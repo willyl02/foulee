@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Foulée</title>
+  <meta name="color-scheme" content="light dark">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 24'%3E%3Crect width='32' height='24' rx='5' fill='%234b3e34'/%3E%3Crect x='5' y='5' width='22' height='6' rx='1' fill='%23fff'/%3E%3Crect x='5' y='13' width='22' height='6' rx='1' fill='%23d3263a'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/static/css/app.css">
+  <link rel="stylesheet" href="/static/vendor/leaflet/leaflet.css">
+  <script>
+    try {
+      const t = localStorage.getItem("foulee-theme");
+      if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
+    } catch (e) { /* stockage indisponible : thème du système */ }
+  </script>
+</head>
+<body>
+  <div class="app" id="app">
+    <aside class="rail" id="rail" aria-label="Navigation">
+      <div class="brand"><span class="blaze" aria-hidden="true"></span><span class="brand-name">Foulée</span></div>
+      <nav class="nav" id="nav" aria-label="Vues"></nav>
+      <div class="rail-foot">
+        <div class="sync-line" id="sync-line" aria-live="polite"></div>
+        <div class="progress" id="sync-progress" hidden><span></span></div>
+        <button class="btn btn-primary btn-block" id="sync-btn" type="button"></button>
+        <div class="rail-actions">
+          <button class="btn btn-ghost" id="settings-btn" type="button"></button>
+          <button class="btn btn-ghost icon-btn" id="theme-btn" type="button"></button>
+        </div>
+      </div>
+    </aside>
+    <div class="main" id="main">
+      <div class="topbar">
+        <button class="btn btn-ghost icon-btn" id="menu-btn" type="button" aria-label="Ouvrir le menu"></button>
+        <span class="blaze" aria-hidden="true"></span><span class="brand-name">Foulée</span>
+      </div>
+      <div id="demo-strip"></div>
+      <div id="page"><p class="tile-msg" style="position:static;padding:60px 0">Chargement…</p></div>
+    </div>
+  </div>
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+
+  <script src="/static/vendor/echarts.min.js"></script>
+  <script src="/static/vendor/leaflet/leaflet.js"></script>
+  <script type="module" src="/static/js/app.js"></script>
+</body>
+</html>
