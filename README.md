@@ -314,20 +314,22 @@ Pour développer : `uv sync`, puis `uv run pytest` (tests) et `uv run foulee web
 ## 11. Publier une version (canaux main et beta)
 
 - **`main`** = canal stable, **`beta`** = canal bêta. Les serveurs suivent l'une ou
-  l'autre branche ; les PC suivent les versions publiées sur GitHub (une bêta est
+  l'autre branche ; les PC suivent les versions publiées sur GitHub (une bêta y est
   une « pré-version »).
-- Le numéro de version est dans `pyproject.toml` et `foulee/__init__.py` (une bêta
-  s'écrit `0.5.0b1`, `0.5.0b2`…, puis `0.5.0` pour la stable) ; ses nouveautés vont en
-  tête de `CHANGELOG.md`, ce sont elles que Foulée affiche avant la mise à jour.
-- Publier : pousser une étiquette `v<version>` sur le bon commit (`v0.5.0b1` sur
-  `beta`, `v0.5.0` sur `main`). GitHub Actions (`.github/workflows/windows.yml`) lance
-  alors les tests sous Windows, construit `Foulee-Setup-<version>.exe`
-  (`packaging/build.ps1`), l'essaie de bout en bout sur un Windows propre
-  (installation, relance, Claude, mise à jour, désinstallation :
-  `packaging/smoke-test.ps1`), puis publie la version avec ses empreintes SHA-256.
-- Lancé à la main (Actions → Windows → Run workflow), le même enchaînement construit
-  et essaie l'installateur sans rien publier (il reste téléchargeable dans les
-  artefacts de l'exécution).
+- **Publier, c'est changer le numéro de version** dans `pyproject.toml` et
+  `foulee/__init__.py` : une bêta s'écrit `0.5.0b1`, `0.5.0b2`…, la version stable
+  `0.5.0`. Ses nouveautés vont en tête de `CHANGELOG.md` : ce sont elles que Foulée
+  affiche avant la mise à jour.
+- Une bêta poussée sur `beta`, ou une version stable poussée sur `main` (en général en
+  fusionnant `beta`), déclenche GitHub Actions (`.github/workflows/windows.yml`) : tests
+  sous Windows, construction de `Foulee-Setup-<version>.exe` (`packaging/build.ps1`),
+  essai de bout en bout sur un Windows propre (installation, relance, Claude, mise à
+  jour par-dessus, désinstallation : `packaging/smoke-test.ps1`), puis publication de la
+  version, avec son étiquette `v<version>` et ses empreintes SHA-256.
+- Tant que la version est déjà publiée, un envoi ne déclenche qu'une petite
+  vérification (pas de minutes Windows consommées). Lancé à la main (Actions →
+  Windows → Run workflow), l'enchaînement construit et essaie l'installateur sans rien
+  publier : il reste téléchargeable dans les artefacts de l'exécution.
 
 ## 12. Dépannage
 
