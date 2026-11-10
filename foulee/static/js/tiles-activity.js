@@ -155,6 +155,17 @@ const TILES = {
   ign: ["https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2&STYLE=normal&TILEMATRIXSET=PM&FORMAT=image/png&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}", { maxZoom: 19, attribution: "© IGN, Plan IGN" }],
 };
 
+export const seance_mesures = {
+  title: () => "Séance : autres mesures",
+  async render(body, p, ctx) {
+    const a = await ctx.activityDetail();
+    if (!a) return message(body, "Choisis une séance en haut de la vue.");
+    if (!a.mesures?.length) return message(body, "Pas d'autres mesures pour cette séance (dynamique de course, puissance, respiration… selon la montre et les capteurs).");
+    body.classList.add("scroll");
+    body.innerHTML = `<dl class="measures">${a.mesures.map((m) => `<div><dt>${F.escape(m.label)}</dt><dd>${F.escape(m.affiche)}</dd></div>`).join("")}</dl>`;
+  },
+};
+
 export const seance_carte = {
   title: () => "Tracé",
   async render(body, p, ctx, tile, cleanup) {

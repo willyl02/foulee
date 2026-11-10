@@ -307,7 +307,7 @@ export async function claudePanel(box, { toast, compact = false, onChange = null
         <li>Clique sur « Relier ». Foulée s'ajoute à la configuration de Claude Desktop (une copie de sauvegarde est faite à côté).</li>
         <li>Ouvre Claude Desktop. La toute première fois, Foulée met une vingtaine de secondes à apparaître.</li>
         <li>Dans une conversation, clique sur <b>+</b> puis <b>Connecteurs</b> : « foulee » y figure, activé.</li>
-        <li>Demande par exemple : « Résume ma semaine d'entraînement » ou « Compare mes semaines du matin et du soir ».</li>
+        <li>Demande par exemple : « Résume ma semaine d'entraînement », « Compare mon sommeil d'un poste à l'autre » ou « Quelles allures pour 6 × 800 m à 100 % de VMA ? ».</li>
       </ol>
       <p class="hint">Foulée n'apparaît pas ? Dans Claude Desktop, Paramètres → Développeur : l'entrée « foulee » indique ce qui ne va pas.</p>
     </details>`;

@@ -17,8 +17,9 @@ from typing import Any
 from mcp.server.mcpserver import MCPServer
 from mcp_types import ToolAnnotations
 
-from . import __version__, analysis, config, db, metrics, vault, views
+from . import __version__, analysis, config, db, metrics, reglages, schedule, vault, views
 from . import sync as sync_module
+from .garmin import intraday
 
 INSTRUCTIONS = """\
 Foulée est le hub local de données sport et santé de l'utilisateur (montre Garmin,
@@ -31,8 +32,15 @@ Repères :
   en m/s ; les champs « affiche » / « allure » sont déjà mis en forme (allure réelle,
   min/km, pas ajustée à la pente).
 - Une nuit de sommeil est rattachée au jour du réveil.
-- Postes alternés : semaines ISO impaires = poste du matin, paires = poste du soir
-  (réglable). comparer_postes les compare, jours ouvrés seulement par défaut.
+- Horaires de travail (réglage « horaires ») : bureau, 2x8 (matin / soir selon la parité des
+  semaines ISO), 3x8, 5x8 ou cycle personnalisé, avec les congés. horaires donne le planning
+  jour par jour ; comparer_postes compare les métriques d'un poste à l'autre (jours travaillés
+  seulement par défaut).
+- Au-delà du catalogue, toute valeur numérique gardée des réponses de Garmin est une métrique :
+  « garmin:<flux>:<chemin> » (ex. garmin:daily:pulseOx.avgValue, garmin:activity:avgVerticalRatio).
+  champs_garmin les liste.
+- allures_vma reprend le tableau d'allures du club (55 à 120 % de VMA, temps de passage sur
+  piste, test VAMEVAL) ; forme_du_jour lit les signaux de récupération face aux habitudes.
 - La charge (charge chronique 42 j, aiguë 7 j, fraîcheur) est calculée par Foulée à partir
   de la charge Garmin de chaque séance (ou d'un TRIMP fréquence cardiaque à défaut).
 - Avant d'analyser une séance, lis son nom et sa description : l'utilisateur y note
@@ -52,7 +60,7 @@ def _period(debut: str | None, fin: str | None, jours: int = 30) -> tuple[date, 
 
 
 def _check_metrics(keys: list[str]) -> list[str]:
-    unknown = [k for k in keys if k not in metrics.CATALOG]
+    unknown = [k for k in keys if not metrics.exists(k)]
     if unknown:
         raise ValueError(f"Métrique(s) inconnue(s) : {', '.join(unknown)}. Voir catalogue_metriques.")
     return keys
@@ -76,8 +84,8 @@ def statut() -> dict[str, Any]:
             "aujourdhui": date.today().isoformat(),
             "vma_kmh": settings.get("vma_kmh"),
             "objectif": analysis.objective(settings),
-            "profil_fc": analysis.hr_profile(conn, settings),
-            "postes": settings.get("postes"),
+            "profil_fc": {k: v for k, v in analysis.hr_profile(conn, settings).items() if k != "garmin"},
+            "horaires": schedule.describe(settings["horaires"]),
         }
 
 
@@ -116,8 +124,18 @@ def catalogue_metriques() -> dict[str, Any]:
         ],
         "sports": metrics.SPORTS,
         "note": "Les métriques act.* agrègent les séances et acceptent un filtre sport "
-                "(ex. 'course', 'trail', 'pied' = course + trail).",
+                "(ex. 'course', 'trail', 'pied' = course + trail). Toute valeur brute de Garmin s'utilise aussi "
+                "comme métrique (« garmin:<flux>:<chemin> ») : voir champs_garmin.",
     }
+
+
+@mcp.tool(annotations=READ)
+def champs_garmin() -> dict[str, Any]:
+    """Toutes les valeurs numériques trouvées dans les réponses de Garmin gardées par Foulée, avec un exemple.
+    Chaque clé (« garmin:<flux>:<chemin> ») s'utilise comme une métrique dans serie, correlation, etc."""
+    with db.session(readonly=True) as conn:
+        fields = analysis.raw_fields(conn)
+    return {"champs": [{k: f[k] for k in ("key", "label", "exemple")} for f in fields], "flux": metrics.RAW_KINDS}
 
 
 # ------------------------------------------------------------------ séries
@@ -155,7 +173,9 @@ def comparer_periodes(metriques: list[str], debut_a: str, fin_a: str, debut_b: s
 @mcp.tool(annotations=READ)
 def comparer_postes(metriques: list[str] | None = None, debut: str | None = None, fin: str | None = None,
                     jours_ouvres: bool = True) -> dict[str, Any]:
-    """Compare semaines du matin et semaines du soir (moyenne, médiane, écart-type, taille d'effet)."""
+    """Compare les métriques d'un poste de travail à l'autre (matin, soir, nuit… d'après les horaires) :
+    moyenne, médiane, écart-type par poste, écart et taille d'effet entre les postes extrêmes.
+    jours_ouvres=False compte aussi les jours de repos (rattachés au poste de leur semaine)."""
     keys = _check_metrics(metriques or ["sleep_s", "sleep_end_h", "sleep_score", "hrv_night", "resting_hr",
                                          "bb_wake", "stress_avg"])
     a, b = _period(debut, fin, 180)
@@ -227,6 +247,7 @@ def detail_seance(seance_id: str) -> dict[str, Any]:
         "zones_allure_s": detail.get("pace_zones"), "pct_vma": detail.get("pct_vma"),
         "trimp": detail.get("trimp"), "charge_garmin": detail.get("garmin_load"), "vo2max": detail.get("vo2max"),
         "tours": tours[:80], "km": detail.get("splits_km", [])[:100], "decouplage_cardiaque": detail.get("decouplage"),
+        "autres_mesures": {m["label"]: m["affiche"] for m in detail.get("mesures", [])},
         "telechargement_fit": status,
     })
     return compact
@@ -275,6 +296,68 @@ def objectif() -> dict[str, Any]:
     """Objectif course des réglages : date, jours restants, temps cible, allure cible, % de VMA."""
     with db.session(readonly=True) as conn:
         return analysis.objective(db.get_settings(conn))
+
+
+# ------------------------------------------------------------- accueil
+@mcp.tool(annotations=READ)
+def allures_vma(vma: float | None = None, test_vameval: str | None = None, comparer: float | None = None) -> dict[str, Any]:
+    """Tableau d'allures du club : allures (min/km, secondes tronquées) et vitesses de 55 à 120 % de la VMA,
+    temps de passage sur piste (200 à 800 m, 85 à 120 %) et lecture d'un test VAMEVAL (« 12:40 »).
+    vma : VMA à utiliser (par défaut celle des réglages) ; comparer : une seconde VMA à mettre en regard."""
+    with db.session(readonly=True) as conn:
+        settings = db.get_settings(conn)
+    if vma:
+        settings = {**settings, "vma_kmh": vma}
+    return analysis.paces_table(settings, comparer, test_vameval)
+
+
+@mcp.tool(annotations=READ)
+def forme_du_jour(date_jour: str | None = None) -> dict[str, Any]:
+    """Signaux de récupération d'un jour (FC de repos, VFC, sommeil, Body Battery, fraîcheur, SpO2),
+    chacun face aux habitudes de l'utilisateur, avec une phrase de synthèse. Pas un avis médical."""
+    with db.session(readonly=True) as conn:
+        return analysis.day_form(conn, analysis.to_date(date_jour) if date_jour else None, db.get_settings(conn))
+
+
+@mcp.tool(annotations=READ)
+def semaine(date_jour: str | None = None) -> dict[str, Any]:
+    """Semaine (lundi → dimanche) contenant ce jour : postes de travail, séances, totaux face aux 4 semaines d'avant."""
+    with db.session(readonly=True) as conn:
+        return analysis.week_summary(conn, analysis.to_date(date_jour) if date_jour else None, db.get_settings(conn))
+
+
+@mcp.tool(annotations=READ)
+def records(debut: str | None = None, fin: str | None = None, sport: str = "pied") -> dict[str, Any]:
+    """Meilleurs temps sur 1 km, 1 mile, 5 km, 10 km, semi… (calculés par Garmin pour chaque sortie) dans la
+    période, face au record de tout l'historique. Sans dates : tout l'historique."""
+    with db.session(readonly=True) as conn:
+        return analysis.records(conn, analysis.to_date(debut) if debut else None,
+                                analysis.to_date(fin) if fin else None, sport)
+
+
+@mcp.tool(annotations=READ)
+def horaires(debut: str | None = None, fin: str | None = None) -> dict[str, Any]:
+    """Horaires de travail : modèle, postes et heures, puis le planning jour par jour (poste, repos ou congés)."""
+    a, b = _period(debut, fin, 14)
+    with db.session(readonly=True) as conn:
+        settings = db.get_settings(conn)
+    plan = schedule.Schedule.of(settings)
+    return {**schedule.describe(settings["horaires"]), "jours": [plan.day(d) for d in analysis.days_between(a, b)]}
+
+
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=True))
+def journee_detail(donnee: str = "fc", date_jour: str | None = None) -> dict[str, Any]:
+    """Courbe d'une journée : donnee = 'fc' (FC minute par minute), 'body_battery', 'sommeil' (phases de la
+    nuit, FC, VFC, SpO2…) ou 'vfc' (relevés de la nuit). Demandée à Garmin si elle n'est pas encore gardée."""
+    if donnee not in intraday.KINDS:
+        return {"erreur": f"donnee : {', '.join(intraday.KINDS)}"}
+    with db.session() as conn:
+        data = intraday.day_detail(conn, donnee, analysis.to_date(date_jour) if date_jour else date.today())
+    for key in ("points", "fc", "vfc", "spo2", "respiration", "stress", "body_battery"):
+        if isinstance(data.get(key), list) and len(data[key]) > 300:
+            step = len(data[key]) // 300 + 1
+            data[key] = data[key][::step]
+    return data
 
 
 # --------------------------------------------------------------------- SQL
@@ -359,9 +442,9 @@ def enregistrer_vue(nom: str, tuiles: list[dict[str, Any]], vue_id: str | None =
 
 
 # ----------------------------------------------------------------- réglages
-@mcp.tool(annotations=READ)
-def reglages() -> dict[str, Any]:
-    """Réglages actuels (VMA, FC, objectif, postes, zones d'allure…)."""
+@mcp.tool(name="reglages", annotations=READ)
+def lire_reglages() -> dict[str, Any]:
+    """Réglages actuels (VMA, FC, objectif, horaires de travail, zones FC et d'allure…)."""
     with db.session(readonly=True) as conn:
         return db.get_settings(conn)
 
@@ -370,26 +453,19 @@ def reglages() -> dict[str, Any]:
 def modifier_reglages(changements: dict[str, Any]) -> dict[str, Any]:
     """Modifie des réglages (ex. {"vma_kmh": 16.5} ou {"objectif": {"temps_cible": "1:24:00"}}).
 
+    Un réglage composé est complété, pas remplacé : {"horaires": {"conges": [...]}} ne touche qu'aux congés.
+    Zones : {"zones_fc": {"methode": "pct_reserve", "pct": [50, 60, 70, 80, 90]}} (méthodes garmin, pct_max,
+    pct_reserve, pct_seuil, bornes) ; {"zones_allure": {"methode": "pct_vma", "pct": [70, 80, 88, 95]}}.
     Les calculs dépendants (zones, TRIMP, charge) sont refaits aussitôt.
     """
-    allowed = set(db.DEFAULT_SETTINGS)
-    unknown = [k for k in changements if k not in allowed]
-    if unknown:
-        return {"erreur": f"Réglage(s) inconnu(s) : {', '.join(unknown)}", "reglages_possibles": sorted(allowed)}
     with db.session() as conn:
-        current = db.get_settings(conn)
-        for key, value in changements.items():
-            if isinstance(current.get(key), dict) and isinstance(value, dict):
-                merged = dict(current[key])
-                merged.update(value)
-                value = merged
-            db.set_setting(conn, key, value)
-        conn.commit()
-        settings = db.get_settings(conn)
-        recalcul = bool({"vma_kmh", "fc_max", "fc_repos", "sexe", "zones_allure_pct_vma", "charge_source"}
-                        & set(changements))
+        try:
+            settings, recalcul = reglages.apply(conn, changements, merge=True)
+        except reglages.SettingsError as exc:
+            return {"erreur": str(exc), "reglages_possibles": sorted(db.DEFAULT_SETTINGS)}
         if recalcul:
             analysis.refresh_all_activities(conn, settings)
+            conn.commit()
     return {"reglages": settings, "recalcul_effectue": recalcul}
 
 

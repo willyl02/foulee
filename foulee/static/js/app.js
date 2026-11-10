@@ -4,16 +4,20 @@ import * as C from "./charts.js";
 import * as E from "./editor.js";
 import * as F from "./format.js";
 import { icon } from "./icons.js";
+import { brandMark, setFavicon } from "./logos.js";
 import { renderSettings } from "./settings.js";
 import { renderWelcome } from "./welcome.js";
 import * as A from "./tiles-activity.js";
 import * as D from "./tiles-data.js";
+import * as H from "./tiles-home.js";
 
 const RENDERERS = {
   kpi: D.kpi, serie: D.serie, charge: D.charge, zones: D.zones, calendrier: D.calendrier, nuage: D.nuage,
   postes: D.postes, objectif: D.objectif, fractions: D.fractions, note: D.note,
   activites: A.activites, derniere_seance: A.derniere_seance, seance_resume: A.seance_resume,
   seance_carte: A.seance_carte, seance_courbes: A.seance_courbes, seance_tours: A.seance_tours,
+  seance_mesures: A.seance_mesures,
+  profil: H.profil, forme: H.forme, allures: H.allures, semaine: H.semaine, records: H.records, journee: H.journee,
 };
 const PERIODS = [[7, "7 j"], [30, "30 j"], [90, "90 j"], [180, "6 mois"], [365, "1 an"], [730, "2 ans"]];
 const WIDTHS = [3, 4, 6, 8, 12];
@@ -98,6 +102,7 @@ function setupChrome() {
   $("#menu-btn").addEventListener("click", () => $("#rail").classList.toggle("open"));
   $("#theme-btn").addEventListener("click", cycleTheme);
   paintTheme();
+  renderBrand();
   renderStrip();
   renderNav();
   renderSyncLine();
@@ -135,6 +140,22 @@ function renderStrip() {
 }
 
 function closeMenu() { $("#rail").classList.remove("open"); }
+
+// Logo choisi (ou photo de profil) dans la colonne, la barre du téléphone et l'onglet du navigateur
+function renderBrand() {
+  const profil = state.boot.profil || {};
+  document.querySelectorAll(".brand-mark").forEach((box) => { box.innerHTML = brandMark(profil, box.dataset.size ? Number(box.dataset.size) : 28); });
+  setFavicon(profil);
+}
+
+/** Recharge l'état du serveur (après un réglage qui touche l'en-tête, les horaires…). */
+async function refreshBoot() {
+  api.clearCache();
+  await loadBoot();
+  renderBrand();
+  renderStrip();
+  renderNav();
+}
 
 // ======================================================================= thème
 function themeChoice() { return store("foulee-theme") || "auto"; }
@@ -220,11 +241,11 @@ function disposePass() {
 function shiftChip() {
   const today = new Date();
   const { week } = F.isoWeek(today);
-  const postes = state.boot.reglages.postes || {};
-  if (postes.actif === false) return `<span class="shift-chip">Semaine ${week}</span>`;
-  const label = F.shiftOf(today, state.boot.reglages, false);
-  const color = label === "matin" ? "var(--s1)" : "var(--s2)";
-  return `<span class="shift-chip" title="Semaine ISO ${week}, ${week % 2 ? "impaire" : "paire"}"><i class="dot" style="background:${color}"></i>Semaine ${week}, poste du ${label}</span>`;
+  const plan = F.dayPlan(today, state.boot.reglages);
+  if (!plan.actif) return `<span class="shift-chip">Semaine ${week}</span>`;
+  const color = F.shiftColor(plan.poste, state.boot.reglages, C.palette());
+  const text = plan.poste ? `${plan.nom}, ${plan.debut}–${plan.fin}` : plan.conges ? plan.conges : plan.nom;
+  return `<span class="shift-chip" title="Semaine ISO ${week} (${week % 2 ? "impaire" : "paire"}) : ${F.escape(text)}"><i class="dot" style="background:${color}"></i>Semaine ${week}, ${F.escape(text.charAt(0).toLowerCase() + text.slice(1))}</span>`;
 }
 
 async function renderView() {
@@ -293,8 +314,24 @@ function makeContext(token) {
     settings: state.boot.reglages,
     palette: C.palette(),
     bus,
+    toast,
     activityId: id,
-    meta: (key) => state.catalog[key],
+    /** Enregistre des réglages depuis une tuile, puis redessine la vue. */
+    saveSettings: async (patch, done) => {
+      try {
+        const res = await api.put("/api/settings", patch);
+        state.boot.reglages = res.reglages;
+        state.boot.objectif = res.objectif;
+        if (res.profil_fc) state.boot.profil_fc = res.profil_fc;
+        if (res.planning) state.boot.planning = res.planning;
+        api.clearCache();
+        if (done) toast(done);
+        renderView();
+      } catch (err) {
+        toast(err.message, { error: true });
+      }
+    },
+    meta: (key) => state.catalog[key] || state.boot.metriques.find((m) => m.key === key) || { key, label: key, fmt: "num", unit: "" },
     sportLabel: (s) => E.sportLabel(s, state.boot.sports),
     period: (p) => {
       const days = !p?.periode || p.periode === "herite" ? state.days : Number(p.periode);
@@ -565,9 +602,17 @@ function showSettings(section = null) {
   renderSettings($("#page"), state.boot, {
     toast,
     section,
-    onSaved: (settings) => { state.boot.reglages = settings; api.clearCache(); },
+    onSaved: (res) => {
+      state.boot.reglages = res.reglages;
+      if (res.objectif) state.boot.objectif = res.objectif;
+      if (res.profil_fc) state.boot.profil_fc = res.profil_fc;
+      if (res.planning) state.boot.planning = res.planning;
+      api.clearCache();
+    },
+    onProfile: (profil) => { state.boot.profil = profil; renderBrand(); },
+    refreshBoot: async (again) => { await refreshBoot(); if (again) showSettings(again); },
     resetViews: async () => {
-      const ok = await E.confirm("Restaurer les vues d'origine ?", "Les cinq vues fournies avec Foulée reprennent leur contenu de départ. Tes vues personnelles ne bougent pas.", "Restaurer");
+      const ok = await E.confirm("Restaurer les vues d'origine ?", "Les six vues fournies avec Foulée (dont l'accueil) reprennent leur contenu de départ. Tes vues personnelles ne bougent pas.", "Restaurer");
       if (!ok) return;
       state.views = await api.post("/api/views/reset");
       renderNav();

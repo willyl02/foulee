@@ -44,3 +44,15 @@ export function clearCache() { cache.clear(); }
 export const post = (path, body) => { clearCache(); return request("POST", path, body ?? {}); };
 export const put = (path, body) => { clearCache(); return request("PUT", path, body ?? {}); };
 export const del = (path) => { clearCache(); return request("DELETE", path); };
+
+/** Envoi d'un fichier tel quel (photo de profil). */
+export async function putBlob(path, blob) {
+  clearCache();
+  const response = await fetch(path, { method: "PUT", headers: { "X-Foulee": "1", "Content-Type": blob.type || "application/octet-stream", Accept: "application/json" }, body: blob });
+  if (!response.ok) {
+    let detail = `${response.status}`;
+    try { detail = (await response.json()).detail || detail; } catch (e) { /* réponse non JSON */ }
+    throw new Error(detail);
+  }
+  return response.json();
+}

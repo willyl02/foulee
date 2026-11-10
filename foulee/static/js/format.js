@@ -64,8 +64,22 @@ export function value(meta, v, { unit = true } = {}) {
     case "km": return unit ? `${dec1(v)} km` : dec1(v);
     case "dec1": return withUnit(dec1(v), meta, unit);
     case "dec2": return withUnit(dec2(v), meta, unit);
+    case "num": return withUnit(Number.isInteger(v) ? int(v) : new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 2 }).format(v), meta, unit);
     default: return withUnit(int(v), meta, unit);
   }
+}
+
+/** « 4:05 » → 245 secondes par km (null si illisible). */
+export function parsePace(text) {
+  const m = String(text ?? "").trim().match(/^(\d{1,2})[:'’](\d{2})$/);
+  return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+}
+
+/** Secondes par km → « 4:05 ». */
+export function paceSecs(secs) {
+  if (!isNum(secs) || secs <= 0) return "–";
+  const t = Math.round(secs);
+  return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`;
 }
 
 function withUnit(text, meta, unit) {
@@ -183,16 +197,66 @@ export function whenActivity(startLocal) {
   return `${dateLong(day, { year: parseDate(day).getFullYear() !== new Date().getFullYear() })} à ${time}`;
 }
 
-/** Poste du jour, même règle que le serveur (semaine ISO impaire / paire). */
-export function shiftOf(date, settings, weekdaysOnly = null) {
-  const postes = settings?.postes || {};
-  if (postes.actif === false) return null;
-  const only = weekdaysOnly ?? postes.jours_ouvres ?? true;
-  const day = date.getDay();
-  if (only && (day === 0 || day === 6)) return null;
-  const { year, week } = isoWeek(date);
-  if ((postes.semaines_exclues || []).includes(`${year}-W${String(week).padStart(2, "0")}`)) return null;
-  return week % 2 === 1 ? (postes.impaires || "matin") : (postes.paires || "soir");
+// ------------------------------------------------- horaires de travail
+// Même règle que le serveur (schedule.py) : cycle en semaines (parité ISO ou semaine n° 1 datée)
+// ou en jours (jour n° 1 daté), jours de repos (""), congés.
+function dayNumber(date) { return Math.round(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) / 86400000); }
+function mod(n, m) { return ((n % m) + m) % m; }
+export function mondayOf(date) { return addDays(new Date(date.getFullYear(), date.getMonth(), date.getDate()), -((date.getDay() + 6) % 7)); }
+
+export function cycleWeekIndex(date, horaires) {
+  const c = horaires.cycle;
+  if (c.ancrage === "parite") return isoWeek(date).week % 2 === 1 ? 0 : 1;
+  const weeks = Math.floor((dayNumber(mondayOf(date)) - dayNumber(parseDate(c.ancrage))) / 7);
+  return mod(weeks, c.semaines.length);
+}
+
+export function cycleCode(date, horaires) {
+  const c = horaires.cycle;
+  if (c.unite === "jour") return c.jours[mod(dayNumber(date) - dayNumber(parseDate(c.debut)), c.jours.length)] || "";
+  return c.semaines[cycleWeekIndex(date, horaires)][(date.getDay() + 6) % 7] || "";
+}
+
+export function leaveOf(date, horaires) {
+  const iso = isoDate(date);
+  return (horaires.conges || []).find((c) => c.du <= iso && iso <= c.au) || null;
+}
+
+/** Groupe de comparaison d'un jour : un poste, « repos », ou null (congés, repos non compté). */
+export function shiftOf(date, settings, includeRest = null) {
+  const h = settings?.horaires;
+  if (!h || h.actif === false || leaveOf(date, h)) return null;
+  const code = cycleCode(date, h);
+  if (code) return code;
+  if (!(includeRest ?? !(h.jours_ouvres ?? true))) return null;
+  if (h.cycle.unite !== "semaine") return "repos";
+  const counts = {};
+  h.cycle.semaines[cycleWeekIndex(date, h)].filter(Boolean).forEach((c) => { counts[c] = (counts[c] || 0) + 1; });
+  return Object.keys(counts).sort((a, b) => counts[b] - counts[a])[0] || null;
+}
+
+/** Ce que dit le planning d'un jour : { poste, nom, debut, fin, repos, conges }. */
+export function dayPlan(date, settings) {
+  const h = settings?.horaires;
+  if (!h || h.actif === false) return { poste: null, nom: null, actif: false };
+  const leave = leaveOf(date, h);
+  if (leave) return { poste: null, nom: "Congés", conges: leave.nom || "Congés", actif: true };
+  const code = cycleCode(date, h);
+  if (!code) return { poste: null, nom: "Repos", repos: true, actif: true };
+  const poste = h.postes.find((p) => p.id === code) || { nom: code };
+  return { poste: code, nom: poste.nom, debut: poste.debut, fin: poste.fin, actif: true };
+}
+
+/** Couleur d'un poste : l'ordre des postes dans les horaires (matin bleu, soir orange…). */
+export function shiftColor(id, settings, palette) {
+  if (!id || id === "repos") return palette.base;
+  const index = (settings?.horaires?.postes || []).findIndex((p) => p.id === id);
+  return palette.series[(index < 0 ? 0 : index) % palette.series.length];
+}
+
+export function shiftName(id, settings) {
+  if (id === "repos") return "Repos";
+  return (settings?.horaires?.postes || []).find((p) => p.id === id)?.nom || id || "–";
 }
 
 /** « 2026-11-10 14:02:33 » → « 10 nov. 2026 à 14 h 02 ». */

@@ -219,7 +219,10 @@ def build(days: int = 430, seed: int = 7) -> dict:
 
     with db.session() as conn:
         db.set_meta(conn, "garmin_hr_zones", json.dumps({"floors": FLOORS, "max": HR_MAX, "rest": HR_REST,
-                                                         "method": "HR_MAX"}))
+                                                         "method": "HR_MAX", "lthr": 171, "sport": "DEFAULT"}))
+        db.set_meta(conn, "garmin_profil", json.dumps({"seuil_fc": 171, "seuil_vitesse": 4.08, "vo2max_course": 54,
+                                                        "vo2max_velo": None, "poids_kg": 72.4, "taille_cm": 178,
+                                                        "systeme": "metric"}))
         for key, value in settings_patch.items():
             db.set_setting(conn, key, value)
         settings = db.get_settings(conn)
@@ -239,6 +242,7 @@ def build(days: int = 430, seed: int = 7) -> dict:
             day_load = 0.0
             for session in athlete.plan(day, race_day, prep_start):
                 sim = athlete.simulate(day, session, fatigue, with_streams=day >= stream_cutoff)
+                sim["kind"] = session.get("kind")
                 n_activities += 1
                 athlete.next_id += rng.randint(3, 400)
                 activity_id = f"garmin:{athlete.next_id}"
@@ -265,9 +269,12 @@ def build(days: int = 430, seed: int = 7) -> dict:
                     "calories": round(sim["duration"] / 60 * (11 if sim["sport"] != "renfo" else 6)),
                     "te_aerobic": round(min(5.0, 1.5 + trimp / 60), 1), "te_anaerobic": round(rng.uniform(0, 2.5), 1),
                     "garmin_load": round(trimp * 1.15), "vo2max": 52 + round((day - start).days / days * 2) if sim["sport"] in ("course", "trail") else None,
-                    "hr_zones": None, "start_lat": BASE_LAT, "start_lon": BASE_LON, "lap_count": len(sim["laps"]),
+                    "hr_zones_garmin": None, "start_lat": BASE_LAT, "start_lon": BASE_LON, "lap_count": len(sim["laps"]),
                 }
+                extra = activity_extra(sim, trimp, rng)
+                row["extra"] = json.dumps(extra) if extra else None
                 upsert_activity(conn, row)
+                db.put_raw(conn, "garmin", "activity", row["source_id"], garmin_payload(row, extra))
                 day_load += row["garmin_load"]
                 if sim["streams"]:
                     laps = []
@@ -335,7 +342,20 @@ def build(days: int = 430, seed: int = 7) -> dict:
                 "cal_total": round(2350 + day_load * 4 + rng.gauss(0, 120)), "cal_active": round(450 + day_load * 4),
                 "int_minutes": round(day_load / 3 + rng.uniform(0, 15)),
                 "resp_avg": round(15 + rng.gauss(0, 0.7), 1),
+                "resp_min": round(9 + rng.gauss(0, 0.8)), "resp_max": round(28 + rng.gauss(0, 4)),
+                "spo2_avg": round(min(100, 96.5 + rng.gauss(0, 0.8))), "spo2_min": round(min(98, 89 + rng.gauss(0, 2))),
+                "sleep_spo2_avg": round(min(100, 95.5 + rng.gauss(0, 1))),
+                "sleep_spo2_min": round(min(97, 88 + rng.gauss(0, 2))),
+                "sleep_awake_count": max(0, round(rng.gauss(1.5, 1))),
+                "sleep_need_min": round(450 + 0.1 * yesterday + rng.gauss(0, 10)),
+                "bb_sleep_gain": round(max(5, bb_wake - 25 + rng.gauss(0, 5))),
+                "bb_activity_cost": round(day_load / 6) if day_load else None,
+                "steps_goal": 10000, "steps_km": round(max(1500, steps) * 0.00078, 2),
+                "stress_low_s": round(rng.uniform(2, 4) * 3600), "stress_med_s": round(rng.uniform(1, 2.5) * 3600),
             }
+            values["sleep_deep_pct"] = round(values["sleep_deep_s"] / values["sleep_s"] * 100)
+            values["sleep_rem_pct"] = round(values["sleep_rem_s"] / values["sleep_s"] * 100)
+            values["sleep_light_pct"] = 100 - values["sleep_deep_pct"] - values["sleep_rem_pct"]
             low, high = values["hrv_bl_low"], values["hrv_bl_high"]
             values["hrv_status"] = 3 if low <= values["hrv_week"] <= high else 2
             if rng.random() < 0.35:
@@ -343,8 +363,12 @@ def build(days: int = 430, seed: int = 7) -> dict:
                 values["weight_kg"] = round(weight, 1)
                 values["body_fat_pct"] = round(14.5 + rng.gauss(0, 0.4), 1)
             db.put_daily(conn, key, values)
+            if (today - day).days < 90:
+                db.put_raw(conn, "garmin", "daily", key, daily_payload(key, values))
+            if (today - day).days < 10:
+                store_intraday(conn, day, values, rng, morning, evening)
             if day == today:
-                db.put_daily(conn, key, {"fitness_age": 34.5})
+                db.put_daily(conn, key, {"fitness_age": 34.5, "vigorous_days": 3.4, "vigorous_min": 214})
             if weekday == 6:
                 conn.commit()
         analysis.recompute_daily_calc(conn)
@@ -354,3 +378,156 @@ def build(days: int = 430, seed: int = 7) -> dict:
         counts = db.table_counts(conn)
     counts["seances_generees"] = n_activities
     return counts
+
+
+# ------------------------------------------------- valeurs « à la Garmin »
+TE_LABELS = {"easy": "BASE", "long": "BASE", "tempo": "TEMPO", "vma": "VO2MAX", "hills": "ANAEROBIC_CAPACITY",
+             "race": "LACTATE_THRESHOLD"}
+
+
+def activity_extra(sim: dict, trimp: float, rng: random.Random) -> dict:
+    """Dynamique de course, transpiration, Body Battery et meilleurs temps d'une séance simulée."""
+    if sim["sport"] not in ("course", "trail") or not sim["distance"]:
+        return {"bb_impact": -round(trimp / 9)} if trimp else {}
+    speed = sim["distance"] / sim["duration"]
+    cadence = 150 + 7 * speed
+    extra = {
+        "gct": round(262 - 9 * speed + rng.gauss(0, 3), 1), "gcb": round(50 + rng.gauss(0.3, 0.5), 2),
+        "vo": round(8.6 - 0.25 * speed + rng.gauss(0, 0.2), 2), "stride": round(speed * 60 / cadence * 100, 1),
+        "resp": round(30 + 3 * speed + rng.gauss(0, 2), 1), "sweat": round(sim["duration"] / 3600 * 720),
+        "bb_impact": -round(trimp / 7), "steps": round(cadence * 2 * sim["duration"] / 60 / 2),
+        "temp_min": round(rng.uniform(8, 16)), "temp_max": round(rng.uniform(17, 26)),
+        "te_label": TE_LABELS.get(sim.get("kind", "easy"), "BASE"),
+    }
+    extra["vr"] = round(extra["vo"] / extra["stride"] * 100, 2)
+    for meters in (1000, 1609, 5000, 10000, 21098):
+        if sim["distance"] >= meters:
+            boost = 1.06 if meters <= 1609 else 1.03 if meters <= 5000 else 1.0
+            extra[f"best_{meters}"] = round(meters / (speed * boost * rng.uniform(0.99, 1.04)), 1)
+    return extra
+
+
+def garmin_payload(row: dict, extra: dict) -> dict:
+    """Réponse brute minimale d'une séance, comme la liste des séances de Garmin la renvoie."""
+    names = {"gct": "avgGroundContactTime", "gcb": "avgGroundContactBalance", "vo": "avgVerticalOscillation",
+             "vr": "avgVerticalRatio", "stride": "avgStrideLength", "resp": "avgRespirationRate",
+             "sweat": "waterEstimated", "bb_impact": "differenceBodyBattery", "steps": "steps",
+             "temp_min": "minTemperature", "temp_max": "maxTemperature", "te_label": "trainingEffectLabel"}
+    payload = {"activityId": int(row["source_id"]), "activityName": row["name"], "startTimeLocal": row["start_local"],
+               "startTimeGMT": row["start_utc"], "activityType": {"typeKey": row["type_key"]},
+               "distance": row["distance_m"], "duration": row["duration_s"], "averageHR": row["avg_hr"],
+               "maxHR": row["max_hr"], "averageSpeed": row["avg_speed"], "calories": row["calories"],
+               "activityTrainingLoad": row["garmin_load"], "ownerFullName": "Camille Martin"}
+    for key, value in extra.items():
+        if key.startswith("best_"):
+            payload[f"fastestSplit_{key[5:]}"] = value
+        elif key in names:
+            payload[names[key]] = value
+    return payload
+
+
+def daily_payload(day: str, values: dict) -> dict:
+    """Résumé du jour brut (une partie des champs de Garmin), pour l'explorateur de données."""
+    return {
+        "calendarDate": day,
+        "movement": {"steps": {"value": values.get("steps"), "goal": 10000},
+                     "floorsAscended": {"value": values.get("floors")}},
+        "heartRate": {"restingValue": values.get("resting_hr"), "minValue": values.get("resting_hr", 50) - 4,
+                      "maxValue": 120 + (values.get("int_minutes") or 0)},
+        "pulseOx": {"avgValue": values.get("spo2_avg"), "minValue": values.get("spo2_min")},
+        "respiration": {"avgValue": values.get("resp_avg"), "minValue": values.get("resp_min"),
+                        "maxValue": values.get("resp_max")},
+        "stress": {"avgLevel": values.get("stress_avg"), "maxLevel": values.get("stress_max")},
+        "bodyBattery": {"maxValue": values.get("bb_max"), "minValue": values.get("bb_min")},
+        "calories": {"burnedTotal": values.get("cal_total"), "burnedActive": values.get("cal_active")},
+    }
+
+
+def store_intraday(conn, day: date, values: dict, rng: random.Random, morning: bool, evening: bool) -> None:
+    """Courbes de la journée (FC, Body Battery, sommeil, VFC) au format de Garmin, pour les 10 derniers jours."""
+    key = day.isoformat()
+    midnight = datetime(day.year, day.month, day.day)
+    utc = timedelta(hours=1)  # heure d'hiver, comme Paris
+
+    def ms(moment: datetime) -> int:
+        return int((moment - utc - datetime(1970, 1, 1)).total_seconds() * 1000)
+
+    wake = (midnight + timedelta(hours=values["sleep_end_h"])).replace(microsecond=0)
+    bed = (wake - timedelta(seconds=values["sleep_s"] + values["sleep_awake_s"])).replace(microsecond=0)
+    now = datetime.now().replace(microsecond=0) if day == date.today() else midnight + timedelta(hours=23, minutes=58)
+    # FC toutes les 2 minutes : nuit basse, journée qui monte, une séance en fin de matinée ou le soir
+    hr_values, level = [], values["resting_hr"] + 6
+    moment = midnight
+    workout = midnight + timedelta(hours=18 if morning else 12, minutes=10)
+    while moment <= now:
+        asleep = moment < wake or moment > bed + timedelta(days=1)
+        target = values["resting_hr"] + 3 if asleep else 72 + 10 * math.sin(moment.hour / 3)
+        if workout <= moment < workout + timedelta(minutes=50):
+            target = 150 + 12 * math.sin((moment - workout).seconds / 600)
+        level += (target - level) * 0.35 + rng.gauss(0, 2)
+        hr_values.append([ms(moment), round(level)])
+        moment += timedelta(minutes=2)
+    stamps = {"startTimestampGMT": (midnight - utc).isoformat() + ".0", "startTimestampLocal": midnight.isoformat() + ".0"}
+    db.put_raw(conn, "garmin", "hr_day", key, {
+        "calendarDate": key, **stamps, "restingHeartRate": values["resting_hr"],
+        "heartRateValueDescriptors": [{"key": "timestamp", "index": 0}, {"key": "heartrate", "index": 1}],
+        "heartRateValues": hr_values})
+    # Body Battery toutes les 3 minutes : remonte la nuit, descend le jour, chute pendant la séance
+    battery, samples, moment = max(10, values["bb_wake"] - 30), [], midnight
+    while moment <= now:
+        if moment < wake:
+            battery = min(100, battery + 0.55)
+        elif workout <= moment < workout + timedelta(minutes=50):
+            battery -= 0.9
+        else:
+            battery -= 0.16
+        samples.append([ms(moment), round(max(5, battery))])
+        moment += timedelta(minutes=3)
+    db.put_raw(conn, "garmin", "body_battery", key, {
+        "date": key, **stamps, "charged": values.get("bb_charged"), "drained": values.get("bb_drained"),
+        "bodyBatteryValueDescriptorDTOList": [
+            {"bodyBatteryValueDescriptorIndex": 0, "bodyBatteryValueDescriptorKey": "timestamp"},
+            {"bodyBatteryValueDescriptorIndex": 1, "bodyBatteryValueDescriptorKey": "bodyBatteryLevel"}],
+        "bodyBatteryValuesArray": samples})
+    # Phases du sommeil (cycles de 90 minutes) et relevés de la nuit
+    levels, moment, cycle = [], bed, 0
+    plan = [(1, 25), (0, 30), (1, 20), (2, 15)]
+    while moment < wake:
+        for activity, minutes in plan:
+            end = min(wake, moment + timedelta(seconds=round(minutes * 60 * rng.uniform(0.7, 1.3))))
+            if cycle > 2 and activity == 0:
+                activity = 1
+            levels.append({"startGMT": (moment - utc).isoformat() + ".0", "endGMT": (end - utc).isoformat() + ".0",
+                           "activityLevel": float(activity)})
+            moment = end
+            if moment >= wake:
+                break
+        if moment < wake and rng.random() < 0.4:
+            end = min(wake, moment + timedelta(seconds=round(rng.uniform(120, 480))))
+            levels.append({"startGMT": (moment - utc).isoformat() + ".0", "endGMT": (end - utc).isoformat() + ".0",
+                           "activityLevel": 3.0})
+            moment = end
+        cycle += 1
+    night = [bed + timedelta(minutes=5 * i) for i in range(int((wake - bed).total_seconds() // 300))]
+    db.put_raw(conn, "garmin", "sleep_day", key, {
+        "dailySleepDTO": {"calendarDate": key, "sleepTimeSeconds": values["sleep_s"],
+                          "deepSleepSeconds": values["sleep_deep_s"], "lightSleepSeconds": values["sleep_light_s"],
+                          "remSleepSeconds": values["sleep_rem_s"], "awakeSleepSeconds": values["sleep_awake_s"],
+                          "sleepStartTimestampGMT": ms(bed), "sleepStartTimestampLocal": ms(bed + utc),
+                          "sleepEndTimestampGMT": ms(wake), "sleepEndTimestampLocal": ms(wake + utc),
+                          "sleepScores": {"overall": {"value": values["sleep_score"]}}},
+        "sleepLevels": levels,
+        "sleepHeartRate": [{"value": round(values["resting_hr"] + 4 + 3 * math.sin(i / 9) + rng.gauss(0, 1)),
+                            "startGMT": ms(t)} for i, t in enumerate(night)],
+        "hrvData": [{"value": round(values["hrv_night"] + 8 * math.sin(i / 7) + rng.gauss(0, 4)), "startGMT": ms(t)}
+                    for i, t in enumerate(night)],
+        "wellnessEpochSPO2DataDTOList": [{"epochTimestamp": (t - utc).isoformat() + ".0",
+                                          "spo2Reading": round(min(100, 95.5 + rng.gauss(0, 1.2)))}
+                                         for t in night[::2]],
+    })
+    db.put_raw(conn, "garmin", "hrv_day", key, {
+        "hrvSummary": {"calendarDate": key, "lastNightAvg": values["hrv_night"], "weeklyAvg": values["hrv_week"],
+                       "status": "BALANCED"},
+        "hrvReadings": [{"hrvValue": round(values["hrv_night"] + 8 * math.sin(i / 7) + rng.gauss(0, 4)),
+                         "readingTimeLocal": t.isoformat() + ".0"} for i, t in enumerate(night)],
+    })

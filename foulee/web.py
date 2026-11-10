@@ -41,14 +41,18 @@ from . import (
     db,
     keyinput,
     metrics,
+    profile,
+    reglages,
+    schedule,
     updates,
     vault,
     views,
 )
 from . import sync as sync_module
+from .garmin import intraday
 from .garmin.client import KEY_PAGE, GarminError, check_key
 
-DERIVED_KEYS = {"vma_kmh", "fc_max", "fc_repos", "sexe", "zones_allure_pct_vma", "charge_source"}
+DERIVED_KEYS = reglages.DERIVED
 
 
 class SyncJob:
@@ -97,9 +101,27 @@ def _period(start: str | None, end: str | None, days: int | None = None) -> tupl
 
 
 def _metric(key: str) -> str:
-    if key not in metrics.CATALOG:
+    if not metrics.exists(key):
         raise HTTPException(400, f"Métrique inconnue : {key}")
     return key
+
+
+def _day(text: str | None) -> date | None:
+    if not text:
+        return None
+    try:
+        return analysis.to_date(text)
+    except ValueError as exc:
+        raise HTTPException(400, f"Date illisible : {text}") from exc
+
+
+def _refresh_in_background() -> None:
+    """Recalcule zones, TRIMP et charge de toutes les séances après un changement de réglage."""
+    def work() -> None:
+        with db.session() as conn:
+            analysis.refresh_all_activities(conn, db.get_settings(conn))
+            conn.commit()
+    threading.Thread(target=work, name="foulee-recalcul", daemon=True).start()
 
 
 STARTED_AT = time.time()  # permet à l'interface de voir que le serveur a redémarré
@@ -189,10 +211,16 @@ def create_app() -> FastAPI:
             return {
                 "app": "Foulée", "version": __version__, "demo": config.is_demo(),
                 "aujourdhui": date.today().isoformat(),
-                "metriques": metrics.catalog_json(), "sports": metrics.SPORTS,
+                "metriques": metrics.catalog_json() + views.raw_metrics_in_use(conn), "sports": metrics.SPORTS,
                 "tuiles": views.TILE_TYPES, "icones": views.ICONS, "periodes": views.PERIODES,
                 "vues": views.list_views(conn), "reglages": settings,
+                "categories_tuiles": views.TILE_CATEGORIES, "categories_metriques": metrics.CATEGORIES,
                 "objectif": analysis.objective(settings), "profil_fc": analysis.hr_profile(conn, settings),
+                "garmin_profil": analysis.garmin_profile(conn),
+                "planning": schedule.describe(settings["horaires"]),
+                "modeles_horaires": schedule.MODELES,
+                "profil": {**(settings.get("profil") or {}), "prenom_affiche": profile.first_name(conn, settings),
+                           **profile.info(), "garmin": profile.garmin_identity(conn)["photo_url"] is not None},
                 "synchro": sync_module.last_sync_info(conn), "cle": vault.has_key() or config.is_demo(),
                 "dossier_donnees": str(config.data_dir()),
                 "machine": "pc" if sys.platform == "win32" else "serveur",
@@ -271,6 +299,130 @@ def create_app() -> FastAPI:
     def get_objective() -> dict:
         with db.session(readonly=True) as conn:
             return analysis.objective(db.get_settings(conn))
+
+    # -------------------------------------------------------------- accueil
+    @app.get("/api/forme")
+    def get_form(day: str | None = None) -> dict:
+        with db.session(readonly=True) as conn:
+            return analysis.day_form(conn, _day(day), db.get_settings(conn))
+
+    @app.get("/api/semaine")
+    def get_week(day: str | None = None) -> dict:
+        with db.session(readonly=True) as conn:
+            return analysis.week_summary(conn, _day(day), db.get_settings(conn))
+
+    @app.get("/api/allures")
+    def get_paces(comparer: float | None = None, test: str | None = None) -> dict:
+        with db.session(readonly=True) as conn:
+            settings = db.get_settings(conn)
+        data = analysis.paces_table(settings, comparer, test or None)
+        if test and not data["test"]:
+            raise HTTPException(400, "Temps du test illisible : de 2:00 à 59:59 (minutes:secondes).")
+        return data
+
+    @app.get("/api/records")
+    def get_records(start: str | None = None, end: str | None = None, sport: str | None = "pied") -> dict:
+        with db.session(readonly=True) as conn:
+            return analysis.records(conn, _day(start), _day(end), None if sport in (None, "", "tous") else sport)
+
+    @app.get("/api/journee")
+    def get_day_detail(donnee: str = "body_battery", day: str | None = None) -> dict:
+        if donnee not in intraday.KINDS:
+            raise HTTPException(400, f"Donnée inconnue : {donnee}")
+        with db.session() as conn:  # écriture : la réponse de Garmin est gardée pour la prochaine fois
+            return intraday.day_detail(conn, donnee, _day(day) or date.today())
+
+    @app.get("/api/garmin/champs")
+    def get_raw_fields() -> dict:
+        with db.session(readonly=True) as conn:
+            return {"champs": analysis.raw_fields(conn), "flux": metrics.RAW_KINDS}
+
+    @app.get("/api/horaires")
+    def get_schedule(start: str | None = None, end: str | None = None) -> dict:
+        a, b = _period(start, end, 28)
+        with db.session(readonly=True) as conn:
+            settings = db.get_settings(conn)
+        plan = schedule.Schedule.of(settings)
+        return {"horaires": settings["horaires"], "jours": [plan.day(d) for d in analysis.days_between(a, b)]}
+
+    # ---------------------------------------------------------------- profil
+    def _profile_state(conn) -> dict:
+        settings = db.get_settings(conn)
+        return {**(settings.get("profil") or {}), "prenom_affiche": profile.first_name(conn, settings),
+                **profile.info(), "garmin": profile.garmin_identity(conn)["photo_url"] is not None}
+
+    @app.get("/api/profil")
+    def get_profile() -> dict:
+        with db.session(readonly=True) as conn:
+            return _profile_state(conn)
+
+    @app.put("/api/profil")
+    def put_profile(payload: dict = Body(...)) -> dict:
+        with db.session() as conn:
+            current = db.get_settings(conn).get("profil") or {}
+            reglages.apply(conn, {"profil": {**current, **payload}})
+            return _profile_state(conn)
+
+    @app.get("/api/profil/photo")
+    def get_photo():
+        path = profile.photo_path()
+        if not path.exists():
+            raise HTTPException(404, "Pas de photo de profil")
+        return FileResponse(path, media_type="image/jpeg",
+                            headers={"Cache-Control": "no-cache", "X-Content-Type-Options": "nosniff"})
+
+    @app.put("/api/profil/photo")
+    async def put_photo(request: Request) -> dict:
+        if int(request.headers.get("content-length") or 0) > profile.MAX_UPLOAD:
+            raise HTTPException(413, "Image trop lourde : 8 Mo au plus.")
+        data = await request.body()
+        try:
+            profile.save_photo(data)
+        except profile.PhotoError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        with db.session() as conn:
+            return _profile_state(conn)
+
+    @app.delete("/api/profil/photo")
+    def delete_photo() -> dict:
+        profile.delete_photo()
+        with db.session() as conn:
+            current = db.get_settings(conn).get("profil") or {}
+            if current.get("logo") == "photo":
+                reglages.apply(conn, {"profil": {**current, "logo": "foulee"}})
+            return _profile_state(conn)
+
+    @app.post("/api/profil/photo/garmin")
+    def garmin_photo() -> dict:
+        if config.is_demo():
+            raise HTTPException(400, "Pas de photo Garmin en mode démo.")
+        with db.session() as conn:
+            try:
+                profile.fetch_garmin_photo(conn)
+            except profile.PhotoError as exc:
+                raise HTTPException(400, str(exc)) from exc
+            return _profile_state(conn)
+
+    # ------------------------------------------------------- export / import
+    @app.get("/api/reglages/export")
+    def export_settings(vues: int = 1, photo: int = 1) -> JSONResponse:
+        with db.session(readonly=True) as conn:
+            data = reglages.export(conn, with_views=bool(vues), with_photo=bool(photo))
+        machine = "pc" if sys.platform == "win32" else "serveur"
+        name = f"foulee-reglages-{machine}-{date.today().isoformat()}.json"
+        return JSONResponse(data, headers={"Content-Disposition": f'attachment; filename="{name}"'})
+
+    @app.post("/api/reglages/import")
+    def import_settings(payload: dict = Body(...)) -> dict:
+        parts = {p for p in payload.get("parties") or ["reglages", "vues", "photo"] if p in ("reglages", "vues", "photo")}
+        with db.session() as conn:
+            try:
+                report = reglages.import_(conn, payload.get("donnees"), parts=parts)
+            except reglages.SettingsError as exc:
+                raise HTTPException(400, str(exc)) from exc
+        if report["recalcul"]:
+            _refresh_in_background()
+        return report
 
     # ---------------------------------------------------------------- séances
     @app.get("/api/activities")
@@ -356,21 +508,18 @@ def create_app() -> FastAPI:
     @app.put("/api/settings")
     def put_settings(payload: dict = Body(...)) -> dict:
         allowed = set(db.DEFAULT_SETTINGS)
-        changed = [k for k in payload if k in allowed]
-        if "canal_maj" in payload and payload["canal_maj"] not in updates.CHANNELS:
-            raise HTTPException(400, "Canal inconnu : « stable » ou « beta ».")
+        changes = {k: v for k, v in payload.items() if k in allowed}
         with db.session() as conn:
-            for key in changed:
-                db.set_setting(conn, key, payload[key])
-            conn.commit()
-            settings = db.get_settings(conn)
-        if DERIVED_KEYS & set(changed):
-            def refresh() -> None:
-                with db.session() as conn2:
-                    analysis.refresh_all_activities(conn2, db.get_settings(conn2))
-            threading.Thread(target=refresh, daemon=True).start()
-        return {"reglages": settings, "recalcul": bool(DERIVED_KEYS & set(changed)),
-                "objectif": analysis.objective(settings)}
+            try:
+                settings, recalcul = reglages.apply(conn, changes)
+            except reglages.SettingsError as exc:
+                raise HTTPException(400, str(exc)) from exc
+            hrp = analysis.hr_profile(conn, settings)
+            planning = schedule.describe(settings["horaires"])
+        if recalcul:
+            _refresh_in_background()
+        return {"reglages": settings, "recalcul": recalcul, "objectif": analysis.objective(settings),
+                "profil_fc": hrp, "planning": planning}
 
     # ------------------------------------------------------------------ synchro
     @app.post("/api/sync")

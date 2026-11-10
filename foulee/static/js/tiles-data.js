@@ -1,5 +1,5 @@
 // Tuiles de données : chiffres clés, séries, charge, zones, calendrier, nuage,
-// matin vs soir, objectif, fractions, note.
+// comparaison par poste, objectif, fractions, note.
 import * as api from "./api.js";
 import * as C from "./charts.js";
 import * as F from "./format.js";
@@ -85,21 +85,25 @@ function sparkline(points, p) {
 }
 
 // ------------------------------------------------------------- série
-function morningBands(dates, ctx) {
+/** Fonds colorés selon le poste de travail de chaque jour (un aplat par suite de jours du même poste). */
+function shiftBands(dates, ctx) {
   const ranges = [];
   let current = null;
   for (const iso of dates) {
-    const label = F.shiftOf(F.parseDate(iso), ctx.settings, false);
-    if (label === "matin") {
-      if (!current) current = [iso, iso];
-      else current[1] = iso;
-    } else if (current) {
-      ranges.push(current);
-      current = null;
+    const label = F.shiftOf(F.parseDate(iso), ctx.settings, true);
+    if (label && label !== "repos" && current && current.label === label) {
+      current.end = iso;
+    } else {
+      if (current) ranges.push(current);
+      current = label && label !== "repos" ? { label, start: iso, end: iso } : null;
     }
   }
   if (current) ranges.push(current);
-  return ranges.map(([a, b]) => [{ xAxis: a }, { xAxis: b }]);
+  return ranges.map((r) => [{ xAxis: r.start, itemStyle: { color: F.shiftColor(r.label, ctx.settings, ctx.palette), opacity: 0.1 } }, { xAxis: r.end }]);
+}
+
+function shiftLegend(ctx, used) {
+  return used.map((id) => ({ label: F.shiftName(id, ctx.settings), color: F.shiftColor(id, ctx.settings, ctx.palette), kind: "band-color" }));
 }
 
 export const serie = {
@@ -118,10 +122,10 @@ export const serie = {
     const dates = results[0].points.map((pt) => pt[0]);
     const kinds = new Set(metas.map((m) => `${m.fmt}|${m.unit}`));
     const stacked = metas.length > 1 && (p.disposition === "empiler" || (p.disposition === "auto" && kinds.size > 1));
-    const bands = p.bandes_postes && p.agregation === "jour" ? morningBands(dates, ctx) : [];
+    const bands = p.bandes_postes && p.agregation === "jour" ? shiftBands(dates, ctx) : [];
     const legend = [];
     if (!stacked && metas.length > 1) metas.forEach((m, i) => legend.push({ label: m.label, color: P.series[i], kind: p.style === "barres" ? "square" : "line" }));
-    if (bands.length) legend.push({ kind: "band", label: "Semaines du matin" });
+    if (bands.length) legend.push(...shiftLegend(ctx, [...new Set(bands.map((b) => F.shiftOf(F.parseDate(b[0].xAxis), ctx.settings, true)))]));
     const el = chartShell(body, legend.length ? C.legendHTML(legend) : "");
     const labelOf = (iso) => F.periodLabel(iso, p.agregation);
     const plotted = results.map((r, i) => r.points.map((pt) => C.toChart(metas[i], pt[1])));
@@ -136,7 +140,7 @@ export const serie = {
       const s = p.style === "barres"
         ? C.bars(P, color, plotted[i], { name: metas[i].label, xAxisIndex, yAxisIndex })
         : C.line(P, color, plotted[i], { name: metas[i].label, area: p.style === "aire", xAxisIndex, yAxisIndex, connectNulls: sparse });
-      if (bands.length) s.markArea = { silent: true, itemStyle: { color: P.band }, data: bands };
+      if (bands.length) s.markArea = { silent: true, data: bands };
       return s;
     };
     const axisFor = (i, extra = {}) => {
@@ -334,7 +338,7 @@ export const nuage = {
     ctx.sub(F.isNum(d.r) ? `r = ${F.dec2(d.r)} sur ${d.n} jours` : `${d.n} jours`);
     const P = ctx.palette;
     const groups = p.couleur_postes
-      ? [["matin", "Semaines du matin", P.series[0]], ["soir", "Semaines du soir", P.series[1]], [null, "Week-ends et semaines exclues", P.base]]
+      ? [...(d.groupes || []).map((g) => [g.id, g.nom, F.shiftColor(g.id, ctx.settings, P)]), [null, "Repos et congés", P.base]]
       : [["*", "Jours", P.series[0]]];
     const used = groups.filter(([key]) => key === "*" || d.points.some((pt) => pt.poste === key));
     const xs = d.points.map((pt) => C.toChart(mx, pt.x));
@@ -374,52 +378,56 @@ export const nuage = {
   },
 };
 
-// ------------------------------------------------------------- matin vs soir
+// ------------------------------------------------------- comparaison par poste
 export const postes = {
-  title: () => "Semaines du matin et semaines du soir",
+  title: () => "Comparaison par poste",
   async render(body, p, ctx) {
     const { start, end } = ctx.period(p);
+    const h = ctx.settings.horaires || {};
+    if (h.actif === false) return message(body, "Les horaires de travail sont désactivés dans les réglages.");
     const d = await api.get("/api/shifts", { metrics_list: p.metriques.join(","), start, end, weekdays: p.jours_ouvres ? 1 : 0 });
     const P = ctx.palette;
-    const postes = ctx.settings.postes || {};
-    if (postes.actif === false) return message(body, "La comparaison par poste est désactivée dans les réglages.");
-    ctx.sub(`${d.jours.matin || 0} jours du matin, ${d.jours.soir || 0} du soir${d.jours_ouvres_seulement ? ", jours ouvrés" : ""}`);
-    const matinParity = postes.impaires === "matin" ? "impaires" : "paires";
-    const soirParity = matinParity === "impaires" ? "paires" : "impaires";
+    const groups = (d.groupes || []).filter((g) => d.jours[g.id]);
+    if (groups.length < 2) return message(body, "Il faut au moins deux postes différents sur la période pour comparer.");
+    const color = (id) => F.shiftColor(id, ctx.settings, P);
+    ctx.sub(`${groups.map((g) => `${d.jours[g.id]} j ${g.nom.toLowerCase()}`).join(", ")}${d.jours_ouvres_seulement ? ", jours travaillés" : ""}`);
+    const two = groups.length === 2;
     const rows = d.metriques.map((m) => {
-      const a = m.matin;
-      const b = m.soir;
       const meta = ctx.meta(m.metric);
-      const has = F.isNum(a.moyenne) && F.isNum(b.moyenne);
+      const stats = groups.map((g) => m.groupes[g.id]);
+      const has = stats.filter((st) => F.isNum(st.moyenne));
       let svg = "";
-      if (has) {
+      if (has.length >= 2) {
         // Lecture « forêt » : un point par poste (moyenne) et un trait pour ± un écart-type.
         const spread = (st) => (F.isNum(st.ecart_type) ? st.ecart_type : 0);
-        const lo = Math.min(a.moyenne - spread(a), b.moyenne - spread(b));
-        const hi = Math.max(a.moyenne + spread(a), b.moyenne + spread(b));
+        const lo = Math.min(...has.map((st) => st.moyenne - spread(st)));
+        const hi = Math.max(...has.map((st) => st.moyenne + spread(st)));
         const x = (v) => 3 + ((v - lo) / ((hi - lo) || 1)) * 94;
-        const mark = (st, top, color) => `
-          <i class="whisker" style="left:${x(st.moyenne - spread(st))}%;width:${x(st.moyenne + spread(st)) - x(st.moyenne - spread(st))}%;top:${top + 3}px;background:${color}"></i>
-          <i class="pt" style="left:${x(st.moyenne)}%;top:${top}px;background:${color}"></i>`;
-        svg = `<div class="forest" aria-hidden="true">${mark(a, 2, P.series[0])}${mark(b, 14, P.series[1])}</div>`;
+        const step = Math.min(12, 26 / groups.length);
+        svg = `<div class="forest" aria-hidden="true">${groups.map((g, i) => {
+          const st = m.groupes[g.id];
+          if (!F.isNum(st.moyenne)) return "";
+          const top = 2 + i * step;
+          return `<i class="whisker" style="left:${x(st.moyenne - spread(st))}%;width:${x(st.moyenne + spread(st)) - x(st.moyenne - spread(st))}%;top:${top + 3}px;background:${color(g.id)}"></i>
+            <i class="pt" style="left:${x(st.moyenne)}%;top:${top}px;background:${color(g.id)}"></i>`;
+        }).join("")}</div>`;
       }
-      const diff = has ? F.delta(meta, a.moyenne, b.moyenne) : "–";
-      const tip = has ? `Matin : moyenne ${F.value(meta, a.moyenne)}, médiane ${F.value(meta, a.mediane)} (${a.n} j). Soir : moyenne ${F.value(meta, b.moyenne)}, médiane ${F.value(meta, b.mediane)} (${b.n} j). Barres pâles : ± un écart-type.` : "";
-      return `<div class="shift-row" title="${F.escape(tip)}">
+      const [a, b] = m.entre || [];
+      const diff = m.entre ? F.delta(meta, m.groupes[a].moyenne, m.groupes[b].moyenne) : "–";
+      const between = m.entre && !two ? `<br><small>${F.escape(F.shiftName(a, ctx.settings))} − ${F.escape(F.shiftName(b, ctx.settings))}</small>` : "";
+      const tip = groups.map((g) => `${g.nom} : moyenne ${F.value(meta, m.groupes[g.id].moyenne)}, médiane ${F.value(meta, m.groupes[g.id].mediane)} (${m.groupes[g.id].n} j)`).join(". ") + ". Barres pâles : ± un écart-type.";
+      return `<div class="shift-row" style="--n:${groups.length}" title="${F.escape(tip)}">
         <span>${F.escape(m.label)}</span>
-        <span class="val">${F.escape(F.value(meta, a.moyenne))}</span>
-        <span class="val">${F.escape(F.value(meta, b.moyenne))}</span>
+        ${groups.map((g) => `<span class="val">${F.escape(F.value(meta, m.groupes[g.id].moyenne))}</span>`).join("")}
         <span class="bar-cell">${svg}</span>
-        <span class="effect"><b>${F.escape(diff)}</b><br>écart ${F.escape(LECTURE[m.effet.lecture] || m.effet.lecture)}</span>
+        <span class="effect"><b>${F.escape(diff || "–")}</b>${between}<br>écart ${F.escape(LECTURE[m.effet.lecture] || m.effet.lecture)}</span>
       </div>`;
     }).join("");
     body.classList.add("scroll");
-    body.innerHTML = `${C.legendHTML([
-      { label: `Matin (semaines ${matinParity})`, color: P.series[0], kind: "dot" },
-      { label: `Soir (semaines ${soirParity})`, color: P.series[1], kind: "dot" },
-    ])}
+    const head = two ? `${F.escape(groups[0].nom)} − ${F.escape(groups[1].nom.toLowerCase())}` : "Écart max";
+    body.innerHTML = `${C.legendHTML(groups.map((g) => ({ label: `${g.nom}${g.debut ? ` (${g.debut}–${g.fin})` : ""}`, color: color(g.id), kind: "dot" })))}
       <div class="shift-rows" role="table">
-        <div class="shift-row head-row"><span>Métrique</span><span class="val">Matin</span><span class="val">Soir</span><span class="bar-cell"></span><span class="effect">Matin − soir</span></div>
+        <div class="shift-row head-row" style="--n:${groups.length}"><span>Métrique</span>${groups.map((g) => `<span class="val">${F.escape(g.nom)}</span>`).join("")}<span class="bar-cell"></span><span class="effect">${head}</span></div>
         ${rows}
       </div>`;
   },

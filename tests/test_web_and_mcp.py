@@ -28,7 +28,8 @@ def test_web_api(filled):
 
     client = TestClient(create_app())
     boot = client.get("/api/bootstrap").json()
-    assert boot["volumes"]["activities"] == 8 and len(boot["vues"]) == 5 and boot["cle"]
+    assert boot["volumes"]["activities"] == 8 and len(boot["vues"]) == 6 and boot["cle"]
+    assert boot["vues"][0]["id"] == "accueil"  # la page d'accueil ouvre l'interface
     assert client.get("/").status_code == 200
     assert client.get("/static/js/app.js").status_code == 200
     # protections

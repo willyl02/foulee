@@ -115,6 +115,12 @@ def reparse_all(conn: sqlite3.Connection) -> dict:
     update_wake_battery(conn, days)
     for r in conn.execute("SELECT key, payload FROM raw WHERE source = ? AND kind = 'fitness_age'", (SOURCE,)).fetchall():
         db.put_daily(conn, r["key"], parse.parse_fitness_age(json.loads(r["payload"])))
+    zones = db.get_raw(conn, SOURCE, "hr_zones", "latest")
+    if zones is not None and parse.heart_rate_zones(zones):
+        db.set_meta(conn, "garmin_hr_zones", json.dumps(parse.heart_rate_zones(zones)))
+    profile = db.get_raw(conn, SOURCE, "profile", "latest")
+    if isinstance(profile, dict):
+        db.set_meta(conn, "garmin_profil", json.dumps(parse.profile_settings(profile)))
     rows = conn.execute("SELECT payload FROM raw WHERE source = ? AND kind = 'activity'", (SOURCE,)).fetchall()
     for r in rows:
         row = parse.parse_activity(json.loads(r["payload"]))
@@ -212,12 +218,19 @@ def run(conn: sqlite3.Connection, *, since: date | None = None, fit_days: int | 
             summary["flux"][STREAM_LABELS[stream]] = count
         update_wake_battery(conn, touched_days)
 
-        # Profil : zones FC et âge fitness du jour (un appel chacun)
-        progress("Profil : zones FC et âge fitness…", (len(DAILY_STREAMS)) / total_steps)
+        # Profil : zones FC, seuil lactique et âge fitness du jour (un appel chacun)
+        progress("Profil : zones FC, seuil et âge fitness…", (len(DAILY_STREAMS)) / total_steps)
         try:
-            zones = parse.heart_rate_zones(session.call("get_heart_rate_zones"))
+            payload = session.call("get_heart_rate_zones")
+            if payload:
+                db.put_raw(conn, SOURCE, "hr_zones", "latest", payload)
+            zones = parse.heart_rate_zones(payload)
             if zones:
                 db.set_meta(conn, "garmin_hr_zones", json.dumps(zones))
+            settings_payload = session.call("get_user_profile_settings")
+            if isinstance(settings_payload, dict):
+                db.put_raw(conn, SOURCE, "profile", "latest", settings_payload)
+                db.set_meta(conn, "garmin_profil", json.dumps(parse.profile_settings(settings_payload)))
             fitness = session.call("get_fitness_age", today)
             if fitness:
                 db.put_raw(conn, SOURCE, "fitness_age", today.isoformat(), fitness)

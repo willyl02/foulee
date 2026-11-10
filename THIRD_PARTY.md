@@ -11,7 +11,7 @@ Foulée s'appuie sur ces briques open source, installées ou embarquées localem
 | mcp (Model Context Protocol, SDK Python) | Serveur pour Claude Desktop | MIT |
 | keyring | Accès au Gestionnaire d'identification Windows | MIT |
 | pystray, six | Icône près de l'horloge (Windows) | LGPL 3.0 (pystray, non modifié, remplaçable), MIT (six) |
-| Pillow | Dessin de l'icône (Windows) | MIT-CMU (HPND) |
+| Pillow | Dessin de l'icône (Windows), contrôle et réduction de la photo de profil | MIT-CMU (HPND) |
 | Apache ECharts 5 (`foulee/static/vendor/echarts.min.js`) | Graphiques | Apache 2.0 |
 | Leaflet 1.9 (`foulee/static/vendor/leaflet/`) | Cartes | BSD 2 clauses |
 | Barlow et Barlow Semi Condensed (`foulee/static/fonts/`) | Polices | SIL Open Font License 1.1 |

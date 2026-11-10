@@ -17,7 +17,7 @@ from typing import Any, Iterator
 
 from . import config
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2  # 2 : colonnes « extra » et « hr_zones_garmin » des séances (0.5)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (
@@ -76,8 +76,10 @@ CREATE TABLE IF NOT EXISTS activities (
     vo2max       REAL,
     trimp        REAL,                  -- TRIMP calculé par Foulée (FC)
     load         REAL,                  -- charge retenue pour les calculs forme/fatigue
-    hr_zones     TEXT,                  -- JSON : secondes en zones FC 1..5
+    hr_zones     TEXT,                  -- JSON : secondes en zones FC 1..5 (selon les zones des réglages)
     pace_zones   TEXT,                  -- JSON : secondes en zones d'allure 1..5
+    hr_zones_garmin TEXT,               -- JSON : secondes en zones FC 1..5 comptées par Garmin
+    extra        TEXT,                  -- JSON : autres valeurs Garmin (dynamique de course, puissance…)
     start_lat    REAL,
     start_lon    REAL,
     lap_count    INTEGER,
@@ -159,13 +161,16 @@ DEFAULT_SETTINGS: dict[str, Any] = {
         "distance_km": 21.0975,
         "temps_cible": "1:25:00",
     },
-    "postes": {
+    "postes": {                # ancien réglage (0.1 à 0.4), relu si « horaires » est vide
         "actif": True,
         "impaires": "matin",   # semaines ISO impaires
         "paires": "soir",      # semaines ISO paires
         "jours_ouvres": True,  # comparer uniquement du lundi au vendredi
         "semaines_exclues": [],  # ex. ["2026-W32", "2026-W33"] (congés)
     },
+    "horaires": None,          # horaires de travail (voir schedule.py) ; vide = reprise de « postes »
+    "zones_fc": None,          # méthode des zones FC (voir zones.py) ; vide = zones Garmin
+    "zones_allure": None,      # méthode des zones d'allure ; vide = % de VMA ci-dessous
     "zones_allure_pct_vma": [70, 80, 88, 95],
     "fractions_seuil_pct_vma": 85,
     "fit_auto_jours": 180,     # télécharge automatiquement les FIT des N derniers jours
@@ -173,9 +178,12 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "carte_fond": "osm",       # osm | ign | aucun
     "canal_maj": "stable",     # stable | beta : quelles versions proposer aux mises à jour
     "charge_source": "garmin",  # garmin (charge Garmin si dispo) | trimp
+    "profil": {"prenom": "", "logo": "foulee"},  # en-tête de l'interface (logo au choix ou photo)
+    "vameval": None,           # dernier test VAMEVAL saisi (« 12:40 »), pour la page d'accueil
 }
 
 ZONE_NAMES_PACE = ["Récup / EF", "Endurance active", "Seuil / semi", "Allure 10 km", "VMA"]
+SETTINGS_SKIPPED_ON_EXPORT = {"historique_depuis"}  # propre à chaque installation
 
 
 def now_iso() -> str:
@@ -200,10 +208,56 @@ def init(conn: sqlite3.Connection) -> None:
         "INSERT OR IGNORE INTO meta(key, value) VALUES ('schema_version', ?)", (str(SCHEMA_VERSION),)
     )
     _mask_key_ids(conn)
+    _migrate(conn)
     conn.commit()
     from . import views  # import local pour éviter un cycle
 
     views.ensure_default_views(conn)
+
+
+def _schema_version(conn: sqlite3.Connection) -> int:
+    row = conn.execute("SELECT value FROM meta WHERE key = 'schema_version'").fetchone()
+    return int(row[0]) if row else 1
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Met à niveau une base créée par une version plus ancienne (une seule fois, sous verrou :
+    l'interface et Claude Desktop peuvent ouvrir la base en même temps)."""
+    if _schema_version(conn) >= SCHEMA_VERSION:
+        return
+    conn.commit()
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        version = _schema_version(conn)
+        if version < 2:
+            _migrate_v2(conn)
+        conn.execute("UPDATE meta SET value = ? WHERE key = 'schema_version'", (str(SCHEMA_VERSION),))
+        conn.commit()
+    except BaseException:
+        conn.rollback()
+        raise
+
+
+def _migrate_v2(conn: sqlite3.Connection) -> None:
+    """0.5 : nouvelles valeurs Garmin (SpO2, dynamique de course…), relues dans les réponses brutes gardées."""
+    from .garmin import parse
+
+    columns = {r["name"] for r in conn.execute("PRAGMA table_info(activities)")}
+    for name in ("hr_zones_garmin", "extra"):
+        if name not in columns:
+            conn.execute(f"ALTER TABLE activities ADD COLUMN {name} TEXT")
+    for row in conn.execute("SELECT payload FROM raw WHERE source = 'garmin' AND kind = 'activity'").fetchall():
+        parsed = parse.parse_activity(json.loads(row["payload"]))
+        if parsed:
+            conn.execute("UPDATE activities SET hr_zones_garmin = ?, extra = ? WHERE id = ?",
+                         (parsed["hr_zones_garmin"], parsed["extra"], parsed["id"]))
+    parsers = {"daily": parse.parse_daily_summary, "sleep": parse.parse_sleep, "weight": parse.parse_weight}
+    for kind, parser in parsers.items():
+        for row in conn.execute("SELECT key, payload FROM raw WHERE source = 'garmin' AND kind = ?", (kind,)).fetchall():
+            day, values = parser(json.loads(row["payload"]))
+            put_daily(conn, str(day or row["key"])[:10], values)
+    for row in conn.execute("SELECT key, payload FROM raw WHERE source = 'garmin' AND kind = 'fitness_age'").fetchall():
+        put_daily(conn, row["key"], parse.parse_fitness_age(json.loads(row["payload"])))
 
 
 def _mask_key_ids(conn: sqlite3.Connection) -> None:
@@ -265,6 +319,9 @@ def get_settings(conn: sqlite3.Connection) -> dict[str, Any]:
             result[row["key"]].update(value)
         else:
             result[row["key"]] = value
+    from . import schedule  # import local : schedule ne dépend de rien
+
+    result["horaires"] = schedule.effective(result)
     return result
 
 

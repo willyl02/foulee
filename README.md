@@ -93,21 +93,47 @@ la clé**. Pour l'effacer de ce PC : **Supprimer la clé sur ce PC**.
 
 | Vue | Contenu |
 |---|---|
+| Accueil | Bonjour (photo, poste du jour, objectif), forme du jour face à tes habitudes, ta semaine, tes allures selon ta VMA (tableau du club, piste, test VAMEVAL), Body Battery de la journée, records |
 | Aujourd'hui | Nuit, VFC, FC de repos, Body Battery au réveil, stress, km sur 7 jours, fraîcheur, dernière séance |
 | Entraînement | Km par semaine, forme et fatigue (charge chronique, aiguë, fraîcheur, ratio), zones FC et d'allure, liste des séances |
-| Séance | Résumé, carte, courbes synchronisées (FC, allure, altitude, cadence…), tours ou découpage au km |
-| Récup & postes | Semaines du matin contre semaines du soir, sommeil, VFC, FC de repos, nuage sommeil → VFC, calendrier |
+| Séance | Résumé, carte, courbes synchronisées (FC, allure, altitude, cadence…), autres mesures (dynamique de course, puissance, respiration…), tours ou découpage au km |
+| Récup & postes | Comparaison d'un poste de travail à l'autre, sommeil, VFC, FC de repos, nuage sommeil → VFC, calendrier |
 | Cap semi de Paris | Compte à rebours, allure cible, fractions rapides face à l'allure cible, volume, charge, zones, VO2max |
 
 **Tout se modifie** : bouton « Modifier la vue », puis glisse les tuiles, change
-leur taille, règle-les (roue dentée) ou ajoute-en. « Nouvelle vue » dans le menu
-crée une vue vide. Les vues s'exportent et s'importent en JSON.
+leur taille, règle-les (roue dentée) ou ajoute-en. Les tuiles sont rangées par
+catégories, avec une recherche. Partout où une tuile demande une métrique, tu peux
+choisir parmi celles de Foulée **ou n'importe quelle valeur que Garmin renvoie**
+(« données brutes » : SpO2, respiration, dynamique de course, minutes d'intensité…).
+« Nouvelle vue » dans le menu crée une vue vide. Les vues s'exportent et s'importent
+en JSON.
 
-Les **Réglages** contiennent ta VMA (zones d'allure, fractions), tes FC (laisse
-vide pour utiliser tes zones Garmin), ton objectif course, tes postes (parité des
-semaines, semaines de congés à exclure), le fond de carte (OpenStreetMap, Plan IGN
-ou aucun), puis l'installation : clé Garmin, dossier des données, Claude Desktop,
-démarrage avec Windows et mises à jour.
+La tuile **Journée en détail** montre heure par heure la FC, la Body Battery, les
+phases du sommeil ou la VFC de la nuit. Ces courbes sont demandées à Garmin quand
+la tuile les affiche (un appel par jour), puis gardées dans ta base.
+
+Les **Réglages** contiennent :
+
+- **Profil et logo** : ton prénom, ta photo (JPEG, PNG ou WebP, recadrée en carré
+  dans le navigateur et réduite à 256 × 256 pixels, sans métadonnées) ou celle de
+  Garmin Connect, et le logo de l'application (sept dessins, ou ta photo) ;
+- **Profil de coureur** et **Objectif course** ;
+- **Horaires de travail** : bureau, 2x8 matin / soir (selon la parité des
+  semaines), 3x8, 5x8 (cycle en jours) ou cycle personnalisé, avec les heures de
+  chaque poste et tes congés ;
+- **Zones FC** : celles de ta montre (lues chez Garmin), en % de la FC max, en %
+  de la FC de réserve, en % de la FC au seuil, ou bornes à la main comme sur Strava ;
+  tire les séparations de la barre pour les ajuster ;
+- **Zones d'allure** : en % de la VMA, en % de la vitesse au seuil, ou allures à la
+  main ;
+- la synchro, le fond de carte (OpenStreetMap, Plan IGN ou aucun), puis
+  l'installation : clé Garmin, dossier des données, Claude Desktop, démarrage avec
+  Windows et mises à jour.
+
+**Sauvegarde des réglages** : chaque installation (le PC, le serveur) garde ses
+propres réglages. « Exporter mes réglages » les met dans un fichier (avec tes vues et
+ta photo) ; « Importer des réglages… » les reprend sur l'autre installation. La clé
+Garmin, les mots de passe et le jeton GitHub n'y figurent jamais.
 
 ## 4. Utiliser Foulée avec Claude Desktop
 
@@ -119,7 +145,9 @@ démarrage avec Windows et mises à jour.
    l'antivirus de Windows analyse les fichiers de Foulée une première fois.
 3. Dans une conversation, bouton **+** → **Connecteurs** : « foulee » y figure.
 4. Pose tes questions, par exemple :
-   - « Compare mon sommeil et ma VFC entre semaines du matin et du soir depuis septembre. »
+   - « Compare mon sommeil et ma VFC d'un poste à l'autre depuis septembre. »
+   - « Quelles allures pour 6 × 800 m à 100 % de VMA ? Et sur piste, au 400 m ? »
+   - « Comment est ma forme ce matin ? »
    - « Analyse ma séance de fractionné d'hier : tours, FC, découplage. »
    - « Où en est ma charge d'entraînement ? Suis-je frais pour samedi ? »
    - « Crée-moi une vue qui suit mes fractions longues et mon volume depuis octobre. »
@@ -354,8 +382,12 @@ Pour développer : `uv sync`, puis `uv run pytest` (tests) et `uv run foulee web
   bouton « Copier » et réessaie ; si elle vient d'être créée, attends une minute ;
   vérifie qu'elle figure, active, sur la page API personnelle. Le message cite la
   réponse de Garmin sans jamais montrer ta clé : tu peux le transmettre à Claude.
-- **Bandeau « Garmin refuse ta clé »** alors que tout marchait : elle a expiré ou été
-  régénérée, remplace-la (section 2).
+- **Bandeau « Garmin refuse ta clé »** ou **« Garmin ne connaît plus ta clé »** alors
+  que tout marchait : elle a expiré, ou été supprimée ou régénérée dans Garmin Connect
+  (par exemple en créant une clé pour un autre appareil) ; remplace-la (section 2).
+- **Le serveur et le PC n'ont pas les mêmes réglages** : c'est normal, chaque
+  installation a sa base. Exporte-les d'un côté et importe-les de l'autre
+  (Réglages → Sauvegarde des réglages).
 - **La mise à jour indique « ajoute un jeton GitHub »** : le dépôt est privé
   (section 6).
 - **Le téléphone affiche « Foulée est injoignable »** : l'appli Tailscale est
@@ -393,9 +425,13 @@ foulee/
   vault.py         secrets : clé Garmin, jeton GitHub (Gestionnaire d'identification Windows)
   keyinput.py      lecture de la clé (presse-papiers, nettoyage) sans jamais l'afficher
   sync.py          chef d'orchestre des sources (ajouter Withings ou Strava = une entrée ici)
-  db.py            schéma SQLite, réglages
-  metrics.py       catalogue des métriques (libellés, unités, formats)
-  analysis.py      tous les calculs (séries, charge, zones, postes, objectif…)
+  db.py            schéma SQLite (et sa mise à niveau), réglages
+  metrics.py       catalogue des métriques (libellés, unités, formats) et données brutes de Garmin
+  analysis.py      tous les calculs (séries, charge, zones, postes, objectif, allures VMA, forme du jour…)
+  schedule.py      horaires de travail : bureau, 2x8, 3x8, 5x8, cycle personnalisé, congés
+  zones.py         méthodes des zones FC et d'allure
+  reglages.py      contrôle des réglages, export et import
+  profile.py       prénom, logo, photo de profil
   views.py         types de tuiles et vues par défaut
   access.py        mot de passe du réseau local (empreinte, cookie signé, anti-acharnement)
   mcp_server.py    outils pour Claude Desktop

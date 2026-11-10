@@ -19,9 +19,39 @@ from . import db, metrics
 PERIODES = ["herite", "7", "14", "30", "60", "90", "120", "180", "365", "730"]
 SPORT_OPTIONS = ["tous", "pied"] + list(metrics.SPORTS)
 
+TILE_CATEGORIES = ["Accueil", "Chiffres et courbes", "Entraînement", "Séances", "Journée en détail", "Travail",
+                   "Divers"]
+
 TILE_TYPES: list[dict[str, Any]] = [
     {
-        "type": "kpi", "label": "Chiffre clé", "icone": "gauge",
+        "type": "profil", "label": "En-tête : bonjour", "icone": "user", "categorie": "Accueil",
+        "description": "Ta photo, la date, ton poste du jour, ton objectif et la dernière synchro.",
+        "taille": {"w": 12, "h": 1}, "params": [],
+    },
+    {
+        "type": "forme", "label": "Forme du jour", "icone": "heart", "categorie": "Accueil",
+        "description": "FC de repos, VFC, sommeil, Body Battery, fraîcheur : chacun face à tes habitudes.",
+        "taille": {"w": 8, "h": 2}, "params": [],
+    },
+    {
+        "type": "allures", "label": "Allures selon ta VMA", "icone": "run", "categorie": "Accueil",
+        "description": "Le tableau du club : allures et vitesses de 55 à 120 % de VMA, temps de passage sur "
+                       "piste, test VAMEVAL.",
+        "taille": {"w": 12, "h": 3},
+        "params": [
+            {"key": "onglet", "label": "Onglet affiché d'abord", "kind": "select",
+             "options": ["tableau", "vameval"], "default": "tableau"},
+            {"key": "comparer", "label": "Comparer avec une autre VMA (km/h, 0 = non)", "kind": "number",
+             "default": 0},
+        ],
+    },
+    {
+        "type": "semaine", "label": "Ta semaine", "icone": "calendar", "categorie": "Accueil",
+        "description": "Les 7 jours de la semaine : postes, séances, volume et charge face aux 4 semaines d'avant.",
+        "taille": {"w": 12, "h": 2}, "params": [],
+    },
+    {
+        "type": "kpi", "label": "Chiffre clé", "icone": "gauge", "categorie": "Chiffres et courbes",
         "description": "Dernière valeur d'une métrique, comparée à ta moyenne récente.",
         "taille": {"w": 3, "h": 1},
         "params": [
@@ -32,7 +62,7 @@ TILE_TYPES: list[dict[str, Any]] = [
         ],
     },
     {
-        "type": "serie", "label": "Courbe ou barres", "icone": "chart",
+        "type": "serie", "label": "Courbe ou barres", "icone": "chart", "categorie": "Chiffres et courbes",
         "description": "Une ou plusieurs métriques dans le temps, par jour, semaine ou mois.",
         "taille": {"w": 6, "h": 2},
         "params": [
@@ -46,12 +76,13 @@ TILE_TYPES: list[dict[str, Any]] = [
             {"key": "sport", "label": "Sport (séances)", "kind": "sport", "default": "tous"},
             {"key": "disposition", "label": "Plusieurs métriques", "kind": "select",
              "options": ["auto", "superposer", "empiler"], "default": "auto"},
-            {"key": "bandes_postes", "label": "Griser les semaines du matin", "kind": "bool", "default": False},
+            {"key": "bandes_postes", "label": "Colorer le fond selon le poste de travail", "kind": "bool",
+             "default": False},
             {"key": "periode", "label": "Période (jours)", "kind": "periode", "default": "herite"},
         ],
     },
     {
-        "type": "charge", "label": "Forme & fatigue", "icone": "trend",
+        "type": "charge", "label": "Forme & fatigue", "icone": "trend", "categorie": "Entraînement",
         "description": "Charge chronique (42 j), aiguë (7 j) et fraîcheur.",
         "taille": {"w": 12, "h": 2},
         "params": [
@@ -60,7 +91,7 @@ TILE_TYPES: list[dict[str, Any]] = [
         ],
     },
     {
-        "type": "zones", "label": "Zones FC ou allure", "icone": "layers",
+        "type": "zones", "label": "Zones FC ou allure", "icone": "layers", "categorie": "Entraînement",
         "description": "Temps passé dans chaque zone, par semaine, par mois ou au total.",
         "taille": {"w": 6, "h": 2},
         "params": [
@@ -72,7 +103,7 @@ TILE_TYPES: list[dict[str, Any]] = [
         ],
     },
     {
-        "type": "calendrier", "label": "Calendrier thermique", "icone": "calendar",
+        "type": "calendrier", "label": "Calendrier thermique", "icone": "calendar", "categorie": "Chiffres et courbes",
         "description": "Une case par jour, colorée selon la valeur.",
         "taille": {"w": 6, "h": 2},
         "params": [
@@ -81,7 +112,7 @@ TILE_TYPES: list[dict[str, Any]] = [
         ],
     },
     {
-        "type": "nuage", "label": "Nuage de points", "icone": "scatter",
+        "type": "nuage", "label": "Nuage de points", "icone": "scatter", "categorie": "Chiffres et courbes",
         "description": "Croise deux métriques jour par jour (avec un décalage possible).",
         "taille": {"w": 6, "h": 2},
         "params": [
@@ -89,23 +120,23 @@ TILE_TYPES: list[dict[str, Any]] = [
             {"key": "y", "label": "Axe vertical", "kind": "metric", "default": "hrv_night"},
             {"key": "decalage", "label": "Y mesuré N jours après X", "kind": "select", "options": ["0", "1", "2"],
              "default": "0"},
-            {"key": "couleur_postes", "label": "Colorer matin / soir", "kind": "bool", "default": True},
+            {"key": "couleur_postes", "label": "Colorer selon le poste de travail", "kind": "bool", "default": True},
             {"key": "periode", "label": "Période (jours)", "kind": "periode", "default": "herite"},
         ],
     },
     {
-        "type": "postes", "label": "Matin vs soir", "icone": "shift",
-        "description": "Compare tes métriques entre semaines du matin et semaines du soir.",
+        "type": "postes", "label": "Comparaison par poste", "icone": "shift", "categorie": "Travail",
+        "description": "Compare tes métriques d'un poste à l'autre (matin, soir, nuit…), d'après tes horaires.",
         "taille": {"w": 12, "h": 2},
         "params": [
             {"key": "metriques", "label": "Métriques", "kind": "metrics",
              "default": ["sleep_s", "sleep_end_h", "hrv_night", "resting_hr", "bb_wake"]},
-            {"key": "jours_ouvres", "label": "Jours ouvrés seulement", "kind": "bool", "default": True},
+            {"key": "jours_ouvres", "label": "Jours travaillés seulement", "kind": "bool", "default": True},
             {"key": "periode", "label": "Période (jours)", "kind": "periode", "default": "180"},
         ],
     },
     {
-        "type": "activites", "label": "Liste des séances", "icone": "list",
+        "type": "activites", "label": "Liste des séances", "icone": "list", "categorie": "Séances",
         "description": "Tes séances, filtrables ; un clic ouvre le détail.",
         "taille": {"w": 12, "h": 3},
         "params": [
@@ -116,23 +147,29 @@ TILE_TYPES: list[dict[str, Any]] = [
         ],
     },
     {
-        "type": "derniere_seance", "label": "Dernière séance", "icone": "run",
+        "type": "derniere_seance", "label": "Dernière séance", "icone": "run", "categorie": "Séances",
         "description": "Carte résumé de ta dernière séance.",
         "taille": {"w": 6, "h": 2},
         "params": [{"key": "sport", "label": "Sport", "kind": "sport", "default": "tous"}],
     },
     {
-        "type": "seance_resume", "label": "Séance : résumé", "icone": "info",
+        "type": "seance_resume", "label": "Séance : résumé", "icone": "info", "categorie": "Séances",
         "description": "Chiffres clés de la séance choisie en haut de la vue.",
         "taille": {"w": 12, "h": 1}, "params": [],
     },
     {
-        "type": "seance_carte", "label": "Séance : carte", "icone": "map",
+        "type": "seance_mesures", "label": "Séance : autres mesures", "icone": "gauge", "categorie": "Séances",
+        "description": "Dynamique de course, puissance, respiration, température, Body Battery, meilleurs temps "
+                       "de la sortie.",
+        "taille": {"w": 12, "h": 2}, "params": [],
+    },
+    {
+        "type": "seance_carte", "label": "Séance : carte", "icone": "map", "categorie": "Séances",
         "description": "Tracé GPS de la séance choisie.",
         "taille": {"w": 6, "h": 3}, "params": [],
     },
     {
-        "type": "seance_courbes", "label": "Séance : courbes", "icone": "wave",
+        "type": "seance_courbes", "label": "Séance : courbes", "icone": "wave", "categorie": "Séances",
         "description": "FC, allure, altitude, cadence… synchronisées.",
         "taille": {"w": 6, "h": 3},
         "params": [
@@ -143,7 +180,7 @@ TILE_TYPES: list[dict[str, Any]] = [
         ],
     },
     {
-        "type": "seance_tours", "label": "Séance : tours", "icone": "table",
+        "type": "seance_tours", "label": "Séance : tours", "icone": "table", "categorie": "Séances",
         "description": "Tours enregistrés par la montre, ou découpage au kilomètre.",
         "taille": {"w": 12, "h": 2},
         "params": [
@@ -151,18 +188,38 @@ TILE_TYPES: list[dict[str, Any]] = [
         ],
     },
     {
-        "type": "objectif", "label": "Objectif course", "icone": "flag",
+        "type": "objectif", "label": "Objectif course", "icone": "flag", "categorie": "Entraînement",
         "description": "Compte à rebours et allure cible de ton objectif (voir Réglages).",
         "taille": {"w": 4, "h": 2}, "params": [],
     },
     {
-        "type": "fractions", "label": "Fractions rapides", "icone": "bolt",
+        "type": "fractions", "label": "Fractions rapides", "icone": "bolt", "categorie": "Entraînement",
         "description": "Allure moyenne de tes tours rapides, séance par séance, face à l'allure cible.",
         "taille": {"w": 8, "h": 2},
         "params": [{"key": "periode", "label": "Période (jours)", "kind": "periode", "default": "120"}],
     },
     {
-        "type": "note", "label": "Note", "icone": "note",
+        "type": "records", "label": "Records", "icone": "trophy", "categorie": "Entraînement",
+        "description": "Tes meilleurs temps (1 km, 5 km, 10 km, semi…) sur la période, face à tes records.",
+        "taille": {"w": 6, "h": 2},
+        "params": [
+            {"key": "sport", "label": "Sport", "kind": "sport", "default": "pied"},
+            {"key": "periode", "label": "Période (jours)", "kind": "periode", "default": "365"},
+        ],
+    },
+    {
+        "type": "journee", "label": "Journée en détail", "icone": "clock", "categorie": "Journée en détail",
+        "description": "Heure par heure : FC de la journée, Body Battery, phases de sommeil ou VFC de la nuit.",
+        "taille": {"w": 12, "h": 2},
+        "params": [
+            {"key": "donnee", "label": "Donnée", "kind": "select",
+             "options": ["body_battery", "fc", "sommeil", "vfc"], "default": "body_battery"},
+            {"key": "jour", "label": "Jour affiché d'abord", "kind": "select", "options": ["aujourdhui", "hier"],
+             "default": "aujourdhui"},
+        ],
+    },
+    {
+        "type": "note", "label": "Note", "icone": "note", "categorie": "Divers",
         "description": "Un texte libre (rappel, consigne, idée).",
         "taille": {"w": 4, "h": 1},
         "params": [{"key": "texte", "label": "Texte", "kind": "textarea", "default": ""}],
@@ -170,7 +227,8 @@ TILE_TYPES: list[dict[str, Any]] = [
 ]
 TILE_INDEX = {t["type"]: t for t in TILE_TYPES}
 WIDTHS = (3, 4, 6, 8, 12)
-ICONS = ["sun", "activity", "map", "moon", "flag", "heart", "chart", "calendar", "star", "bolt", "layers", "run"]
+ICONS = ["home", "sun", "activity", "map", "moon", "flag", "heart", "chart", "calendar", "star", "bolt", "layers",
+         "run", "trophy", "clock", "user"]
 
 
 def _tile(kind: str, w: int | None = None, h: int | None = None, titre: str | None = None, **params: Any) -> dict:
@@ -186,9 +244,26 @@ def _tile(kind: str, w: int | None = None, h: int | None = None, titre: str | No
     return tile
 
 
+def home_view() -> dict:
+    """Page d'accueil : la journée en un coup d'œil, et les allures du club selon ta VMA."""
+    return {
+        "id": "accueil", "name": "Accueil", "icon": "home",
+        "spec": {"tuiles": [
+            _tile("profil", 12, 1),
+            _tile("forme", 8, 2),
+            _tile("objectif", 4, 2),
+            _tile("semaine", 12, 2),
+            _tile("allures", 12, 3),
+            _tile("journee", 6, 2, donnee="body_battery"),
+            _tile("records", 6, 2),
+        ]},
+    }
+
+
 def default_views() -> list[dict]:
     pied = "pied"
     return [
+        home_view(),
         {
             "id": "aujourdhui", "name": "Aujourd'hui", "icon": "sun",
             "spec": {"tuiles": [
@@ -230,6 +305,7 @@ def default_views() -> list[dict]:
                 _tile("seance_resume", 12, 1),
                 _tile("seance_carte", 6, 3),
                 _tile("seance_courbes", 6, 3),
+                _tile("seance_mesures", 12, 2),
                 _tile("seance_tours", 12, 2),
             ]},
         },
@@ -270,9 +346,10 @@ def _clean_params(kind: str, params: dict | None) -> dict:
     for p in spec["params"]:
         value = params.get(p["key"], copy.deepcopy(p["default"]))
         if p["kind"] == "metric":
-            value = value if value in metrics.CATALOG else p["default"]
+            value = value if isinstance(value, str) and metrics.exists(value) else p["default"]
         elif p["kind"] == "metrics":
-            value = [v for v in (value if isinstance(value, list) else [value]) if v in metrics.CATALOG] or p["default"]
+            value = [v for v in (value if isinstance(value, list) else [value])
+                     if isinstance(v, str) and metrics.exists(v)] or p["default"]
         elif p["kind"] in ("select", "periode", "sport"):
             options = p.get("options") or (PERIODES if p["kind"] == "periode" else SPORT_OPTIONS)
             value = str(value) if str(value) in options else p["default"]
@@ -317,9 +394,23 @@ def slugify(text: str) -> str:
 
 # ------------------------------------------------------------------- stockage
 def ensure_default_views(conn: sqlite3.Connection) -> None:
-    if conn.execute("SELECT COUNT(*) AS n FROM views").fetchone()["n"]:
+    if not conn.execute("SELECT COUNT(*) AS n FROM views").fetchone()["n"]:
+        reset_default_views(conn)
+        db.set_meta(conn, "vue_accueil", "1")
+        conn.commit()
         return
-    reset_default_views(conn)
+    if db.get_meta(conn, "vue_accueil") is None:
+        # 0.5 : la page d'accueil arrive en tête des vues déjà en place, une seule fois
+        if not conn.execute("SELECT 1 FROM views WHERE id = 'accueil'").fetchone():
+            view = home_view()
+            first = conn.execute("SELECT COALESCE(MIN(position), 0) AS p FROM views").fetchone()["p"]
+            conn.execute(
+                "INSERT INTO views(id, name, icon, position, spec, builtin, updated_at) VALUES (?, ?, ?, ?, ?, 1, ?)",
+                (view["id"], view["name"], view["icon"], first - 1, json.dumps(view["spec"], ensure_ascii=False),
+                 db.now_iso()),
+            )
+        db.set_meta(conn, "vue_accueil", "1")
+        conn.commit()
 
 
 def reset_default_views(conn: sqlite3.Connection) -> None:
@@ -371,3 +462,17 @@ def reorder_views(conn: sqlite3.Connection, ids: list[str]) -> None:
     for position, view_id in enumerate(ids):
         conn.execute("UPDATE views SET position = ? WHERE id = ?", (position, view_id))
     conn.commit()
+
+
+def raw_metrics_in_use(conn: sqlite3.Connection) -> list[dict]:
+    """Métriques « données brutes de Garmin » choisies dans des tuiles : l'interface a besoin de leur libellé."""
+    from dataclasses import asdict
+
+    keys: set[str] = set()
+    for view in list_views(conn):
+        for tile in view["spec"].get("tuiles", []):
+            for value in (tile.get("params") or {}).values():
+                for item in value if isinstance(value, list) else [value]:
+                    if isinstance(item, str) and metrics.raw_parts(item):
+                        keys.add(item)
+    return [asdict(metrics.raw_metric(k)) for k in sorted(keys)]

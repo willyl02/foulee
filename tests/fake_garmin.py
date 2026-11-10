@@ -69,6 +69,7 @@ class FakeGarmin:
         self.deleted_keys: set[str] = set()  # clés supprimées dans Garmin Connect : 404 à l'échange
         self.revoked = False  # jetons déjà délivrés refusés (401), comme après la suppression de la clé
         self.fail_status: int | None = None  # panne de Garmin : ce code pour toute lecture
+        self.intraday_calls: list[tuple[str, str]] = []  # journées demandées (FC, sommeil, VFC)
         self.activities = []
         for i in range(activities):
             day = self.today - dt.timedelta(days=i * 4)
@@ -85,6 +86,15 @@ class FakeGarmin:
                 "activityTrainingLoad": 64.0 + i, "vO2MaxValue": 53.0,
                 "hrTimeInZone_1": 60.0, "hrTimeInZone_2": 300.0, "hrTimeInZone_3": 600.0, "hrTimeInZone_4": 200.0,
                 "hrTimeInZone_5": 40.0, "startLatitude": 48.4, "startLongitude": 2.7, "lapCount": 2,
+                # Dynamique de course et meilleurs temps de la sortie (valeurs inventées, champs réels)
+                "avgGroundContactTime": 241.1 + i, "avgVerticalOscillation": 7.47, "avgVerticalRatio": 6.86,
+                "avgStrideLength": 108.4, "avgGroundContactBalance": 50.38, "avgRespirationRate": 38.2,
+                "waterEstimated": 851.0, "differenceBodyBattery": -15, "steps": 9198, "minTemperature": 14.0,
+                "maxTemperature": 25.0, "avgPower": 323.0, "normPower": 353.0, "maxPower": 483.0,
+                "powerTimeInZone_1": 907.9, "trainingEffectLabel": "LACTATE_THRESHOLD", "locationName": "Nogentel",
+                "fastestSplit_1000": 270.0 - i, "fastestSplit_1609": 440.0 - i,
+                "ownerFullName": "Alex Coureur",
+                "ownerProfileImageUrlLarge": "https://exemple.s3.amazonaws.com/profil.jpg",
             })
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), self._handler())
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
@@ -147,6 +157,44 @@ class FakeGarmin:
                 "bodyBatteryValueDescriptorDTOList": [
                     {"bodyBatteryValueDescriptorIndex": 0, "bodyBatteryValueDescriptorKey": "timestamp"},
                     {"bodyBatteryValueDescriptorIndex": 1, "bodyBatteryValueDescriptorKey": "bodyBatteryLevel"}]}
+
+    # ------------------------------------------------- journée en détail
+    @staticmethod
+    def _stamps(day: dt.date) -> dict:
+        midnight = dt.datetime(day.year, day.month, day.day)
+        return {"startTimestampGMT": (midnight - dt.timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%S.0"),
+                "startTimestampLocal": midnight.strftime("%Y-%m-%dT%H:%M:%S.0")}
+
+    def heart_rate_day(self, day: dt.date) -> dict:
+        start = dt.datetime(day.year, day.month, day.day, tzinfo=dt.timezone.utc) - dt.timedelta(hours=1)
+        values = [[int((start + dt.timedelta(minutes=2 * k)).timestamp() * 1000), 50 + k % 30] for k in range(720)]
+        return {"calendarDate": day.isoformat(), **self._stamps(day), "restingHeartRate": 47, "maxHeartRate": 165,
+                "minHeartRate": 44, "heartRateValueDescriptors": [{"key": "timestamp", "index": 0},
+                                                                   {"key": "heartrate", "index": 1}],
+                "heartRateValues": values}
+
+    def sleep_day(self, day: dt.date) -> dict:
+        # Nuit de 23:00 à 07:00 (heure locale, UTC+1) : 4 phases dont les totaux collent au résumé
+        bed = dt.datetime(day.year, day.month, day.day) - dt.timedelta(hours=2)  # 22:00 UTC = 23:00 locale
+        plan = [(1, 90), (0, 60), (1, 60), (2, 45), (3, 10), (1, 120), (2, 65), (1, 30)]
+        levels, moment = [], bed
+        for level, minutes in plan:
+            end = moment + dt.timedelta(minutes=minutes)
+            levels.append({"startGMT": moment.strftime("%Y-%m-%dT%H:%M:%S.0"), "endGMT": end.strftime("%Y-%m-%dT%H:%M:%S.0"),
+                           "activityLevel": float(level)})
+            moment = end
+        ms = int(bed.replace(tzinfo=dt.timezone.utc).timestamp() * 1000)
+        return {"dailySleepDTO": {"calendarDate": day.isoformat(), "sleepTimeSeconds": 28200,
+                                  "deepSleepSeconds": 3600, "lightSleepSeconds": 18000, "remSleepSeconds": 6600,
+                                  "awakeSleepSeconds": 600, "sleepStartTimestampGMT": ms,
+                                  "sleepStartTimestampLocal": ms + 3600_000, "sleepEndTimestampGMT": ms + 480 * 60_000},
+                "sleepLevels": levels,
+                "sleepHeartRate": [{"value": 48 + k % 5, "startGMT": ms + k * 120_000} for k in range(240)]}
+
+    def hrv_day(self, day: dt.date) -> dict:
+        return {"hrvSummary": {"calendarDate": day.isoformat(), "lastNightAvg": 61, "weeklyAvg": 60, "status": "BALANCED"},
+                "hrvReadings": [{"hrvValue": 55 + k % 12, "readingTimeLocal": f"{day.isoformat()}T0{k // 12}:{(k % 12) * 5:02d}:00.0"}
+                                for k in range(84)]}
 
     # --------------------------------------------------------------- routage
     def _handler(self):
@@ -213,12 +261,24 @@ class FakeGarmin:
                     return self._json({"dailyWeightSummaries": items})
                 if p == "/biometric-service/heartRateZones/v2":
                     return self._json([{"trainingMethod": "HR_MAX", "restingHeartRateUsed": 48, "maxHeartRateUsed": 188,
+                                        "lactateThresholdHeartRateUsed": 172,
                                         "zone1Floor": 94, "zone2Floor": 113, "zone3Floor": 132, "zone4Floor": 150,
                                         "zone5Floor": 169, "sport": "DEFAULT"}])
+                if p == "/wellness-service/wellness/dailyHeartRate":
+                    fake.intraday_calls.append(("fc", q.get("date")))
+                    return self._json(fake.heart_rate_day(dt.date.fromisoformat(q["date"])))
+                if p == "/sleep-service/sleep/dailySleep":
+                    fake.intraday_calls.append(("sommeil", q.get("date")))
+                    return self._json(fake.sleep_day(dt.date.fromisoformat(q["date"])))
+                if p.startswith("/hrv-service/hrv/") and not p.startswith("/hrv-service/hrv/daily/"):
+                    fake.intraday_calls.append(("vfc", parts[-1]))
+                    return self._json(fake.hrv_day(dt.date.fromisoformat(parts[-1])))
                 if p.startswith("/fitnessage-service/"):
                     return self._json({"fitnessAge": 33.4, "chronologicalAge": 41})
                 if p == "/userprofile-service/userprofile/settings":
-                    return self._json({"measurementSystem": "metric"})
+                    return self._json({"measurementSystem": "metric", "userData": {
+                        "lactateThresholdHeartRate": 171, "lactateThresholdSpeed": 0.3846, "vo2MaxRunning": 54,
+                        "weight": 72400.0, "height": 178.0, "measurementSystem": "metric"}})
                 if p == "/activitylist-service/activities/search/activities":
                     start, limit = int(q.get("start", 0)), int(q.get("limit", 20))
                     if limit > 45:

@@ -15,6 +15,7 @@ Particularités de l'API gérées ici :
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime, timezone
 from typing import Any, Iterable
 
@@ -114,6 +115,9 @@ DAILY_SUMMARY_METRICS = [
     "int_moderate", "int_vigorous", "int_minutes", "stress_avg", "stress_max", "stress_high_s",
     "stress_rest_s", "stress_low_s", "stress_med_s", "bb_min", "bb_max", "bb_charged", "bb_drained",
     "resp_avg", "hydration_ml",
+    # 0.5
+    "steps_goal", "steps_km", "floors_down", "int_goal", "stress_activity_s", "hydration_goal_ml",
+    "spo2_avg", "spo2_min", "resp_min", "resp_max", "bb_last", "bb_sleep_gain", "bb_activity_cost",
 ]
 
 
@@ -155,13 +159,46 @@ def parse_daily_summary(item: dict) -> tuple[str | None, dict[str, float | None]
         "bb_drained": non_negative(dig(item, "bodyBattery", "drainedValue")),
         "resp_avg": positive(dig(item, "respiration", "avgValue")),
         "hydration_ml": positive(dig(item, "hydration", "consumedInMl")),
+        "steps_goal": positive(dig(item, "movement", "steps", "goal")),
+        "steps_km": _km(dig(item, "movement", "steps", "distanceInMeters")),
+        "floors_down": non_negative(dig(item, "movement", "floorsDescended", "value")),
+        "int_goal": positive(dig(item, "intensityMinutes", "goal")),
+        "stress_activity_s": millis("activityDurationInMillis"),
+        "hydration_goal_ml": positive(dig(item, "hydration", "goalInMl")),
+        "spo2_avg": positive(dig(item, "pulseOx", "avgValue")),
+        "spo2_min": positive(dig(item, "pulseOx", "minValue")),
+        "resp_min": positive(dig(item, "respiration", "minValue")),
+        "resp_max": positive(dig(item, "respiration", "maxValue")),
+        "bb_last": non_negative(dig(item, "bodyBattery", "latestValue")),
+        **_battery_events(dig(item, "bodyBattery", "activityEvents")),
     }
     return date, values
+
+
+def _km(meters: Any) -> float | None:
+    value = positive(meters)
+    return round(value / 1000, 2) if value is not None else None
+
+
+def _battery_events(events: Any) -> dict[str, float | None]:
+    """Recharge de la nuit et coût des séances, d'après les événements Body Battery du jour."""
+    if not isinstance(events, list):
+        return {"bb_sleep_gain": None, "bb_activity_cost": None}
+    sleep = [num(e.get("bodyBatteryImpact")) for e in events
+             if isinstance(e, dict) and str(e.get("eventType", "")).upper() == "SLEEP"]
+    sport = [num(e.get("bodyBatteryImpact")) for e in events
+             if isinstance(e, dict) and str(e.get("eventType", "")).upper() == "ACTIVITY"]
+    sleep = [v for v in sleep if v is not None]
+    sport = [v for v in sport if v is not None and v < 0]
+    return {"bb_sleep_gain": sum(sleep) if sleep else None, "bb_activity_cost": -sum(sport) if sport else None}
 
 
 SLEEP_METRICS = [
     "sleep_s", "sleep_deep_s", "sleep_light_s", "sleep_rem_s", "sleep_awake_s", "sleep_score",
     "sleep_start_h", "sleep_end_h", "sleep_hr", "sleep_stress", "sleep_resp", "sleep_need_min", "nap_s",
+    # 0.5
+    "sleep_spo2_avg", "sleep_spo2_min", "sleep_resp_min", "sleep_resp_max", "sleep_awake_count",
+    "sleep_deep_pct", "sleep_light_pct", "sleep_rem_pct", "sleep_need_base_min", "sleep_mid_h",
 ]
 
 
@@ -195,8 +232,26 @@ def parse_sleep(item: dict) -> tuple[str | None, dict[str, float | None]]:
         "sleep_resp": positive(item.get("averageRespirationValue")),
         "sleep_need_min": positive(dig(item, "sleepNeed", "actual")),
         "nap_s": positive(item.get("napTimeSeconds")),
+        "sleep_spo2_avg": positive(item.get("averageSpO2Value")),
+        "sleep_spo2_min": positive(item.get("lowestSpO2Value")),
+        "sleep_resp_min": positive(item.get("lowestRespirationValue")),
+        "sleep_resp_max": positive(item.get("highestRespirationValue")),
+        "sleep_awake_count": non_negative(item.get("awakeCount")),
+        "sleep_deep_pct": non_negative(dig(item, "sleepScores", "deepPercentage", "value")),
+        "sleep_light_pct": non_negative(dig(item, "sleepScores", "lightPercentage", "value")),
+        "sleep_rem_pct": non_negative(dig(item, "sleepScores", "remPercentage", "value")),
+        "sleep_need_base_min": positive(dig(item, "sleepNeed", "baseline")),
+        "sleep_mid_h": _midpoint(dig(item, "sleepAlignment", "lastSleepMidpointMins")),
     }
     return date, values
+
+
+def _midpoint(minutes: Any) -> float | None:
+    """Milieu de la nuit (minutes après minuit, négatif = avant) → heure décimale."""
+    value = num(minutes)
+    if value is None:
+        return None
+    return round((value / 60) % 24, 3)
 
 
 HRV_METRICS = ["hrv_night", "hrv_week", "hrv_high", "hrv_bl_low", "hrv_bl_high", "hrv_status"]
@@ -270,7 +325,8 @@ def wake_body_battery(bb_item: dict, sleep_item: dict | None) -> float | None:
     return best[1] if best else None
 
 
-WEIGHT_METRICS = ["weight_kg", "body_fat_pct", "bmi", "muscle_kg", "body_water_pct"]
+WEIGHT_METRICS = ["weight_kg", "body_fat_pct", "bmi", "muscle_kg", "body_water_pct", "bone_kg", "visceral_fat",
+                  "metabolic_age"]
 
 
 def weight_items(payload: Any) -> list[dict]:
@@ -292,6 +348,9 @@ def parse_weight(item: dict) -> tuple[str | None, dict[str, float | None]]:
         "bmi": positive(latest.get("bmi")),
         "muscle_kg": _grams_to_kg(latest.get("muscleMass")),
         "body_water_pct": positive(latest.get("bodyWater")),
+        "bone_kg": _grams_to_kg(latest.get("boneMass")),
+        "visceral_fat": positive(latest.get("visceralFat")),
+        "metabolic_age": positive(latest.get("metabolicAge")),
     }
     return item.get("summaryDate") or latest.get("calendarDate"), values
 
@@ -299,7 +358,11 @@ def parse_weight(item: dict) -> tuple[str | None, dict[str, float | None]]:
 def parse_fitness_age(payload: Any) -> dict[str, float | None]:
     if not isinstance(payload, dict):
         return {}
-    return {"fitness_age": positive(payload.get("fitnessAge"))}
+    return {
+        "fitness_age": positive(payload.get("fitnessAge")),
+        "vigorous_days": non_negative(dig(payload, "components", "vigorousDaysAvg", "value")),
+        "vigorous_min": non_negative(dig(payload, "components", "vigorousMinutesAvg", "value")),
+    }
 
 
 # ------------------------------------------------------------- séances
@@ -345,6 +408,69 @@ def normalize_sport(type_key: str | None) -> str:
     if "hik" in key:
         return "rando"
     return "autre"
+
+
+# Valeurs de séance rangées dans la colonne « extra » : clé Foulée → (clés Garmin possibles, lecture)
+ACTIVITY_EXTRAS: dict[str, tuple[tuple[str, ...], str]] = {
+    "gct": (("avgGroundContactTime",), "positive"),            # temps de contact au sol, ms
+    "gcb": (("avgGroundContactBalance",), "positive"),         # équilibre gauche / droite, % à gauche
+    "vo": (("avgVerticalOscillation",), "positive"),           # oscillation verticale, cm
+    "vr": (("avgVerticalRatio",), "positive"),                 # ratio vertical, %
+    "stride": (("avgStrideLength",), "positive"),              # longueur de foulée, cm
+    "ssl": (("avgStepSpeedLoss",), "positive"),                # perte de vitesse par pas, cm/s
+    "ssl_pct": (("avgStepSpeedLossPercent",), "positive"),     # même chose, en %
+    "resp": (("avgRespirationRate",), "positive"),             # respiration, resp/min
+    "resp_min": (("minRespirationRate",), "positive"),
+    "resp_max": (("maxRespirationRate",), "positive"),
+    "np": (("normPower", "normalizedPower"), "positive"),      # puissance normalisée, W
+    "pmax": (("maxPower",), "positive"),
+    "temp_min": (("minTemperature",), "num"),                  # °C
+    "temp_max": (("maxTemperature",), "num"),
+    "sweat": (("waterEstimated",), "positive"),                # perte hydrique estimée, ml
+    "bb_impact": (("differenceBodyBattery",), "num"),          # effet sur la Body Battery
+    "steps": (("steps",), "positive"),
+    "cad_max": (("maxRunningCadenceInStepsPerMinute", "maxBikingCadenceInRevPerMinute"), "positive"),
+    "alt_min": (("minElevation",), "num"),
+    "alt_max": (("maxElevation",), "num"),
+    "im_mod": (("moderateIntensityMinutes",), "non_negative"),
+    "im_vig": (("vigorousIntensityMinutes",), "non_negative"),
+    "tss": (("trainingStressScore",), "positive"),
+    "if": (("intensityFactor",), "positive"),
+    "swolf": (("averageSwolf", "avgSwolf"), "positive"),
+    "strokes": (("totalNumberOfStrokes",), "positive"),
+    "pz1": (("powerTimeInZone_1",), "non_negative"),
+    "pz2": (("powerTimeInZone_2",), "non_negative"),
+    "pz3": (("powerTimeInZone_3",), "non_negative"),
+    "pz4": (("powerTimeInZone_4",), "non_negative"),
+    "pz5": (("powerTimeInZone_5",), "non_negative"),
+}
+_READERS = {"positive": positive, "non_negative": non_negative, "num": num}
+
+
+def activity_extra(item: dict) -> dict:
+    """Valeurs supplémentaires d'une séance (dynamique de course, puissance, records de la sortie…)."""
+    summary = item.get("summaryDTO") if isinstance(item.get("summaryDTO"), dict) else {}
+    extra: dict[str, Any] = {}
+    for key, (names, reader) in ACTIVITY_EXTRAS.items():
+        for name in names:
+            raw = item.get(name) if item.get(name) is not None else summary.get(name)
+            value = _READERS[reader](raw)
+            if value is not None:
+                extra[key] = round(value, 3)
+                break
+    for name, value in list(item.items()) + list(summary.items()):
+        match = re.fullmatch(r"fastestSplit_(\d+)", str(name))
+        if match and positive(value):
+            extra[f"best_{match[1]}"] = round(float(value), 2)  # meilleur temps (s) sur cette distance (m)
+    for key, name in (("te_label", "trainingEffectLabel"), ("lieu", "locationName")):
+        text = item.get(name) or summary.get(name)
+        if isinstance(text, str) and text.strip():
+            extra[key] = text.strip()[:60]
+    return extra
+
+
+def _json_or_none(value: dict) -> str | None:
+    return json.dumps(value, ensure_ascii=False) if value else None
 
 
 def parse_activity(item: dict) -> dict | None:
@@ -401,7 +527,8 @@ def parse_activity(item: dict) -> dict | None:
         "te_anaerobic": non_negative(pick("anaerobicTrainingEffect")),
         "garmin_load": non_negative(pick("activityTrainingLoad")),
         "vo2max": positive(pick("vO2MaxValue")),
-        "hr_zones": json.dumps(zones) if any(z for z in zones) else None,
+        "hr_zones_garmin": json.dumps(zones) if any(z for z in zones) else None,
+        "extra": _json_or_none(activity_extra(item)),
         "start_lat": num(pick("startLatitude")),
         "start_lon": num(pick("startLongitude")),
         "lap_count": int(num(pick("lapCount")) or 0) or None,
@@ -431,6 +558,30 @@ def heart_rate_zones(payload: Any) -> dict | None:
         "max": hr_max,
         "rest": positive(chosen.get("restingHeartRateUsed")),
         "method": chosen.get("trainingMethod"),
+        "lthr": positive(chosen.get("lactateThresholdHeartRateUsed")),
+        "sport": chosen.get("sport"),
+    }
+
+
+def profile_settings(payload: Any) -> dict:
+    """Réglages du profil Garmin utiles à Foulée (seuil lactique, VO2max, mensurations)."""
+    if not isinstance(payload, dict):
+        return {}
+    data = payload.get("userData") if isinstance(payload.get("userData"), dict) else payload
+    speed = positive(data.get("lactateThresholdSpeed"))
+    if speed is not None and speed < 1.5:
+        speed *= 10  # Garmin range parfois cette vitesse en dizaines de m/s (0,34 pour 3,4 m/s)
+    if speed is not None and not 1.5 <= speed <= 8:
+        speed = None
+    weight = positive(data.get("weight"))
+    return {
+        "seuil_fc": positive(data.get("lactateThresholdHeartRate")),
+        "seuil_vitesse": round(speed, 3) if speed else None,
+        "vo2max_course": positive(data.get("vo2MaxRunning")),
+        "vo2max_velo": positive(data.get("vo2MaxCycling")),
+        "poids_kg": round(weight / 1000, 1) if weight and weight > 500 else weight,
+        "taille_cm": positive(data.get("height")),
+        "systeme": payload.get("measurementSystem") or data.get("measurementSystem"),
     }
 
 

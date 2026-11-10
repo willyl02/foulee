@@ -185,6 +185,7 @@ export function gridTitle(p, text, top) {
 export function legendHTML(items) {
   return `<div class="legend">${items.map((it) => `<span>${
     it.kind === "band" ? '<i class="key-band"></i>'
+      : it.kind === "band-color" ? `<i class="key-band" style="background:color-mix(in srgb, ${it.color} 22%, transparent)"></i>`
       : it.kind === "square" ? `<i class="dot" style="border-radius:2px;background:${it.color}"></i>`
         : it.kind === "dot" ? `<i class="dot" style="background:${it.color}"></i>`
           : `<i class="key-line" style="background:${it.color}"></i>`

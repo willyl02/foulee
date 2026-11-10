@@ -1,6 +1,6 @@
 [project]
 name = "foulee"
-version = "0.4.1"
+version = "0.5.0b1"
 description = "Foulée — hub local de données sport et santé (Garmin d'abord)"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -12,7 +12,7 @@ dependencies = [
     "mcp>=1.10",
     "keyring>=25; sys_platform == 'win32'",
     "pystray>=0.19.5 ; sys_platform == 'win32'",
-    "pillow>=11 ; sys_platform == 'win32'",
+    "pillow>=11",
 ]
 
 [project.scripts]

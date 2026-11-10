@@ -1,4 +1,5 @@
 // Dialogues d'édition : choisir un type de tuile, régler une tuile, créer ou renommer une vue.
+import * as api from "./api.js";
 import * as F from "./format.js";
 import { icon } from "./icons.js";
 
@@ -8,7 +9,10 @@ export const OPTION_LABELS = {
   agregation: { jour: "Jour", semaine: "Semaine", mois: "Mois" },
   fonction: { auto: "Automatique (selon la métrique)", avg: "Moyenne", sum: "Somme", max: "Maximum", min: "Minimum" },
   disposition: { auto: "Automatique (un graphique par unité)", superposer: "Toutes sur le même graphique", empiler: "Un graphique par métrique" },
-  zones: { fc: "Fréquence cardiaque", allure: "Allure (calée sur la VMA)" },
+  zones: { fc: "Fréquence cardiaque", allure: "Allure" },
+  onglet: { tableau: "Allures, vitesses et piste", vameval: "Test VAMEVAL" },
+  donnee: { body_battery: "Body Battery de la journée", fc: "FC de la journée", sommeil: "Phases du sommeil", vfc: "VFC de la nuit" },
+  jour: { aujourdhui: "Aujourd'hui", hier: "Hier" },
   groupe: { semaine: "Semaine", mois: "Mois", total: "Total de la période" },
   mois: { 3: "3 mois", 6: "6 mois", 12: "12 mois" },
   decalage: { 0: "Le même jour", 1: "Le lendemain", 2: "Deux jours après" },
@@ -43,11 +47,69 @@ function openDialog(inner) {
   return dialog;
 }
 
-function metricOptions(boot, selected) {
-  const groups = {};
-  for (const m of boot.metriques) (groups[m.category] ||= []).push(m);
-  return Object.entries(groups).map(([cat, items]) => `<optgroup label="${F.escape(cat)}">${items.map((m) =>
-    `<option value="${m.key}" ${m.key === selected ? "selected" : ""}>${F.escape(m.label)}</option>`).join("")}</optgroup>`).join("");
+const fold = (text) => String(text || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+function metricLabel(boot, key) {
+  return boot.metriques.find((m) => m.key === key)?.label || key;
+}
+
+function metricButton(boot, value) {
+  return `<button type="button" class="metric-btn" data-metric="${F.escape(value)}">${icon("search")}<span>${F.escape(metricLabel(boot, value))}</span></button>`;
+}
+
+let rawFields = null;  // valeurs brutes de Garmin, chargées une fois à la demande
+
+/** Choix d'une métrique : catalogue par catégories + toutes les valeurs brutes de Garmin, avec recherche. */
+export function pickMetric(boot, current) {
+  return new Promise((resolve) => {
+    const dialog = openDialog(`<div class="dlg dlg-wide">
+      <div class="dlg-head"><h2>Choisir une métrique</h2>
+        <p>Les métriques de Foulée d'abord, puis toutes les valeurs que Garmin renvoie (données brutes).</p>
+        <label class="search-field">${icon("search")}<input type="search" data-search placeholder="Chercher : sommeil, SpO2, foulée, puissance…" aria-label="Chercher une métrique"></label></div>
+      <div class="dlg-body" data-list><p class="tile-msg" style="position:static">Chargement…</p></div>
+      <div class="dlg-foot"><button class="btn" type="button" data-cancel>Annuler</button></div></div>`);
+    let chosen = null;
+    const list = dialog.querySelector("[data-list]");
+    const search = dialog.querySelector("[data-search]");
+    const groups = () => {
+      const order = boot.categories_metriques || [];
+      const byCat = {};
+      for (const m of boot.metriques) if (m.kind !== "raw") (byCat[m.category] ||= []).push(m);
+      const cats = [...order.filter((c) => byCat[c]), ...Object.keys(byCat).filter((c) => !order.includes(c))];
+      const result = cats.map((c) => [c, byCat[c]]);
+      const raw = {};
+      for (const f of rawFields || []) (raw[f.category] ||= []).push(f);
+      return result.concat(Object.entries(raw));
+    };
+    const draw = () => {
+      const q = fold(search.value.trim());
+      const html = groups().map(([cat, items]) => {
+        const shown = items.filter((m) => !q || fold(`${m.label} ${m.key} ${m.category} ${m.description || ""}`).includes(q));
+        if (!shown.length) return "";
+        return `<section class="type-group"><h3>${F.escape(cat)}</h3><div class="metric-list">${shown.map((m) => `
+          <button type="button" class="metric-item" data-key="${F.escape(m.key)}" aria-pressed="${m.key === current}">
+            <b>${F.escape(m.label)}</b><span>${m.kind === "raw" ? `exemple : ${F.escape(m.exemple)}` : F.escape(m.description || m.unit || "")}</span></button>`).join("")}</div></section>`;
+      }).join("");
+      list.innerHTML = html || `<p class="tile-msg" style="position:static">Aucune métrique ne correspond.</p>`;
+    };
+    search.addEventListener("input", draw);
+    dialog.addEventListener("click", (e) => {
+      const item = e.target.closest("[data-key]");
+      if (item) {
+        chosen = item.dataset.key;
+        const raw = (rawFields || []).find((f) => f.key === chosen);
+        if (raw && !boot.metriques.some((m) => m.key === chosen)) boot.metriques.push(raw);
+        dialog.close();
+      }
+      if (e.target.closest("[data-cancel]")) dialog.close();
+    });
+    dialog.addEventListener("close", () => resolve(chosen));
+    draw();
+    search.focus();
+    if (!rawFields) {
+      api.get("/api/garmin/champs").then((d) => { rawFields = d.champs; if (dialog.open) draw(); }).catch(() => { rawFields = []; });
+    }
+  });
 }
 
 function fieldHTML(param, value, boot) {
@@ -55,7 +117,7 @@ function fieldHTML(param, value, boot) {
   const label = `<span>${F.escape(param.label)}</span>`;
   switch (param.kind) {
     case "metric":
-      return `<label class="field">${label}<select id="${id}" data-key="${param.key}">${metricOptions(boot, value)}</select></label>`;
+      return `<div class="field" data-key="${param.key}" data-kind="metric">${label}${metricButton(boot, value)}</div>`;
     case "metrics":
       return `<div class="field" data-key="${param.key}" data-kind="metrics">${label}
         <div class="metric-rows">${(value || []).map((v) => metricRow(boot, v)).join("")}</div>
@@ -83,7 +145,7 @@ function fieldHTML(param, value, boot) {
 }
 
 function metricRow(boot, value) {
-  return `<div class="metric-row" style="display:flex;gap:6px;margin-bottom:6px"><select style="flex:1">${metricOptions(boot, value)}</select>
+  return `<div class="metric-row">${metricButton(boot, value)}
     <button type="button" class="btn btn-ghost icon-btn" data-remove aria-label="Retirer cette métrique">${icon("close")}</button></div>`;
 }
 
@@ -91,7 +153,9 @@ function readForm(form, typeDef) {
   const params = {};
   for (const param of typeDef.params) {
     if (param.kind === "metrics") {
-      params[param.key] = [...form.querySelectorAll(`[data-key="${param.key}"] .metric-row select`)].map((s) => s.value);
+      params[param.key] = [...form.querySelectorAll(`[data-key="${param.key}"] .metric-row [data-metric]`)].map((b) => b.dataset.metric);
+    } else if (param.kind === "metric") {
+      params[param.key] = form.querySelector(`[data-key="${param.key}"] [data-metric]`).dataset.metric;
     } else if (param.kind === "multi") {
       params[param.key] = [...form.querySelectorAll(`[data-key="${param.key}"] input:checked`)].map((c) => c.value);
     } else {
@@ -119,11 +183,23 @@ export function editTile(tile, typeDef, boot) {
       <div class="dlg-foot"><button class="btn" value="cancel" type="submit">Annuler</button><button class="btn btn-primary" value="ok" type="submit">Enregistrer</button></div>
     </form>`);
     const form = dialog.querySelector("form");
-    form.addEventListener("click", (e) => {
+    form.addEventListener("click", async (e) => {
       const add = e.target.closest("[data-add-metric]");
-      if (add) add.previousElementSibling.insertAdjacentHTML("beforeend", metricRow(boot, boot.metriques[0].key));
+      if (add) {
+        const key = await pickMetric(boot, null);
+        if (key) add.previousElementSibling.insertAdjacentHTML("beforeend", metricRow(boot, key));
+        return;
+      }
       const remove = e.target.closest("[data-remove]");
       if (remove && remove.closest(".metric-rows").children.length > 1) remove.closest(".metric-row").remove();
+      const pick = e.target.closest("[data-metric]");
+      if (pick) {
+        const key = await pickMetric(boot, pick.dataset.metric);
+        if (key) {
+          pick.dataset.metric = key;
+          pick.querySelector("span").textContent = metricLabel(boot, key);
+        }
+      }
     });
     dialog.addEventListener("close", () => {
       if (dialog.returnValue !== "ok") return resolve(null);
@@ -137,21 +213,42 @@ export function editTile(tile, typeDef, boot) {
   });
 }
 
-/** Choix d'un type de tuile. Résout avec le type ou null. */
+/** Choix d'un type de tuile, rangés par catégories, avec recherche. Résout avec le type ou null. */
 export function pickTileType(boot) {
   return new Promise((resolve) => {
-    const dialog = openDialog(`<div class="dlg">
-      <div class="dlg-head"><h2>Ajouter une tuile</h2><p>Choisis ce que la tuile doit montrer ; tu la régleras juste après.</p></div>
-      <div class="dlg-body"><div class="type-list">${boot.tuiles.map((t) => `<button class="type-card" type="button" data-type="${t.type}">
-        ${icon(t.icone)}<b>${F.escape(t.label)}</b><span>${F.escape(t.description)}</span></button>`).join("")}</div></div>
+    const cats = boot.categories_tuiles || [...new Set(boot.tuiles.map((t) => t.categorie || "Divers"))];
+    const dialog = openDialog(`<div class="dlg dlg-wide">
+      <div class="dlg-head"><h2>Ajouter une tuile</h2><p>Choisis ce que la tuile doit montrer ; tu la régleras juste après. Les tuiles à métrique proposent toutes les données de Garmin.</p>
+        <label class="search-field">${icon("search")}<input type="search" data-search placeholder="Chercher : records, sommeil, allure, poste…" aria-label="Chercher une tuile"></label></div>
+      <div class="dlg-body">${cats.map((cat) => `<section class="type-group" data-group><h3>${F.escape(cat)}</h3><div class="type-list">${boot.tuiles.filter((t) => (t.categorie || "Divers") === cat).map((t) => `
+        <button class="type-card" type="button" data-type="${t.type}" data-text="${F.escape(fold(`${t.label} ${t.description} ${cat}`))}">
+        ${icon(t.icone)}<b>${F.escape(t.label)}</b><span>${F.escape(t.description)}</span></button>`).join("")}</div></section>`).join("")}
+        <p class="tile-msg" style="position:static" data-empty hidden>Aucune tuile ne correspond.</p></div>
       <div class="dlg-foot"><button class="btn" type="button" data-cancel>Annuler</button></div></div>`);
     let chosen = null;
+    const search = dialog.querySelector("[data-search]");
+    search.addEventListener("input", () => {
+      const q = fold(search.value.trim());
+      let any = false;
+      dialog.querySelectorAll("[data-group]").forEach((group) => {
+        let shown = 0;
+        group.querySelectorAll("[data-type]").forEach((card) => {
+          const ok = !q || card.dataset.text.includes(q);
+          card.hidden = !ok;
+          if (ok) shown += 1;
+        });
+        group.hidden = !shown;
+        any ||= shown > 0;
+      });
+      dialog.querySelector("[data-empty]").hidden = any;
+    });
     dialog.addEventListener("click", (e) => {
       const card = e.target.closest("[data-type]");
       if (card) { chosen = card.dataset.type; dialog.close(); }
       if (e.target.closest("[data-cancel]")) dialog.close();
     });
     dialog.addEventListener("close", () => resolve(chosen));
+    search.focus();
   });
 }
 
