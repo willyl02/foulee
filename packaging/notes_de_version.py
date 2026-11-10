@@ -24,7 +24,8 @@ Empreinte SHA-256 : voir `SHA256SUMS.txt`.
 
 def notes(version: str) -> str:
     text = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
-    match = re.search(rf"^## \[?{re.escape(version)}\]?[^\n]*\n(.*?)(?=^## |\Z)", text, re.S | re.M)
+    # « ## 0.4.0 » ne doit pas attraper « ## 0.4.0b1 » : rien de collé au numéro
+    match = re.search(rf"^## \[?{re.escape(version)}\]?(?![\w.])[^\n]*\n(.*?)(?=^## |\Z)", text, re.S | re.M)
     body = match.group(1).strip() if match else f"Foulée {version}."
     return body + "\n" + FOOTER.format(version=version)
 
