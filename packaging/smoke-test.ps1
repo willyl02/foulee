@@ -21,6 +21,8 @@ $Base = Join-Path $env:LOCALAPPDATA "Foulee"
 $Logs = Join-Path $env:RUNNER_TEMP "foulee-essai"
 $RunKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
 New-Item -ItemType Directory -Force $Logs | Out-Null
+# Hors du dépôt : « python -m foulee » doit trouver la copie installée, pas le code source d'ici
+Set-Location $Logs
 $script:Step = 0
 
 function Ok($text) { Write-Host "  OK  $text" -ForegroundColor Green }

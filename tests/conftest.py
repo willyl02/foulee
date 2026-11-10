@@ -14,6 +14,10 @@ def isolated(tmp_path, monkeypatch):
     monkeypatch.setenv("FOULEE_SECRETS", str(tmp_path / "secrets"))
     monkeypatch.setenv("FOULEE_CONFIG", str(tmp_path / "config"))
     monkeypatch.setenv("FOULEE_COFFRE", "fichier")  # jamais le vrai Gestionnaire d'identification Windows
+    monkeypatch.setenv("FOULEE_TEST", "1")  # jamais le vrai registre Windows (démarrage avec la session)
+    # Jamais la vraie configuration de Claude Desktop, ni les vrais dossiers de l'utilisateur
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "LocalAppData"))
+    monkeypatch.setenv("APPDATA", str(tmp_path / "Roaming"))
     for name in ("FOULEE_ECOUTE", "FOULEE_MAJ", "FOULEE_HOTES", "FOULEE_DEPOT", "GITHUB_TOKEN", "FOULEE_GITHUB_TOKEN",
                  "FOULEE_PORT"):
         monkeypatch.delenv(name, raising=False)

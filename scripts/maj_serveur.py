@@ -170,21 +170,27 @@ class Updater:
         return 0
 
 
-def configured_channel() -> str:
-    """Canal choisi dans les Réglages de Foulée (lu directement dans sa base)."""
+def configured_channel(root: Path | None = None) -> str:
+    """Canal choisi dans les Réglages de Foulée (lu directement dans sa base).
+
+    Jamais choisi : une bêta installée continue de suivre les bêtas, sinon canal stable.
+    """
     import sqlite3
 
+    root = root or Path(__file__).resolve().parent.parent
+    match = re.search(r'__version__\s*=\s*"([^"]+)"', (root / "foulee" / "__init__.py").read_text(encoding="utf-8"))
+    default = "beta" if match and version_key(match.group(1))[3] < 9 else "stable"
     database = Path(os.environ.get("FOULEE_DATA") or "/var/lib/foulee") / "foulee.db"
     if not database.exists():
-        return "stable"
+        return default
     try:
         # immutable=1 : root ne crée aucun fichier à côté de la base (des -wal/-shm appartenant à root
         # empêcheraient l'utilisateur foulee de l'ouvrir ensuite)
         with sqlite3.connect(f"file:{database}?mode=ro&immutable=1", uri=True) as conn:
             row = conn.execute("SELECT value FROM settings WHERE key = 'canal_maj'").fetchone()
-        value = json.loads(row[0]) if row else "stable"
+        value = json.loads(row[0]) if row else default
     except (sqlite3.Error, ValueError):
-        value = "stable"
+        value = default
     return value if value in BRANCHES else "stable"
 
 

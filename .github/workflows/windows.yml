@@ -94,9 +94,13 @@ jobs:
           uv run --frozen pytest -q -p no:cacheprovider -rfE 2>&1 | Tee-Object -FilePath tests.log
           $code = $LASTEXITCODE
           if ($code -ne 0) {
-            # Les journaux ne se lisent pas toujours de l'extérieur : le résumé part dans une annotation
+            # Les journaux ne se lisent pas toujours de l'extérieur : le résumé part dans des annotations
+            $failed = Get-Content tests.log | Where-Object { $_ -match '^(FAILED|ERROR) ' } |
+              ForEach-Object { if ($_.Length -gt 400) { $_.Substring(0, 400) } else { $_ } }
+            $summary = (($failed + (Get-Content tests.log -Tail 1)) -join "`n").Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+            Write-Host "::error title=Tests Windows (résumé)::$summary"
             $tail = ((Get-Content tests.log -Tail 70) -join "`n").Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
-            Write-Host "::error title=Tests Windows::$tail"
+            Write-Host "::error title=Tests Windows (fin du journal)::$tail"
             exit $code
           }
 

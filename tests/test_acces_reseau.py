@@ -1,5 +1,7 @@
 """Accès par le réseau local : fermé par défaut, puis protégé par un mot de passe."""
 
+import sys
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -105,4 +107,5 @@ def test_cookie_signature_and_expiry(monkeypatch):
     assert not access.cookie_valid(f"{int(expiry) + 3600}.{signature}", now=1_000_100)  # date trafiquée
     assert not access.cookie_valid("n'importe quoi")
     assert access.check_password(PASSWORD) and not access.check_password(PASSWORD.upper())
-    assert access.path().stat().st_mode & 0o077 == 0  # lisible par le seul propriétaire
+    if sys.platform != "win32":  # Windows : droits hérités du dossier de l'utilisateur
+        assert access.path().stat().st_mode & 0o077 == 0  # lisible par le seul propriétaire

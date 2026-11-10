@@ -145,6 +145,7 @@ def test_local_job_checks_then_installs(github, monkeypatch, tmp_path):
 def test_web_api_on_an_installed_pc(github, monkeypatch):
     monkeypatch.setattr(updates, "mode", lambda: "exe")
     monkeypatch.setattr(updates, "__version__", "0.3.0")
+    monkeypatch.setattr(web, "__version__", "0.3.0")
     client = TestClient(web.create_app())
     status = client.get("/api/maj").json()
     assert status["mode"] == "exe" and status["disponible"] and status["jeton_github"] is False

@@ -1,5 +1,7 @@
 """Mode serveur : noms d'hôte acceptés et appli installable sur le téléphone."""
 
+import sys
+
 from fastapi.testclient import TestClient
 
 from foulee import web
@@ -50,4 +52,5 @@ def test_phone_app_files_are_served(monkeypatch):
 
 def test_bootstrap_tells_where_foulee_runs(monkeypatch):
     client = make_client(monkeypatch)
-    assert client.get("/api/bootstrap").json()["machine"] == "serveur"  # les tests tournent sous Linux
+    expected = "pc" if sys.platform == "win32" else "serveur"
+    assert client.get("/api/bootstrap").json()["machine"] == expected

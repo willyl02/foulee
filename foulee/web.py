@@ -474,7 +474,17 @@ def create_app() -> FastAPI:
 
     def update_channel() -> str:
         with db.session(readonly=True) as conn:
-            channel = db.get_settings(conn).get("canal_maj") or "stable"
+            row = conn.execute("SELECT value FROM settings WHERE key = 'canal_maj'").fetchone()
+        if row is None:
+            # Jamais choisi : une bêta installée continue de suivre les bêtas, sinon canal stable
+            try:
+                return "beta" if updates.is_prerelease(__version__) else "stable"
+            except ValueError:
+                return "stable"
+        try:
+            channel = json.loads(row["value"])
+        except ValueError:
+            channel = "stable"
         return channel if channel in updates.CHANNELS else "stable"
 
     @app.get("/api/maj")

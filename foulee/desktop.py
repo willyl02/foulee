@@ -188,7 +188,8 @@ def launch_command(*extra: str) -> str:
 
 
 def startup_supported() -> bool:
-    return sys.platform == "win32"
+    """Lancement à l'ouverture de session : Windows seulement, et jamais pendant les tests."""
+    return sys.platform == "win32" and os.environ.get("FOULEE_TEST") != "1"
 
 
 def startup_enabled() -> bool:  # pragma: no cover - Windows uniquement
@@ -311,7 +312,7 @@ class AutoSync:
 def show_error(message: str) -> None:
     """Message visible même sans console (lancement depuis le menu Démarrer)."""
     LOG.error(message)
-    if sys.platform == "win32":  # pragma: no cover - Windows uniquement
+    if sys.platform == "win32" and os.environ.get("FOULEE_TEST") != "1":  # pragma: no cover - Windows
         import ctypes
 
         ctypes.windll.user32.MessageBoxW(None, message, "Foulée", 0x10 | 0x40000)  # erreur, premier plan

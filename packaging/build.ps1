@@ -71,11 +71,12 @@ foreach ($useless in @("Lib\test", "Lib\idlelib", "Lib\tkinter\test", "Lib\lib2t
 # Bytecode compilé d'avance : premier démarrage rapide (un fichier qui ne compile pas n'est pas grave)
 & $Python -m compileall -q -j 0 (Join-Path $Stage "python\Lib") | Out-Null
 if ($LASTEXITCODE -ne 0) { Write-Warning "compileall : certains fichiers n'ont pas été précompilés" }
-$Installed = & $Python -c "import foulee, foulee.config as c; print(foulee.__version__, c.is_packaged())"
+# -P : sans le dossier courant (le code source du dépôt) dans le chemin d'import, c'est bien la copie installée qui répond
+$Installed = & $Python -P -c "import foulee, foulee.config as c; print(foulee.__version__, c.is_packaged())"
 if ($Installed -ne "$Version True") { throw "Contrôle de l'installation raté : « $Installed »" }
 
 Step "3. Foulee.exe et son icône"
-Run $Python @("-m", "foulee.icon", (Join-Path $Stage "Foulee.ico"))
+Run $Python @("-P", "-m", "foulee.icon", (Join-Path $Stage "Foulee.ico"))
 $Exe = Join-Path $Stage "python\Foulee.exe"
 Copy-Item (Join-Path $Stage "python\pythonw.exe") $Exe
 $Rcedit = Join-Path $Build "rcedit-x64.exe"

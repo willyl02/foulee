@@ -27,10 +27,12 @@ def _start_app(*extra):
 
 
 def _wait_instance(process, timeout=60):
+    # Le numéro de processus noté peut différer de process.pid : sous Windows, le python.exe d'un
+    # environnement virtuel relance le vrai interpréteur dans un processus enfant
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         info = desktop.read_instance()
-        if info and info.get("pid") == process.pid:
+        if info:
             try:
                 _get(info["port"], "/api/app")
                 return info
@@ -51,7 +53,7 @@ def test_single_instance_and_clean_quit():
 
         second = _start_app("--port", "0")  # déjà lancé : la seconde copie s'efface tout de suite
         assert second.wait(timeout=30) == 0
-        assert desktop.read_instance()["pid"] == first.pid
+        assert desktop.read_instance()["pid"] == info["pid"]
 
         quit_command = subprocess.run([sys.executable, "-m", "foulee", "app", "--quitter"], capture_output=True,
                                       text=True, timeout=60, env={**os.environ, "PYTHONUTF8": "1"})

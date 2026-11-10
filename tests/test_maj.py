@@ -21,6 +21,7 @@ def test_interface_drops_a_request_and_reads_the_state(tmp_path, monkeypatch):
     folder = tmp_path / "maj"
     folder.mkdir()
     monkeypatch.setenv("FOULEE_MAJ", str(folder))
+    monkeypatch.setattr(web, "__version__", "0.3.0")  # version stable installée
     client = TestClient(web.create_app())
     assert client.get("/api/bootstrap").json()["maj"] is True
     status = client.get("/api/maj").json()
@@ -172,5 +173,19 @@ def test_channel_is_read_without_leaving_files_behind(tmp_path, monkeypatch):
     before = sorted(p.name for p in (tmp_path / "donnees").iterdir())
     assert module.configured_channel() == "beta"
     assert sorted(p.name for p in (tmp_path / "donnees").iterdir()) == before
+
+    # Jamais choisi : le canal suit la version installée (bêta → bêtas)
     monkeypatch.setenv("FOULEE_DATA", str(tmp_path / "vide"))
-    assert module.configured_channel() == "stable"
+    for version, expected in (("0.4.0", "stable"), ("0.4.0b2", "beta")):
+        root = tmp_path / version
+        (root / "foulee").mkdir(parents=True)
+        (root / "foulee" / "__init__.py").write_text(f'__version__ = "{version}"\n')
+        assert module.configured_channel(root) == expected
+
+
+def test_a_beta_install_follows_betas_until_told_otherwise(monkeypatch):
+    monkeypatch.setattr(web, "__version__", "0.4.0b1")
+    client = TestClient(web.create_app())
+    assert client.get("/api/maj").json()["canal"] == "beta"
+    client.put("/api/settings", json={"canal_maj": "stable"}, headers=WRITE)
+    assert client.get("/api/maj").json()["canal"] == "stable"
