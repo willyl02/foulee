@@ -690,7 +690,7 @@ def create_app() -> FastAPI:
         if not token:
             raise HTTPException(400, "Colle le jeton GitHub.")
         try:
-            updates.list_releases(token)  # vérifie qu'il ouvre bien le dépôt
+            updates.list_releases(token, fallback=False)  # vérifie que GitHub accepte bien ce jeton
         except updates.UpdateError as exc:
             raise HTTPException(400, str(exc)) from exc
         vault.set_secret("github", token)

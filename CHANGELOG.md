@@ -4,6 +4,11 @@ Les versions « bêta » (par exemple 0.4.0b1) sont des avant-premières : elles
 sur le canal bêta (Réglages → Mises à jour → « Recevoir les versions bêta »), puis sortent en
 version stable une fois éprouvées.
 
+## 0.5.0b3 — 11 novembre 2026 (bêta)
+
+- Formulaire « Un bug, une idée ? » : **envoi par e-mail** pour qui n'a pas de compte GitHub. Le logiciel de messagerie s'ouvre avec un e-mail prêt (titre, message, informations techniques) ; les captures se téléchargent pour être jointes.
+- Le dépôt de Foulée est désormais **public** : l'installateur se télécharge et les sujets se lisent sans compte GitHub, et les mises à jour n'ont plus besoin de jeton. Un jeton déjà enregistré qui expire ne bloque plus les mises à jour : Foulée réessaie sans.
+
 ## 0.5.0b2 — 11 novembre 2026 (bêta)
 
 - **Aide et FAQ**, en bas de la colonne de gauche : 68 questions rangées en 11 thèmes (premiers pas, clé Garmin, synchro et données, tableaux de bord, entraînement et calculs, horaires de travail, Claude Desktop, téléphone et serveur, installation et mises à jour, vie privée, aide et retours). Un chevron déplie chaque réponse ; recherche sans accents (« cle refusee » trouve « clé refusée ») ; liens directs vers la bonne rubrique des réglages.

@@ -130,7 +130,7 @@ export const FAQ = [
     questions: [
       { id: "signaler", q: "Comment signaler un bug ou proposer une idée ?", r: () => `<p>Le bouton <a href="#/retours">« Un bug, une idée ? Parles-en ! »</a>, en bas de la colonne de gauche (menu ☰ sur téléphone), ouvre un formulaire : un titre, ton message, tes captures d'écran. Foulée met le tout en forme, puis ouvre GitHub pour l'envoyer.</p>` },
       { id: "github", q: "GitHub et ses « issues », c'est quoi ?", r: (b) => `<p>GitHub est le site où vit le code de Foulée. Son onglet ${ext(`https://github.com/${b.retours?.depot || "willyl02/foulee"}/issues`, "Issues")} (« sujets ») rassemble les bugs signalés et les idées proposées, chacun avec sa discussion. Avant d'écrire, cherche si ton sujet y est déjà : un 👍 ou un commentaire sur un sujet existant aide plus qu'un doublon.</p>` },
-      { id: "compte", q: "Faut-il un compte GitHub ?", r: (b) => `<p>Pour écrire un sujet, oui : il est gratuit (github.com → « Sign up »). Pour lire, non, dès que le dépôt est public.${b.retours?.email ? " Sans compte, tu peux aussi envoyer ton message par e-mail depuis le formulaire." : ""}</p>` },
+      { id: "compte", q: "Faut-il un compte GitHub ?", r: (b) => `<p>Pour écrire un sujet, oui : il est gratuit (github.com → « Sign up »). Pour les lire, non.${b.retours?.email ? " Sans compte, tu peux aussi envoyer ton message par e-mail depuis le formulaire." : ""}</p>` },
     ],
   },
 ];

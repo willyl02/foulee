@@ -45,18 +45,20 @@ def test_bootstrap_gives_feedback_addresses(monkeypatch):
     info = client.get("/api/bootstrap").json()["retours"]
     assert info == {"depot": "willyl02/foulee", "url": "https://github.com/willyl02/foulee",
                     "issues": "https://github.com/willyl02/foulee/issues",
-                    "nouveau": "https://github.com/willyl02/foulee/issues/new", "email": None}
+                    "nouveau": "https://github.com/willyl02/foulee/issues/new", "email": retours.CONTACT_EMAIL}
     monkeypatch.setenv("FOULEE_DEPOT", "quelquun/fourche")  # une copie de Foulée publiée ailleurs
     assert client.get("/api/bootstrap").json()["retours"]["issues"] == "https://github.com/quelquun/fourche/issues"
     monkeypatch.setattr(retours, "CONTACT_EMAIL", " retours@exemple.org ")
     assert retours.info()["email"] == "retours@exemple.org"
+    monkeypatch.setattr(retours, "CONTACT_EMAIL", "")
+    assert retours.info()["email"] is None  # GitHub seulement : pas de bouton « Envoyer par e-mail »
 
 
-def test_no_contact_address_is_published():
-    # Une adresse écrite dans le code part avec chaque installateur : elle ne s'ajoute qu'avec l'accord de l'auteur
-    assert retours.CONTACT_EMAIL == ""
-    for path in [*STATIC.rglob("*.js"), *STATIC.rglob("*.html"), ROOT / "foulee" / "retours.py"]:
-        assert not re.search(r"[\w.+-]+@(?:gmail|yahoo|hotmail|outlook|orange|free)\.", path.read_text(encoding="utf-8")), path
+def test_contact_address_lives_in_one_place():
+    """L'adresse de contact, choisie par l'auteur, n'est écrite qu'une fois : l'interface la reçoit du serveur."""
+    assert re.fullmatch(r"[\w.+-]+@[\w-]+(\.[\w-]+)+", retours.CONTACT_EMAIL)
+    for path in [*STATIC.rglob("*.js"), *STATIC.rglob("*.html")]:
+        assert not re.search(r"[\w.+-]+@[\w-]+\.(?:com|fr|org|net)\b", path.read_text(encoding="utf-8")), path
 
 
 def test_visibility_is_asked_once_an_hour(github):

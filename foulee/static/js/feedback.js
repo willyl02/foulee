@@ -297,7 +297,7 @@ export function renderFeedback(page, boot, { toast, from = "", kind: wantedKind 
           <span class="spacer"></span>
           <button class="btn btn-ghost" type="button" data-clear>${icon("trash")}Effacer</button>
         </div>
-        <p class="hint fb-after">GitHub s'ouvre dans un nouvel onglet, avec ton titre et ton message déjà remplis : tu relis, tu ajoutes tes captures, tu valides.</p>
+        <p class="hint fb-after">GitHub s'ouvre dans un nouvel onglet, avec ton titre et ton message déjà remplis : tu relis, tu ajoutes tes captures, tu valides.${info.email ? " Pas de compte GitHub\u00a0? «\u00a0Envoyer par e-mail\u00a0» prépare un e-mail à la place." : ""}</p>
       </form>
 
       <section class="fb-card fb-next" data-next hidden tabindex="-1" aria-labelledby="fb-third"></section>
@@ -544,7 +544,7 @@ export function renderFeedback(page, boot, { toast, from = "", kind: wantedKind 
       box.innerHTML = `${icon("info")}<span>Pour l'instant, le dépôt de Foulée est <b>privé</b> : ses pages ne s'ouvrent que pour les personnes invitées, connectées à leur compte GitHub.${res.email ? " Sinon, envoie ton message par e-mail." : ""}</span>`;
       box.classList.add("note");
     } else if (res.visibilite === "public") {
-      box.innerHTML = `${icon("check")}<span>Le dépôt est public : lire les sujets ne demande rien. Pour en écrire un, il faut un compte GitHub (gratuit, « Sign up » en haut de la page).</span>`;
+      box.innerHTML = `${icon("check")}<span>Le dépôt est public : lire les sujets ne demande rien. Pour en écrire un, il faut un compte GitHub (gratuit, « Sign up » en haut de la page).${res.email ? " Pas de compte\u00a0? Le bouton «\u00a0Envoyer par e-mail\u00a0», plus bas, fait aussi l'affaire." : ""}</span>`;
       box.classList.add("note");
     }
   }).catch(() => { /* GitHub injoignable : le texte par défaut suffit */ });

@@ -9,7 +9,8 @@ Trois façons d'être installé, trois façons de se mettre à jour :
   traite (scripts/maj_serveur.py suit la branche main ou beta du dépôt) ;
 - « dev » (dossier décompressé, installation à la main) : Mettre-a-jour-Foulee.cmd.
 
-Tant que le dépôt est privé, GitHub exige un jeton (Réglages → Mises à jour).
+Le dépôt est public : ses versions se lisent sans jeton. S'il redevenait privé, GitHub exigerait un
+jeton (Réglages → Mises à jour) ; un jeton expiré ou révoqué n'empêche pas de lire un dépôt public.
 """
 
 from __future__ import annotations
@@ -86,6 +87,19 @@ def _headers(token: str | None, *, binary: bool = False) -> dict:
     return headers
 
 
+def _get(url: str, token: str | None, *, binary: bool = False, fallback: bool = True, **kwargs) -> requests.Response:
+    """GET vers GitHub. Un jeton refusé (expiré, révoqué) ne bloque pas un dépôt public : on réessaie sans."""
+    response = requests.get(url, headers=_headers(token, binary=binary), **kwargs)
+    if response.status_code == 401 and token and fallback:
+        retry = requests.get(url, headers=_headers(None, binary=binary), **kwargs)
+        if retry.status_code == 200:
+            LOG.info("Jeton GitHub refusé, mais le dépôt se lit sans : le jeton ne sert plus")
+            response.close()
+            return retry
+        retry.close()
+    return response
+
+
 def _explain(response: requests.Response, token: str | None) -> UpdateError:
     if response.status_code == 404:
         return UpdateError("GitHub ne trouve pas le dépôt de Foulée : tant qu'il est privé, ajoute un jeton "
@@ -98,10 +112,10 @@ def _explain(response: requests.Response, token: str | None) -> UpdateError:
     return UpdateError(f"GitHub a répondu {response.status_code}.")
 
 
-def list_releases(token: str | None = None) -> list[dict]:
+def list_releases(token: str | None = None, *, fallback: bool = True) -> list[dict]:
+    """Les versions publiées. fallback=False : sans repli sans jeton (pour vérifier un jeton)."""
     try:
-        response = requests.get(f"{API}/repos/{repo()}/releases", params={"per_page": 30},
-                                headers=_headers(token), timeout=20)
+        response = _get(f"{API}/repos/{repo()}/releases", token, fallback=fallback, params={"per_page": 30}, timeout=20)
     except requests.RequestException as exc:
         raise UpdateError(f"GitHub injoignable ({exc.__class__.__name__}) : vérifie la connexion Internet.") from exc
     if response.status_code != 200:
@@ -167,7 +181,7 @@ def check(channel: str, token: str | None = None) -> dict:
 
 
 def _expected_digest(sums_asset: dict, filename: str, token: str | None) -> str:
-    response = requests.get(sums_asset["url"], headers=_headers(token, binary=True), timeout=30)
+    response = _get(sums_asset["url"], token, binary=True, timeout=30)
     if response.status_code != 200:
         raise _explain(response, token)
     for line in response.text.splitlines():
@@ -185,7 +199,7 @@ def download(best: dict, token: str | None, folder: Path,
     target = folder / asset["name"]
     digest = hashlib.sha256()
     try:
-        with requests.get(asset["url"], headers=_headers(token, binary=True), stream=True, timeout=60) as response:
+        with _get(asset["url"], token, binary=True, stream=True, timeout=60) as response:
             if response.status_code != 200:
                 raise _explain(response, token)
             total = int(response.headers.get("Content-Length") or asset.get("size") or 0)

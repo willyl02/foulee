@@ -567,10 +567,10 @@ async function updatesPanel(box, boot, { toast }) {
 
 function tokenBlock(info) {
   return `<details class="token">
-      <summary>Jeton GitHub ${info.jeton_github ? "(enregistré)" : "(dépôt privé)"}</summary>
-      <p class="hint">Tant que le dépôt de Foulée est privé, GitHub demande un jeton pour montrer ses versions. Crée-le sur ${link(GITHUB_TOKEN_PAGE, "github.com")} : type « fine-grained », accès au seul dépôt <code>${F.escape(info.depot)}</code>, permission « Contents » en lecture seule. Il est rangé dans le coffre de Windows, comme ta clé Garmin.</p>
+      <summary>Jeton GitHub ${info.jeton_github ? "(enregistré, plus utile)" : "(facultatif)"}</summary>
+      <p class="hint">Le dépôt de Foulée est public : ses versions se lisent sans jeton. Si un jour il redevenait privé, GitHub en demanderait un : il se crée sur ${link(GITHUB_TOKEN_PAGE, "github.com")} (type « fine-grained », accès au seul dépôt <code>${F.escape(info.depot)}</code>, permission « Contents » en lecture seule) et se range dans le coffre de Windows, comme ta clé Garmin.</p>
       ${info.jeton_github
-        ? `<div class="inline-actions"><span class="ok">${icon("check")}Jeton enregistré.</span><button class="btn btn-ghost btn-danger" type="button" data-token-forget>Supprimer le jeton</button></div>`
+        ? `<div class="inline-actions"><span class="ok">${icon("check")}Jeton enregistré : il ne sert plus, tu peux le supprimer.</span><button class="btn btn-ghost btn-danger" type="button" data-token-forget>Supprimer le jeton</button></div>`
         : `<div class="key-row"><input type="password" data-token autocomplete="off" spellcheck="false" placeholder="github_pat_…" aria-label="Jeton GitHub">
             <button class="btn" type="button" data-token-save>${icon("check")}Vérifier et enregistrer</button></div>
           <p class="hint" data-token-status aria-live="polite"></p>`}

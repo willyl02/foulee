@@ -30,8 +30,7 @@ Garmin (API personnelle)  ──►  connecteurs + synchro  ──►  base loca
 ## 1. Installer Foulée sur Windows
 
 1. Télécharge **`Foulee-Setup-<version>.exe`** sur la page des versions :
-   https://github.com/willyl02/foulee/releases (tant que le dépôt est privé, il faut
-   être connecté à GitHub avec un compte qui y a accès).
+   https://github.com/willyl02/foulee/releases (pas besoin de compte GitHub).
 2. Double-clique dessus. Pas besoin d'être administrateur : Foulée s'installe pour toi
    seul, dans `%LOCALAPPDATA%\Programs\Foulee`.
    Si Windows affiche « Windows a protégé votre ordinateur », clique sur
@@ -210,12 +209,12 @@ d'elle-même. Tes données, ta clé et tes vues ne bougent pas.
   ton PC avant tout le monde, pour les essayer. Décoche pour revenir au canal stable ;
   Foulée ne redescend jamais de version : tu repasses en stable à la prochaine version
   stable plus récente que ta bêta.
-- **Dépôt privé** : tant que le dépôt GitHub de Foulée est privé, GitHub demande un
-  jeton pour montrer ses versions. Crée-le sur
-  https://github.com/settings/personal-access-tokens/new : type « fine-grained »,
-  accès au seul dépôt `foulee`, permission **Contents : Read-only**. Colle-le dans
-  **Réglages → Mises à jour → Jeton GitHub**. Il est rangé dans le Gestionnaire
-  d'identification Windows, comme ta clé Garmin.
+- **Jeton GitHub** : inutile, le dépôt de Foulée est public. Si un jour il redevenait
+  privé, GitHub en demanderait un pour montrer ses versions : à créer sur
+  https://github.com/settings/personal-access-tokens/new (type « fine-grained »,
+  accès au seul dépôt `foulee`, permission **Contents : Read-only**), puis à coller
+  dans **Réglages → Mises à jour → Jeton GitHub**. Un jeton déjà enregistré qui
+  expire ne bloque pas les mises à jour : Foulée réessaie sans.
 
 Tu peux aussi télécharger une version plus récente de `Foulee-Setup.exe` et
 l'installer par-dessus : c'est exactement ce que fait le bouton.
@@ -270,19 +269,16 @@ Il te faut :
   8 Go de disque) ;
 - un compte **Tailscale** (gratuit pour un usage perso) et l'appli Tailscale sur
   ton téléphone ;
-- un **jeton GitHub en lecture seule**, pour que le serveur récupère le code du
-  dépôt privé : sur https://github.com/settings/personal-access-tokens/new, donne-lui
-  un nom (« foulee-serveur »), limite-le au seul dépôt `foulee` et accorde
-  uniquement « Contents : Read-only ».
+- c'est tout : le dépôt est public, le serveur récupère le code sans jeton GitHub.
 
 Installation, dans la console du conteneur (en root) :
 
 ```
-apt update && apt install -y git && git config --global credential.helper store && git clone https://github.com/<ton-compte>/foulee /opt/foulee && bash /opt/foulee/scripts/installer-serveur.sh
+apt update && apt install -y git && git clone https://github.com/willyl02/foulee /opt/foulee && bash /opt/foulee/scripts/installer-serveur.sh
 ```
 
-1. Git demande ton nom d'utilisateur GitHub puis un mot de passe : colle le jeton.
-   Il est gardé pour les mises à jour.
+1. Git récupère le code (s'il demande un nom d'utilisateur, c'est que l'adresse du
+   dépôt est mal tapée).
 2. Le script installe Python et les bibliothèques, puis les services : l'interface
    (`foulee-web`) et la synchro toutes les 3 heures (`foulee-sync.timer`).
 3. Il affiche un lien Tailscale : ouvre-le et valide l'ajout du serveur. Si un
@@ -406,14 +402,13 @@ avec les informations utiles.
 - **Le serveur et le PC n'ont pas les mêmes réglages** : c'est normal, chaque
   installation a sa base. Exporte-les d'un côté et importe-les de l'autre
   (Réglages → Sauvegarde des réglages).
-- **La mise à jour indique « ajoute un jeton GitHub »** : le dépôt est privé
-  (section 6).
+- **La mise à jour indique « ajoute un jeton GitHub »** : le dépôt serait redevenu
+  privé (section 6).
 - **Le téléphone affiche « Foulée est injoignable »** : l'appli Tailscale est
   déconnectée sur le téléphone, ou le serveur est arrêté (`systemctl status foulee-web`).
 - **La mise à jour du serveur ne répond pas** : `systemctl status foulee-maj.path`
   sur le serveur ; le détail de la dernière tentative est dans `/var/lib/foulee/maj/etat.json`.
-  Si GitHub refuse l'accès, le jeton du serveur a expiré : crée-en un nouveau et colle-le
-  au prochain `git pull` (en root, dans `/opt/foulee`).
+  Le dépôt étant public, `git pull` (en root, dans `/opt/foulee`) n'a besoin d'aucun jeton.
 - **Une donnée semble manquer** : lance `foulee diagnostic` et transmets le rapport
   à Claude ; il ne contient que des noms de champs et des statuts.
 - **Le port 8770 est déjà pris** : l'application prend le suivant libre (8771…) et

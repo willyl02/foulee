@@ -47,6 +47,9 @@ class FakeResponse:
         for start in range(0, len(self.content), chunk_size):
             yield self.content[start:start + chunk_size]
 
+    def close(self):
+        pass
+
     def __enter__(self):
         return self
 
@@ -109,6 +112,24 @@ def test_private_repository_needs_a_token(github):
     github["status"] = 200
     updates.list_releases("github_pat_test")
     assert github["calls"][-1][1]["Authorization"] == "Bearer github_pat_test"
+
+
+def test_expired_token_does_not_block_a_public_repository(github, monkeypatch):
+    """Dépôt public : un jeton expiré (401) n'empêche ni de voir les versions, ni de télécharger."""
+    original = updates.requests.get
+
+    def picky(url, headers=None, **kwargs):
+        if (headers or {}).get("Authorization"):
+            github["calls"].append((url, dict(headers)))
+            return FakeResponse(401, {"message": "Bad credentials"})
+        return original(url, headers=headers, **kwargs)
+
+    monkeypatch.setattr(updates.requests, "get", picky)
+    monkeypatch.setattr(updates, "__version__", "0.3.0")
+    assert updates.check("beta", "github_pat_expire")["disponible"] == "0.4.0b2"
+    assert "Authorization" not in github["calls"][-1][1]  # repli sans jeton
+    with pytest.raises(updates.UpdateError, match="refuse le jeton"):
+        updates.list_releases("github_pat_expire", fallback=False)  # vérifier un jeton : pas de repli
 
 
 def test_download_checks_the_digest(github, tmp_path):

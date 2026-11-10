@@ -5,8 +5,9 @@ discussion, consultables par tous quand le dépôt est public, et l'auteur de Fo
 de GitHub à chaque nouveau sujet. L'interface prépare le titre, le message et les informations
 techniques, puis ouvre la page de GitHub : rien ne part sans un clic de l'utilisateur.
 
-Une adresse e-mail peut s'y ajouter (CONTACT_EMAIL), pour qui n'a pas de compte GitHub. Elle est
-vide par défaut : une adresse écrite ici est publiée avec le code et l'installateur.
+Une adresse e-mail s'y ajoute (CONTACT_EMAIL), pour qui n'a pas de compte GitHub. Elle est publiée
+avec le code et l'installateur : c'est l'adresse que l'auteur a choisi d'afficher (novembre 2026), à
+remplacer par une adresse dédiée avant une diffusion plus large. Vide : GitHub seulement.
 """
 
 from __future__ import annotations
@@ -18,7 +19,7 @@ import requests
 
 from . import updates
 
-CONTACT_EMAIL = ""         # adresse de contact affichée dans le formulaire (vide : GitHub seulement)
+CONTACT_EMAIL = "william.lequin@gmail.com"  # affichée dans le formulaire de retours (vide : GitHub seulement)
 VISIBILITY_TTL = 3600      # on redemande à GitHub au plus une fois par heure
 _cache: dict[str, tuple[str, float]] = {}
 _lock = threading.Lock()
