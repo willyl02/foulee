@@ -674,4 +674,9 @@ dialog:has(.dlg-wide) { width: min(860px, calc(100vw - 32px)); }
   .method-row { grid-template-columns: 1fr; }
   .hello-text h2 { font-size: 24px; }
   .form-note { display: block; }
+  .poste-row { display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; align-items: center; gap: 6px 8px; }
+  .poste-row input[type="text"] { width: 100%; }
+  .poste-row .inline-field { grid-column: 2 / 3; }
+  .poste-row > button { grid-column: 3; grid-row: 1; }
+  .leave-row input[type="text"] { width: 100%; }
 }
