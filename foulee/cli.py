@@ -265,11 +265,44 @@ def cmd_web(args: argparse.Namespace) -> int:
         if not args.sans_navigateur:
             webbrowser.open(url)
         return 0
+    # 127.0.0.1 sur le PC ; 0.0.0.0 sur le serveur pour le réseau local (avec mot de passe)
+    host = args.hote or os.environ.get("FOULEE_ECOUTE") or "127.0.0.1"
+    os.environ["FOULEE_ECOUTE"] = host
+    os.environ["FOULEE_PORT"] = str(args.port)
     _say(f"\nFoulée {'(démo) ' if args.demo else ''}→ {url}")
+    if host not in ("127.0.0.1", "localhost"):
+        from . import access
+
+        for address in access.lan_addresses(args.port):
+            _say(f"Réseau local → {address}/ ({'mot de passe demandé' if access.is_enabled() else 'accès à activer dans les Réglages'})")
     _say("Garde cette fenêtre ouverte tant que tu utilises l'interface (Ctrl+C pour arrêter).\n")
     if not args.sans_navigateur:
         threading.Timer(1.5, lambda: webbrowser.open(url)).start()
-    uvicorn.run(create_app(), host="127.0.0.1", port=args.port, log_level="warning")
+    # proxy_headers=False : derrière Tailscale, l'adresse vue reste celle de la machine (127.0.0.1)
+    uvicorn.run(create_app(), host=host, port=args.port, log_level="warning", proxy_headers=False)
+    return 0
+
+
+def cmd_lan(args: argparse.Namespace) -> int:
+    from . import access
+
+    if args.desactiver:
+        _say("✓ Accès depuis le réseau local désactivé." if access.disable() else "L'accès était déjà désactivé.")
+        return 0
+    _say(f"Mot de passe qui protégera Foulée sur le réseau local ({access.MIN_LENGTH} caractères au moins).")
+    first = getpass.getpass("Mot de passe : ")
+    second = getpass.getpass("Encore une fois : ")
+    if first != second:
+        _say("✗ Les deux saisies diffèrent : rien n'a changé.")
+        return 1
+    try:
+        access.set_password(first)
+    except ValueError as exc:
+        _say(f"✗ {exc}")
+        return 1
+    addresses = access.lan_addresses(config.DEFAULT_PORT)
+    _say("✓ Accès activé" + (f" : {', '.join(addresses)}" if addresses else ".")
+         + " Les appareils déjà connectés devront saisir le nouveau mot de passe.")
     return 0
 
 
@@ -540,7 +573,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--demo", action="store_true", help="utiliser les données de démonstration")
     p.add_argument("--port", type=int, default=config.DEFAULT_PORT)
     p.add_argument("--sans-navigateur", action="store_true", help="ne pas ouvrir le navigateur")
+    p.add_argument("--hote", help="adresse d'écoute : 127.0.0.1 par défaut, 0.0.0.0 pour le réseau local (serveur)")
     p.set_defaults(func=cmd_web)
+
+    p = sub.add_parser("acces-reseau", help="choisir le mot de passe de l'accès par le réseau local (serveur)")
+    p.add_argument("--desactiver", action="store_true", help="couper l'accès par le réseau local")
+    p.set_defaults(func=cmd_lan)
 
     p = sub.add_parser("mcp", help="serveur MCP pour Claude Desktop")
     p.add_argument("--demo", action="store_true")

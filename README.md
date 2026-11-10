@@ -127,6 +127,7 @@ terminal ») et tape `.venv\Scripts\foulee <commande>` :
 | `fit --jours 730` | Télécharger les fichiers FIT manquants sur une période |
 | `reparse` | Reconstruire les tables depuis les réponses brutes (après une mise à jour de Foulée) |
 | `claude-config` | Montrer où Claude Desktop range sa configuration et si Foulée y figure ; `--ecrire` pour l'ajouter, `--retirer` pour l'enlever |
+| `acces-reseau` | Sur un serveur : choisir le mot de passe de l'accès par le réseau local |
 | `reset-views` | Restaurer les vues d'origine |
 | `forget-key` | Supprimer la clé de ce PC |
 
@@ -208,18 +209,48 @@ apt update && apt install -y git && git config --global credential.helper store 
    (`https://foulee.<ton-réseau>.ts.net`), puis menu du navigateur → « Ajouter à
    l'écran d'accueil ». Foulée s'ouvre ensuite comme une appli.
 
+### Depuis la maison, sans Tailscale
+
+Le serveur répond aussi à son adresse sur le réseau local, par exemple
+`http://192.168.0.19:8770`, mais cet accès reste **fermé** tant que tu n'as pas
+choisi de mot de passe : ouvre Foulée par Tailscale, puis **Réglages → Accès depuis
+le réseau local**. Les appareils de la maison verront alors une page de connexion
+(la session dure 90 jours ; changer le mot de passe déconnecte tout le monde).
+
+- Par Tailscale, aucun mot de passe n'est jamais demandé.
+- Le mot de passe se choisit ou se change seulement par Tailscale ou sur le serveur
+  (`foulee acces-reseau`) ; « Couper l'accès » referme le réseau local.
+- Cette adresse n'est pas chiffrée : garde-la pour ta maison et n'ouvre jamais le
+  port 8770 sur ta box Internet.
+
+### Mettre à jour
+
+**Réglages → Mises à jour → Vérifier les mises à jour** : Foulée compare sa version
+avec celle de GitHub, liste les nouveautés, et **Mettre à jour maintenant** l'installe
+puis relance l'interface (une minute environ). Tes données, ta clé et tes vues ne
+bougent pas. En coulisses, l'interface dépose une demande que le service système
+`foulee-maj` traite ; il ne sait faire que deux choses : vérifier, ou installer la
+dernière version de ton dépôt.
+
+Depuis une version antérieure à 0.3.0, qui n'a pas encore ce bouton, lance une seule
+fois, en root dans la console du serveur :
+
+```
+cd /opt/foulee && git pull && bash scripts/mettre-a-jour-serveur.sh
+```
+
 Au quotidien (en root, dans la console du serveur) :
 
 | Commande | Rôle |
 |---|---|
 | `foulee status` | État de la clé, de la base et de la dernière synchro |
 | `foulee sync` | Synchroniser maintenant |
+| `foulee acces-reseau` | Choisir le mot de passe du réseau local (`--desactiver` pour le couper) |
 | `systemctl status foulee-web` | État de l'interface ; `journalctl -u foulee-web -n 50` pour son journal |
-| `bash /opt/foulee/scripts/mettre-a-jour-serveur.sh` | Mettre Foulée à jour depuis GitHub |
+| `bash /opt/foulee/scripts/mettre-a-jour-serveur.sh` | Mettre à jour en ligne de commande (comme le bouton) |
 
-Les données vivent dans `/var/lib/foulee`, la clé dans `/var/lib/foulee/secrets`
-(lisible par le seul utilisateur `foulee`). Le serveur n'écoute que sur lui-même :
-c'est Tailscale qui relaie l'interface.
+Les données vivent dans `/var/lib/foulee`, la clé et l'empreinte du mot de passe dans
+`/var/lib/foulee/secrets` (lisibles par le seul utilisateur `foulee`).
 
 ## 10. Dépannage
 
@@ -240,6 +271,10 @@ c'est Tailscale qui relaie l'interface.
   expiré ou été supprimée, crée-en une nouvelle (section 7).
 - **Le téléphone affiche « Foulée est injoignable »** : l'appli Tailscale est
   déconnectée sur le téléphone, ou le serveur est arrêté (`systemctl status foulee-web`).
+- **La mise à jour depuis les Réglages ne répond pas** : `systemctl status foulee-maj.path`
+  sur le serveur ; le détail de la dernière tentative est dans `/var/lib/foulee/maj/etat.json`.
+  Si GitHub refuse l'accès, le jeton du serveur a expiré : crée-en un nouveau et colle-le
+  au prochain `git pull` (en root, dans `/opt/foulee`).
 - **Une donnée semble manquer** : lance `foulee diagnostic` et transmets le rapport
   à Claude ; il ne contient que des noms de champs et des statuts.
 - **Le port 8770 est déjà pris** : `foulee web --port 8780`.
@@ -266,11 +301,12 @@ foulee/
   metrics.py     catalogue des métriques (libellés, unités, formats)
   analysis.py    tous les calculs (séries, charge, zones, postes, objectif…)
   views.py       types de tuiles et vues par défaut
-  web.py         API locale + pages
+  web.py         API locale + pages, accès réseau, demandes de mise à jour
+  access.py      mot de passe du réseau local (empreinte, cookie signé, anti-acharnement)
   mcp_server.py  outils pour Claude Desktop
   demo.py        données fictives
   static/        interface (HTML/CSS/JS, ECharts et Leaflet embarqués), appli installable (manifest, sw.js)
-scripts/         installation et mise à jour : Windows (.ps1) et serveur Linux (.sh)
+scripts/         installation et mise à jour : Windows (.ps1), serveur Linux (.sh, maj_serveur.py)
 tests/           tests, dont un faux serveur Garmin pour tester toute la chaîne
 ```
 

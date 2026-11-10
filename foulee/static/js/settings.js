@@ -85,6 +85,8 @@ export function renderSettings(page, boot, { onSaved, toast, resetViews }) {
         <button class="btn" type="button" data-reset-views>${icon("reset")}Restaurer les vues d'origine</button>
       </section>
 
+      ${serverSections(boot)}
+
       <section>
         <h2>À propos</h2>
         <dl class="about">
@@ -130,6 +132,10 @@ export function renderSettings(page, boot, { onSaved, toast, resetViews }) {
   refresh();
 
   form.querySelector("[data-reset-views]").addEventListener("click", resetViews);
+  const lan = form.querySelector("[data-lan]");
+  if (lan) renderLan(lan, toast);
+  const updates = form.querySelector("[data-maj]");
+  if (updates) setupUpdates(updates, boot, toast);
 
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -169,5 +175,168 @@ export function renderSettings(page, boot, { onSaved, toast, resetViews }) {
     } catch (err) {
       status.textContent = `Enregistrement impossible : ${err.message}`;
     }
+  });
+}
+
+// ============================================ serveur : réseau local et mises à jour
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function serverSections(boot) {
+  if (boot.machine !== "serveur" || boot.demo) return "";
+  return `
+      <section data-lan>
+        <h2>Accès depuis le réseau local</h2>
+        <p class="intro">Ouvre Foulée depuis n'importe quel appareil de la maison, sans Tailscale, avec l'adresse du serveur. Un mot de passe le protège ; par Tailscale, il n'est jamais demandé.</p>
+        <div data-lan-body><p class="computed">Chargement…</p></div>
+      </section>
+      ${boot.maj ? `<section data-maj>
+        <h2>Mises à jour</h2>
+        <p class="intro">Foulée regarde sur GitHub s'il existe une version plus récente et l'installe, sans commande à taper. Tes données, ta clé et tes vues sont conservées.</p>
+        <div class="inline-actions"><span>Version installée : <b>${F.escape(boot.version)}</b></span>
+          <button class="btn" type="button" data-maj-check>${icon("sync")}Vérifier les mises à jour</button></div>
+        <div data-maj-body></div>
+      </section>` : ""}`;
+}
+
+async function renderLan(section, toast) {
+  const body = section.querySelector("[data-lan-body]");
+  let info;
+  try {
+    info = await api.get("/api/acces-reseau", null, { fresh: true });
+  } catch (err) {
+    body.innerHTML = `<p class="computed">État indisponible : ${F.escape(err.message)}</p>`;
+    return;
+  }
+  const links = info.adresses.map((a) => `<a href="${F.escape(a)}/" target="_blank" rel="noopener">${F.escape(a)}</a>`).join(", ");
+  if (!info.ecoute) {
+    body.innerHTML = `<p class="computed">Le serveur n'écoute pas encore le réseau local : installe la dernière mise à jour, puis reviens ici.</p>`;
+    return;
+  }
+  if (info.depuis === "reseau") {
+    body.innerHTML = `<p class="computed">Tu es connecté par le réseau local${links ? ` (${links})` : ""}. Pour changer le mot de passe ou couper cet accès, passe par Tailscale.</p>
+      <button class="btn" type="button" data-lan-logout>${icon("close")}Se déconnecter</button>`;
+    body.querySelector("[data-lan-logout]").addEventListener("click", async () => {
+      try { await api.post("/api/deconnexion"); } finally { location.replace("/connexion"); }
+    });
+    return;
+  }
+  const state = info.actif
+    ? `<b>Activé</b>${links ? ` : ${links}` : ""}${info.modifie_le ? `, mot de passe choisi le ${F.escape(info.modifie_le)}` : ""}.`
+    : `<b>Désactivé.</b> Les autres appareils de la maison voient une page qui les renvoie vers Tailscale${links ? ` (adresse : ${F.escape(info.adresses[0])})` : ""}.`;
+  body.innerHTML = `
+    <p class="computed">${state}</p>
+    <div class="form-grid">
+      <label class="field"><span>${info.actif ? "Nouveau mot de passe" : "Mot de passe"}</span><input type="password" name="lan_pw1" autocomplete="new-password"></label>
+      <label class="field"><span>Encore une fois</span><input type="password" name="lan_pw2" autocomplete="new-password"></label>
+    </div>
+    <div class="inline-actions">
+      <button class="btn btn-primary" type="button" data-lan-save>${icon("check")}${info.actif ? "Changer le mot de passe" : "Activer l'accès"}</button>
+      ${info.actif ? `<button class="btn" type="button" data-lan-off>Couper l'accès</button>` : ""}
+      <span class="hint" data-lan-status></span>
+    </div>
+    <p class="hint">${info.longueur_min} caractères au moins. Réservé à ta maison : cette adresse n'est pas chiffrée, n'ouvre jamais ce port sur ta box Internet.</p>`;
+  const status = body.querySelector("[data-lan-status]");
+  const save = async () => {
+    const first = body.querySelector("[name=lan_pw1]").value;
+    const second = body.querySelector("[name=lan_pw2]").value;
+    if (first.length < info.longueur_min) { status.textContent = `${info.longueur_min} caractères au moins.`; return; }
+    if (first !== second) { status.textContent = "Les deux saisies diffèrent."; return; }
+    status.textContent = "Enregistrement…";
+    try {
+      await api.put("/api/acces-reseau", { mot_de_passe: first });
+      toast(info.actif ? "Mot de passe changé : les appareils connectés devront le saisir à nouveau." : "Accès par le réseau local activé.");
+      renderLan(section, toast);
+    } catch (err) {
+      status.textContent = err.message;
+    }
+  };
+  body.querySelector("[data-lan-save]").addEventListener("click", save);
+  // Entrée valide le mot de passe, sans envoyer le formulaire des réglages
+  body.querySelectorAll("input[type=password]").forEach((input) => input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") { event.preventDefault(); save(); }
+  }));
+  body.querySelector("[data-lan-off]")?.addEventListener("click", async () => {
+    try {
+      await api.del("/api/acces-reseau");
+      toast("Accès par le réseau local coupé.");
+      renderLan(section, toast);
+    } catch (err) {
+      status.textContent = err.message;
+    }
+  });
+}
+
+function setupUpdates(section, boot, toast) {
+  const body = section.querySelector("[data-maj-body]");
+  const button = section.querySelector("[data-maj-check]");
+  const NO_SERVICE = "Le service de mise à jour ne répond pas. Lance une fois la mise à jour en SSH (voir le README), puis réessaie.";
+
+  // Attend que le service de mise à jour (root) ait écrit un état postérieur à la demande
+  async function waitFor(since, finals, onProgress, timeoutMs) {
+    const end = Date.now() + timeoutMs;
+    while (Date.now() < end) {
+      await sleep(1500);
+      let res;
+      try { res = await api.get("/api/maj", null, { fresh: true }); } catch (err) { continue; }
+      const st = res.etat;
+      if (!st || st.horodatage < since) continue;
+      onProgress?.(st);
+      if (finals.includes(st.statut)) return st;
+    }
+    return null;
+  }
+
+  async function install() {
+    button.disabled = true;
+    body.innerHTML = `<p class="computed" data-maj-progress>Demande envoyée…</p>`;
+    const progress = body.querySelector("[data-maj-progress]");
+    try {
+      const req = await api.post("/api/maj", { action: "installer" });
+      const st = await waitFor(req.horodatage, ["termine", "erreur"], (s) => { progress.textContent = s.message; }, 15 * 60 * 1000);
+      if (!st || st.statut === "erreur") {
+        progress.textContent = st ? `✗ ${st.message}` : NO_SERVICE;
+        button.disabled = false;
+        return;
+      }
+      // L'interface redémarre : on recharge la page dès qu'elle répond de nouveau
+      const end = Date.now() + 3 * 60 * 1000;
+      while (Date.now() < end) {
+        await sleep(2000);
+        try {
+          const fresh = await api.get("/api/bootstrap", null, { fresh: true });
+          if (fresh.demarre_le !== boot.demarre_le) break;
+        } catch (err) { /* redémarrage en cours */ }
+      }
+      toast(st.message.replace(" L'interface redémarre…", ""));
+      setTimeout(() => location.reload(), 600);
+    } catch (err) {
+      progress.textContent = `✗ ${err.message}`;
+      button.disabled = false;
+    }
+  }
+
+  button.addEventListener("click", async () => {
+    button.disabled = true;
+    body.innerHTML = `<p class="computed">Recherche sur GitHub…</p>`;
+    try {
+      const req = await api.post("/api/maj", { action: "verifier" });
+      const st = await waitFor(req.horodatage, ["verifie", "erreur"], null, 90 * 1000);
+      if (!st) {
+        body.innerHTML = `<p class="computed">${NO_SERVICE}</p>`;
+      } else if (st.statut === "erreur") {
+        body.innerHTML = `<p class="computed">✗ ${F.escape(st.message)}</p>`;
+      } else if (!st.retard) {
+        body.innerHTML = `<p class="computed">${F.escape(st.message)}</p>`;
+      } else {
+        body.innerHTML = `<p class="computed"><b>${F.escape(st.message)}</b> Au programme :</p>
+          <ul class="maj-news">${st.nouveautes.map((n) => `<li>${F.escape(n)}</li>`).join("")}</ul>
+          <div class="inline-actions"><button class="btn btn-primary" type="button" data-maj-install>${icon("download")}Mettre à jour maintenant</button>
+            <span class="hint">L'interface redémarre ensuite, une minute environ.</span></div>`;
+        body.querySelector("[data-maj-install]").addEventListener("click", install);
+      }
+    } catch (err) {
+      body.innerHTML = `<p class="computed">✗ ${F.escape(err.message)}</p>`;
+    }
+    button.disabled = false;
   });
 }

@@ -8,9 +8,13 @@
 #   1. les paquets nécessaires (curl, git) ;
 #   2. l'utilisateur système « foulee » et ses données dans /var/lib/foulee ;
 #   3. Python et les bibliothèques, avec uv (dans /opt/uv et /opt/foulee/.venv) ;
-#   4. deux services : l'interface (foulee-web) et la synchro toutes les 3 heures (foulee-sync.timer) ;
+#   4. les services : l'interface (foulee-web), la synchro toutes les 3 heures (foulee-sync.timer)
+#      et les mises à jour demandées depuis les Réglages (foulee-maj), via configurer-serveur.sh ;
 #   5. Tailscale, qui relaie l'interface en HTTPS vers tes seuls appareils ;
 #   6. ta clé Garmin et le premier import.
+#
+# L'interface écoute aussi le réseau local (http://<adresse du serveur>:8770), mais reste fermée
+# tant que tu n'as pas choisi de mot de passe dans les Réglages.
 
 set -euo pipefail
 
@@ -46,33 +50,7 @@ step 2/6 "Utilisateur « foulee » et dossier des données"
 if ! id -u foulee >/dev/null 2>&1; then
     useradd --system --user-group --home-dir "$DATA" --shell /usr/sbin/nologin foulee
 fi
-install -d -o foulee -g foulee -m 0750 "$DATA"
-install -d -o foulee -g foulee -m 0700 "$DATA/secrets"
-if [[ ! -f "$ENV_FILE" ]]; then
-    cat > "$ENV_FILE" <<EOF
-# Configuration de Foulée, lue par les services foulee-web et foulee-sync.
-FOULEE_DATA=$DATA
-FOULEE_SECRETS=$DATA/secrets
-# Noms d'hôte acceptés en plus de 127.0.0.1 (le nom Tailscale du serveur, rempli par l'installation)
-FOULEE_HOTES=
-TZ=Europe/Paris
-PYTHONUTF8=1
-EOF
-fi
-# Commande « foulee » pour root : lance Foulée sous l'utilisateur foulee, avec la configuration du serveur
-cat > /usr/local/bin/foulee <<EOF
-#!/bin/sh
-# Lance une commande Foulée (foulee status, foulee sync, foulee setup…) avec la configuration du serveur.
-set -a
-. $ENV_FILE
-set +a
-if [ "\$(id -u)" = 0 ]; then
-    exec runuser -u foulee -- env HOME=$DATA "$ROOT/.venv/bin/foulee" "\$@"
-fi
-exec "$ROOT/.venv/bin/foulee" "\$@"
-EOF
-chmod 0755 /usr/local/bin/foulee
-say "Utilisateur, dossier et commande « foulee » prêts."
+say "Utilisateur « foulee » prêt."
 
 # ---------------------------------------------------------------------------
 step 3/6 "Python et bibliothèques (une à deux minutes la première fois)"
@@ -86,59 +64,10 @@ install -d -m 0755 /opt/uv
 say "Foulée $("$ROOT/.venv/bin/foulee" --version | awk '{print $2}') est installé."
 
 # ---------------------------------------------------------------------------
-step 4/6 "Services : interface et synchro toutes les 3 heures"
-cat > /etc/systemd/system/foulee-web.service <<EOF
-[Unit]
-Description=Foulée : interface web
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-User=foulee
-Group=foulee
-WorkingDirectory=$ROOT
-EnvironmentFile=$ENV_FILE
-Environment=HOME=$DATA
-ExecStart=$ROOT/.venv/bin/foulee web --sans-navigateur --port $PORT
-Restart=always
-RestartSec=5
-NoNewPrivileges=yes
-
-[Install]
-WantedBy=multi-user.target
-EOF
-cat > /etc/systemd/system/foulee-sync.service <<EOF
-[Unit]
-Description=Foulée : synchronisation avec Garmin
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=oneshot
-User=foulee
-Group=foulee
-WorkingDirectory=$ROOT
-EnvironmentFile=$ENV_FILE
-Environment=HOME=$DATA
-ExecStart=$ROOT/.venv/bin/foulee sync --quiet
-NoNewPrivileges=yes
-EOF
-cat > /etc/systemd/system/foulee-sync.timer <<EOF
-[Unit]
-Description=Foulée : synchro toutes les 3 heures
-
-[Timer]
-OnCalendar=*-*-* 02/3:17:00
-Persistent=true
-RandomizedDelaySec=5min
-
-[Install]
-WantedBy=timers.target
-EOF
-systemctl daemon-reload
-systemctl enable --now foulee-web.service foulee-sync.timer >/dev/null 2>&1
+step 4/6 "Services : interface, synchro toutes les 3 heures, mises à jour"
+bash "$ROOT/scripts/configurer-serveur.sh"
 systemctl restart foulee-web.service
-say "Interface et synchro automatique en route."
+say "Interface, synchro automatique et mises à jour depuis les Réglages en route."
 
 # ---------------------------------------------------------------------------
 step 5/6 "Tailscale : l'accès depuis ton téléphone"
@@ -186,9 +115,15 @@ chown -R foulee:foulee "$DATA"
 printf '\n\033[1;32m=== Foulée est en ligne ===\033[0m\n'
 say "Sur ton téléphone, Tailscale connecté :  https://$TS_HOST"
 say "Puis, dans le menu du navigateur : « Ajouter à l'écran d'accueil » (ou « Installer l'appli »)."
+LAN_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
+if [[ -n "$LAN_IP" ]]; then
+    say "Depuis la maison sans Tailscale : http://$LAN_IP:$PORT, après avoir choisi un mot de passe"
+    say "dans Réglages → Accès depuis le réseau local."
+fi
 say ""
 say "Commandes utiles (en root) :"
 say "  foulee status                          état de la clé, de la base et de la dernière synchro"
 say "  foulee sync                            synchroniser maintenant"
 say "  systemctl status foulee-web            état de l'interface"
-say "  bash $ROOT/scripts/mettre-a-jour-serveur.sh   mettre Foulée à jour depuis GitHub"
+say "  foulee acces-reseau                    choisir le mot de passe du réseau local"
+say "  bash $ROOT/scripts/mettre-a-jour-serveur.sh   mettre Foulée à jour (ou bouton dans les Réglages)"

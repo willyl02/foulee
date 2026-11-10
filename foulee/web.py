@@ -1,33 +1,37 @@
-"""Serveur web local : l'API JSON de l'interface + les pages elles-mêmes.
+"""Serveur web : l'API JSON de l'interface + les pages elles-mêmes.
 
-Il n'écoute que sur 127.0.0.1 : aucun autre appareil ne peut s'y connecter
-directement. Sur un serveur, c'est Tailscale (« tailscale serve ») qui relaie
-l'interface en HTTPS, et seulement vers tes propres appareils.
+Sur le PC, il n'écoute que sur 127.0.0.1 : aucun autre appareil ne peut s'y
+connecter. Sur un serveur, Tailscale (« tailscale serve ») relaie l'interface en
+HTTPS vers tes seuls appareils ; le serveur peut aussi écouter le réseau local
+(FOULEE_ECOUTE=0.0.0.0), et les appareils de la maison passent alors par un mot de
+passe (voir access.py). Ce qui arrive de la machine elle-même, dont Tailscale,
+n'en demande jamais.
 
-Deux protections en plus contre les sites web malveillants qui tenteraient de
-parler à ce serveur :
-- seuls les noms d'hôte attendus sont acceptés dans l'en-tête Host (anti « DNS
-  rebinding ») : 127.0.0.1, localhost, et ceux listés dans FOULEE_HOTES
-  (par exemple le nom Tailscale du serveur) ;
+Deux protections en plus contre les sites web malveillants :
+- l'en-tête Host doit être une adresse IP, localhost ou un nom de FOULEE_HOTES
+  (le nom Tailscale du serveur) : c'est la parade au « DNS rebinding » ;
 - toute requête qui modifie quelque chose doit porter l'en-tête X-Foulee,
   ce qu'un autre site ne peut pas ajouter sans autorisation du navigateur.
 """
 
 from __future__ import annotations
 
+import ipaddress
+import json
 import mimetypes
 import os
 import sys
 import threading
 import time
 from datetime import date
+from pathlib import Path
 from typing import Any
 
 from fastapi import Body, FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import __version__, analysis, config, db, metrics, vault, views
+from . import __version__, access, analysis, config, db, metrics, vault, views
 from . import sync as sync_module
 
 DERIVED_KEYS = {"vma_kmh", "fc_max", "fc_repos", "sexe", "zones_allure_pct_vma", "charge_source"}
@@ -84,16 +88,43 @@ def _metric(key: str) -> str:
     return key
 
 
+STARTED_AT = time.time()  # permet à l'interface de voir que le serveur a redémarré
 LOCAL_HOSTS = ("127.0.0.1", "localhost", "testserver")
+PUBLIC_PATHS = {"/connexion", "/api/connexion"}  # seules pages ouvertes avant le mot de passe
 
 mimetypes.add_type("application/manifest+json", ".webmanifest")
 
 
+def host_name(header: str | None) -> str:
+    """Nom d'hôte d'un en-tête Host, sans le port (« 192.168.0.19:8770 » → « 192.168.0.19 »)."""
+    host = (header or "").strip().lower()
+    if host.startswith("["):  # IPv6 : [::1]:8770
+        return host[1:].split("]", 1)[0]
+    if host.count(":") == 1:
+        host = host.rsplit(":", 1)[0]
+    return host.rstrip(".")
+
+
 def allowed_hosts() -> set[str]:
     """Noms d'hôte acceptés : la machine elle-même, plus ceux de FOULEE_HOTES (séparés par des virgules)."""
-    extra = os.environ.get("FOULEE_HOTES", "")
-    names = {name.strip().lower().rstrip(".").split(":")[0] for name in extra.split(",")}
+    names = {host_name(name) for name in os.environ.get("FOULEE_HOTES", "").split(",")}
     return set(LOCAL_HOSTS) | {name for name in names if name}
+
+
+def host_allowed(host: str, names: set[str]) -> bool:
+    if host in names:
+        return True
+    try:
+        ipaddress.ip_address(host)  # une adresse IP ne peut pas servir au « DNS rebinding »
+        return True
+    except ValueError:
+        return False
+
+
+def update_dir() -> Path | None:
+    """Dossier d'échange avec le service de mise à jour du serveur (FOULEE_MAJ), s'il existe."""
+    value = os.environ.get("FOULEE_MAJ")
+    return Path(value) if value and Path(value).is_dir() else None
 
 
 def create_app() -> FastAPI:
@@ -103,14 +134,27 @@ def create_app() -> FastAPI:
         pass  # crée la base et les vues par défaut si besoin
 
     hosts = allowed_hosts()
+    throttle = access.Throttle()
 
     @app.middleware("http")
-    async def local_only(request: Request, call_next):
-        host = (request.headers.get("host") or "").split(":")[0].lower().rstrip(".")
-        if host not in hosts:
+    async def guard(request: Request, call_next):
+        if not host_allowed(host_name(request.headers.get("host")), hosts):
             return JSONResponse({"detail": "Hôte refusé"}, status_code=403)
         if request.method not in ("GET", "HEAD", "OPTIONS") and request.headers.get("x-foulee") != "1":
             return JSONResponse({"detail": "En-tête X-Foulee manquant"}, status_code=403)
+        # Tailscale et la console du serveur arrivent par la machine elle-même : pas de mot de passe
+        request.state.local = access.is_local_client(request.client.host if request.client else None)
+        path = request.url.path
+        if not request.state.local and path not in PUBLIC_PATHS:
+            if not access.is_enabled():
+                if path.startswith("/api/"):
+                    return JSONResponse({"detail": "Accès depuis le réseau local désactivé"}, status_code=403)
+                return FileResponse(config.STATIC_DIR / "reseau-desactive.html", status_code=403,
+                                    headers={"Cache-Control": "no-store"})
+            if not access.cookie_valid(request.cookies.get(access.COOKIE)):
+                if path.startswith("/api/"):
+                    return JSONResponse({"detail": "Connexion requise"}, status_code=401)
+                return RedirectResponse("/connexion", status_code=303)
         response = await call_next(request)
         if request.url.path.startswith("/api/"):
             response.headers["Cache-Control"] = "no-store"
@@ -122,7 +166,7 @@ def create_app() -> FastAPI:
 
     # ------------------------------------------------------------- démarrage
     @app.get("/api/bootstrap")
-    def bootstrap() -> dict:
+    def bootstrap(request: Request) -> dict:
         with db.session() as conn:
             settings = db.get_settings(conn)
             return {
@@ -135,6 +179,9 @@ def create_app() -> FastAPI:
                 "synchro": sync_module.last_sync_info(conn), "cle": vault.has_key() or config.is_demo(),
                 "dossier_donnees": str(config.data_dir()),
                 "machine": "pc" if sys.platform == "win32" else "serveur",
+                "acces": "local" if request.state.local else "reseau",
+                "demarre_le": STARTED_AT,
+                "maj": update_dir() is not None,
                 "volumes": db.table_counts(conn),
                 "premiere_date": conn.execute("SELECT MIN(date) AS d FROM daily").fetchone()["d"],
             }
@@ -326,6 +373,98 @@ def create_app() -> FastAPI:
     @app.get("/")
     def index() -> FileResponse:
         return FileResponse(config.STATIC_DIR / "index.html", headers={"Cache-Control": "no-cache"})
+
+    # ------------------------------------------------ accès par le réseau local
+    @app.get("/connexion")
+    def login_page(request: Request):
+        if request.state.local:
+            return RedirectResponse("/", status_code=303)
+        page = "connexion.html" if access.is_enabled() else "reseau-desactive.html"
+        return FileResponse(config.STATIC_DIR / page, headers={"Cache-Control": "no-store"})
+
+    @app.post("/api/connexion")
+    def login(request: Request, payload: dict = Body(...)) -> JSONResponse:
+        if request.state.local:
+            return JSONResponse({"ok": True})
+        if not access.is_enabled():
+            raise HTTPException(403, "Accès depuis le réseau local désactivé.")
+        ip = request.client.host if request.client else "?"
+        if throttle.blocked(ip):
+            raise HTTPException(429, "Trop d'essais : attends une minute avant de recommencer.")
+        if not access.check_password(str(payload.get("mot_de_passe") or "")):
+            throttle.failure(ip)
+            raise HTTPException(401, "Mot de passe incorrect.")
+        throttle.success(ip)
+        response = JSONResponse({"ok": True})
+        response.set_cookie(access.COOKIE, access.make_cookie(), max_age=access.SESSION_DAYS * 86400,
+                            httponly=True, samesite="strict", path="/")
+        return response
+
+    @app.post("/api/deconnexion")
+    def logout() -> JSONResponse:
+        response = JSONResponse({"ok": True})
+        response.delete_cookie(access.COOKIE, path="/")
+        return response
+
+    @app.get("/api/acces-reseau")
+    def lan_status(request: Request) -> dict:
+        data = access.load()
+        listening = access.listening_on_network()
+        port = int(os.environ.get("FOULEE_PORT") or config.DEFAULT_PORT)
+        return {
+            "ecoute": listening, "actif": data is not None,
+            "modifie_le": data.get("modifie_le") if data else None,
+            "adresses": access.lan_addresses(port) if listening else [],
+            "depuis": "local" if request.state.local else "reseau",
+            "longueur_min": access.MIN_LENGTH,
+        }
+
+    def require_local(request: Request) -> None:
+        if not request.state.local:
+            raise HTTPException(403, "Ce réglage se change par Tailscale ou sur le serveur lui-même.")
+
+    @app.put("/api/acces-reseau")
+    def lan_enable(request: Request, payload: dict = Body(...)) -> dict:
+        require_local(request)
+        try:
+            access.set_password(str(payload.get("mot_de_passe") or ""))
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return lan_status(request)
+
+    @app.delete("/api/acces-reseau")
+    def lan_disable(request: Request) -> dict:
+        require_local(request)
+        access.disable()
+        return lan_status(request)
+
+    # ------------------------------------------------------- mises à jour
+    # L'interface ne fait que déposer une demande ; le service foulee-maj (root) la traite
+    # et décrit où il en est dans etat.json.
+    @app.get("/api/maj")
+    def update_status() -> dict:
+        folder = update_dir()
+        state = None
+        if folder:
+            try:
+                state = json.loads((folder / "etat.json").read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                state = None
+        return {"disponible": folder is not None, "version": __version__, "etat": state,
+                "en_attente": bool(folder and (folder / "demande").exists())}
+
+    @app.post("/api/maj")
+    def update_request(payload: dict = Body(...)) -> dict:
+        action = payload.get("action")
+        if action not in ("verifier", "installer"):
+            raise HTTPException(400, "Action inconnue : « verifier » ou « installer ».")
+        folder = update_dir()
+        if folder is None:
+            raise HTTPException(404, "La mise à jour depuis l'interface n'existe que sur le serveur.")
+        temporary = folder / "demande.tmp"
+        temporary.write_text(action, encoding="utf-8")
+        os.replace(temporary, folder / "demande")
+        return {"ok": True, "action": action, "horodatage": time.time()}
 
     # Appli installable sur l'écran d'accueil du téléphone (servie à la racine pour couvrir tout le site)
     @app.get("/manifest.webmanifest")

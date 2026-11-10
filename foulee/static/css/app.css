@@ -152,7 +152,7 @@ a { color: inherit; }
 /* ---------------------------------------------------------------- séance */
 .picker { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: -4px 0 16px; }
 .picker select { min-width: min(420px, 100%); }
-select, input[type="text"], input[type="number"], input[type="date"], input[type="search"], textarea {
+select, input[type="text"], input[type="number"], input[type="date"], input[type="search"], input[type="password"], textarea {
   border: 1px solid var(--hair); border-radius: 8px; background: var(--surface); padding: 7px 10px; min-height: 36px;
 }
 textarea { min-height: 110px; resize: vertical; width: 100%; }
@@ -278,7 +278,10 @@ dialog::backdrop { background: rgba(10, 16, 13, 0.45); }
 .field { display: grid; gap: 5px; margin-bottom: 14px; }
 .field > span { font-size: 14px; font-weight: 500; color: var(--ink-2); }
 .field .hint { font-size: 13px; color: var(--muted); }
-.field select, .field input[type="text"], .field input[type="number"], .field input[type="date"] { width: 100%; }
+.field select, .field input[type="text"], .field input[type="number"], .field input[type="date"], .field input[type="password"] { width: 100%; }
+.inline-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin: 4px 0 14px; }
+.maj-news { margin: -6px 0 14px; padding-left: 20px; font-size: 14px; color: var(--ink-2); }
+.maj-news li { margin: 2px 0; }
 .check { display: flex; align-items: center; gap: 8px; font-size: 14.5px; margin: 4px 0 12px; cursor: pointer; }
 .check input { width: 17px; height: 17px; accent-color: var(--btn-ink); }
 .checklist { max-height: 240px; overflow: auto; border: 1px solid var(--hair); border-radius: 8px; padding: 6px 10px; }
