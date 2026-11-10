@@ -8,7 +8,10 @@ disposition de deux façons :
   que tu peux modifier ;
 - un **serveur MCP pour Claude Desktop**, pour me poser tes questions directement.
 
-Aucun service intermédiaire : ton PC parle directement à Garmin (client Python
+Installé sur un serveur à la maison, Foulée s'ouvre aussi **sur ton téléphone**,
+de partout, comme une appli (section 9).
+
+Aucun service intermédiaire : ta machine parle directement à Garmin (client Python
 officiel de Garmin), et tout est stocké chez toi.
 
 ```
@@ -165,7 +168,60 @@ Depuis la version 0.1.0, qui n'a pas encore ce script : débloque l'archive (sec
 son dossier `Foulee`, sélectionne tout (Ctrl+A), copie (Ctrl+C), puis colle (Ctrl+V)
 dans ton dossier Foulee et choisis « Remplacer les fichiers dans la destination ».
 
-## 9. Dépannage
+## 9. Sur ton téléphone : Foulée sur un serveur
+
+Pour consulter Foulée de partout, il tourne en permanence sur un petit serveur
+Linux (par exemple un conteneur Debian sous Proxmox), et **Tailscale** le relie
+à tes seuls appareils, en HTTPS. Rien n'est publié sur Internet.
+
+```
+Garmin  ──►  serveur : Foulée + synchro toutes les 3 h  ──►  Tailscale (tes appareils)  ──►  téléphone
+```
+
+Il te faut :
+- un conteneur **Debian 12 ou 13** avec accès à Internet (1 cœur, 1 Go de mémoire,
+  8 Go de disque) ;
+- un compte **Tailscale** (gratuit pour un usage perso) et l'appli Tailscale sur
+  ton téléphone ;
+- un **jeton GitHub en lecture seule**, pour que le serveur récupère le code du
+  dépôt privé : sur https://github.com/settings/personal-access-tokens/new, donne-lui
+  un nom (« foulee-serveur »), limite-le au seul dépôt `foulee` et accorde
+  uniquement « Contents : Read-only ».
+
+Installation, dans la console du conteneur (en root) :
+
+```
+apt update && apt install -y git && git config --global credential.helper store && git clone https://github.com/<ton-compte>/foulee /opt/foulee && bash /opt/foulee/scripts/installer-serveur.sh
+```
+
+1. Git demande ton nom d'utilisateur GitHub puis un mot de passe : colle le jeton.
+   Il est gardé pour les mises à jour.
+2. Le script installe Python et les bibliothèques, puis les services : l'interface
+   (`foulee-web`) et la synchro toutes les 3 heures (`foulee-sync.timer`).
+3. Il affiche un lien Tailscale : ouvre-le et valide l'ajout du serveur. Si un
+   second lien demande d'activer HTTPS (« Serve »), valide-le aussi.
+4. Il demande ta **clé Garmin** et lance le premier import. Pour reprendre celle du
+   PC sans l'afficher, tape dans PowerShell, depuis le dossier Foulee du PC :
+   `.venv\Scripts\python.exe -c "from foulee import vault; print(vault.get_key(), end='')" | Set-Clipboard`
+   puis colle-la dans la console du conteneur (clic droit → Coller, ou Ctrl+Maj+V).
+5. **Sur le téléphone**, Tailscale connecté : ouvre l'adresse affichée
+   (`https://foulee.<ton-réseau>.ts.net`), puis menu du navigateur → « Ajouter à
+   l'écran d'accueil ». Foulée s'ouvre ensuite comme une appli.
+
+Au quotidien (en root, dans la console du serveur) :
+
+| Commande | Rôle |
+|---|---|
+| `foulee status` | État de la clé, de la base et de la dernière synchro |
+| `foulee sync` | Synchroniser maintenant |
+| `systemctl status foulee-web` | État de l'interface ; `journalctl -u foulee-web -n 50` pour son journal |
+| `bash /opt/foulee/scripts/mettre-a-jour-serveur.sh` | Mettre Foulée à jour depuis GitHub |
+
+Les données vivent dans `/var/lib/foulee`, la clé dans `/var/lib/foulee/secrets`
+(lisible par le seul utilisateur `foulee`). Le serveur n'écoute que sur lui-même :
+c'est Tailscale qui relaie l'interface.
+
+## 10. Dépannage
 
 - **Claude ne voit pas Foulée** : lance `.venv\Scripts\foulee claude-config`. Il
   liste les fichiers de configuration de Claude Desktop présents sur ton PC et dit
@@ -182,13 +238,15 @@ dans ton dossier Foulee et choisis « Remplacer les fichiers dans la destination
   cite la réponse de Garmin sans jamais montrer ta clé : tu peux le transmettre à Claude.
 - **« Garmin a refusé la clé » pendant une synchro, alors que tout marchait** : elle a
   expiré ou été supprimée, crée-en une nouvelle (section 7).
+- **Le téléphone affiche « Foulée est injoignable »** : l'appli Tailscale est
+  déconnectée sur le téléphone, ou le serveur est arrêté (`systemctl status foulee-web`).
 - **Une donnée semble manquer** : lance `foulee diagnostic` et transmets le rapport
   à Claude ; il ne contient que des noms de champs et des statuts.
 - **Le port 8770 est déjà pris** : `foulee web --port 8780`.
 - **La carte reste grise** : le fond de carte vient d'Internet (OpenStreetMap ou IGN).
   Le tracé s'affiche même sans fond.
 
-## 10. Ce que l'API personnelle ne donne pas
+## 11. Ce que l'API personnelle ne donne pas
 
 - Elle est en **lecture seule** : impossible d'envoyer une séance ou un parcours
   sur la montre.
@@ -197,7 +255,7 @@ dans ton dossier Foulee et choisis « Remplacer les fichiers dans la destination
 - Garmin n'a pas précisé si les FIT obtenus par l'API personnelle contiennent
   tous les champs propriétaires : le diagnostic te le dira.
 
-## 11. Faire évoluer Foulée
+## 12. Faire évoluer Foulée
 
 ```
 foulee/
@@ -211,7 +269,8 @@ foulee/
   web.py         API locale + pages
   mcp_server.py  outils pour Claude Desktop
   demo.py        données fictives
-  static/        interface (HTML/CSS/JS, ECharts et Leaflet embarqués)
+  static/        interface (HTML/CSS/JS, ECharts et Leaflet embarqués), appli installable (manifest, sw.js)
+scripts/         installation et mise à jour : Windows (.ps1) et serveur Linux (.sh)
 tests/           tests, dont un faux serveur Garmin pour tester toute la chaîne
 ```
 

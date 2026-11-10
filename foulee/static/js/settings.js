@@ -89,7 +89,7 @@ export function renderSettings(page, boot, { onSaved, toast, resetViews }) {
         <h2>À propos</h2>
         <dl class="about">
           <dt>Version</dt><dd>Foulée ${F.escape(boot.version)}${boot.demo ? " (mode démo)" : ""}</dd>
-          <dt>Clé API Garmin</dt><dd>${boot.demo ? "Inutile en mode démo" : boot.cle ? "Enregistrée sur ce PC" : "Absente : lance « foulee setup » dans un terminal"}</dd>
+          <dt>Clé API Garmin</dt><dd>${boot.demo ? "Inutile en mode démo" : boot.cle ? (boot.machine === "serveur" ? "Enregistrée sur le serveur" : "Enregistrée sur ce PC") : "Absente : lance « foulee setup » dans un terminal"}</dd>
           <dt>Données</dt><dd>${F.escape(boot.dossier_donnees || "")}</dd>
           <dt>Contenu</dt><dd>${F.int(boot.volumes.activities)} séances, ${F.int(boot.volumes.daily)} valeurs quotidiennes, ${F.int(boot.volumes.streams)} séances avec courbes</dd>
           <dt>Depuis le</dt><dd>${boot.premiere_date ? F.dateLong(boot.premiere_date, { year: true }) : "–"}</dd>

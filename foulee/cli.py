@@ -76,16 +76,18 @@ _STOP_WORDS = ("q", "n", "non", "stop", "quitter")
 def _key_instructions(clipboard: bool) -> None:
     from .garmin.client import KEY_PAGE
 
+    if not clipboard:  # serveur ou console sans presse-papiers Windows : on colle la clé
+        _say("Colle ici ta clé API Garmin : celle de ton PC, ou une nouvelle créée sur la page")
+        _say(f"« API personnelle » de Garmin Connect ({KEY_PAGE}).")
+        _say("Colle-la UNE seule fois puis appuie sur Entrée : rien ne s'affiche, c'est normal.\n")
+        return
     _say("1. Dans Garmin Connect sur le web, ouvre la page « API personnelle » :")
     _say(f"   {KEY_PAGE}")
     _say("   Créer une clé → accepte les conditions → choisis la durée (1 an conseillé) → Créer.")
-    if clipboard:
-        _say("2. Copie la clé avec le bouton « Copier » de Garmin (sinon : clique dans la clé, Ctrl+A puis Ctrl+C).")
-        _say("   Garde la fenêtre Garmin ouverte jusqu'à la confirmation : la clé ne s'affiche qu'une fois.")
-        _say("3. Reviens ici et appuie simplement sur Entrée : Foulée lit la clé dans le presse-papiers.")
-        _say("   Inutile de la coller. Elle ne s'affichera jamais à l'écran.\n")
-    else:
-        _say("2. Copie la clé, colle-la ici UNE seule fois, puis Entrée (rien ne s'affiche, c'est normal).\n")
+    _say("2. Copie la clé avec le bouton « Copier » de Garmin (sinon : clique dans la clé, Ctrl+A puis Ctrl+C).")
+    _say("   Garde la fenêtre Garmin ouverte jusqu'à la confirmation : la clé ne s'affiche qu'une fois.")
+    _say("3. Reviens ici et appuie simplement sur Entrée : Foulée lit la clé dans le presse-papiers.")
+    _say("   Inutile de la coller. Elle ne s'affichera jamais à l'écran.\n")
 
 
 def _read_key(first: bool, clipboard: bool) -> tuple[str, str] | None:
@@ -168,7 +170,8 @@ def _enter_key() -> int:
         if origin != "collée" and keyinput.clear_clipboard():
             _say("✓ Presse-papiers vidé. Si l'historique du presse-papiers est activé (Win+V),")
             _say("  supprimes-y aussi la clé (icône corbeille ou « … » → Supprimer).")
-        _say("  Tu peux cliquer sur « Terminé » dans Garmin Connect.")
+        if clipboard:
+            _say("  Tu peux cliquer sur « Terminé » dans Garmin Connect.")
         return 0
     _say("Trop d'essais pour cette fois : relance Configurer-cle-Garmin.cmd quand tu veux.")
     return 2

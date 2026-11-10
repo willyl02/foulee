@@ -47,15 +47,28 @@ async function start() {
   try {
     await loadBoot();
   } catch (err) {
-    $("#page").innerHTML = `<div class="tile-msg" style="position:static;padding:60px 0">Le serveur Foulée ne répond pas (${F.escape(err.message)}). Relance « foulee web ».</div>`;
+    const hint = isLocalHost() ? "Relance « foulee web »." : "Vérifie que Tailscale est connecté sur cet appareil.";
+    $("#page").innerHTML = `<div class="tile-msg" style="position:static;padding:60px 0">Le serveur Foulée ne répond pas (${F.escape(err.message)}). ${hint}</div>`;
     return;
   }
+  registerServiceWorker();
   state.days = Number(store("foulee-period")) || 90;
   setupChrome();
   window.addEventListener("hashchange", route);
   matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { if (themeChoice() === "auto") rerender(); });
   route();
   if (state.boot.synchro?.en_cours) pollSync();
+}
+
+function isLocalHost() {
+  return ["127.0.0.1", "localhost"].includes(location.hostname);
+}
+
+// Sur le serveur (adresse Tailscale en HTTPS), Foulée s'installe comme une appli sur l'écran d'accueil.
+// Sur le PC, inutile : l'interface est servie par la machine elle-même.
+function registerServiceWorker() {
+  if (isLocalHost() || !("serviceWorker" in navigator) || !window.isSecureContext) return;
+  navigator.serviceWorker.register("/sw.js").catch(() => { /* l'interface marche aussi sans */ });
 }
 
 async function loadBoot() {

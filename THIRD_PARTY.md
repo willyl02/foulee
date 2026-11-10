@@ -14,5 +14,8 @@ Foulée s'appuie sur ces briques open source, installées ou embarquées localem
 | Leaflet 1.9 (`foulee/static/vendor/leaflet/`) | Cartes | BSD 2 clauses |
 | Barlow et Barlow Semi Condensed (`foulee/static/fonts/`) | Polices | SIL Open Font License 1.1 |
 
+Sur un serveur, le script `installer-serveur.sh` installe aussi **uv** (Astral,
+Apache 2.0 / MIT) et **Tailscale** (client BSD 3 clauses) depuis leurs sites officiels.
+
 Les fonds de carte (OpenStreetMap, Plan IGN) sont chargés depuis Internet quand
 tu ouvres une carte ; le réglage « Aucun » les désactive.

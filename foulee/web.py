@@ -1,15 +1,23 @@
 """Serveur web local : l'API JSON de l'interface + les pages elles-mêmes.
 
-Il n'écoute que sur 127.0.0.1 : rien n'est accessible depuis un autre
-appareil. Deux protections en plus contre les sites web malveillants qui
-tenteraient de parler à un serveur local :
-- seul un en-tête Host local est accepté (anti « DNS rebinding ») ;
+Il n'écoute que sur 127.0.0.1 : aucun autre appareil ne peut s'y connecter
+directement. Sur un serveur, c'est Tailscale (« tailscale serve ») qui relaie
+l'interface en HTTPS, et seulement vers tes propres appareils.
+
+Deux protections en plus contre les sites web malveillants qui tenteraient de
+parler à ce serveur :
+- seuls les noms d'hôte attendus sont acceptés dans l'en-tête Host (anti « DNS
+  rebinding ») : 127.0.0.1, localhost, et ceux listés dans FOULEE_HOTES
+  (par exemple le nom Tailscale du serveur) ;
 - toute requête qui modifie quelque chose doit porter l'en-tête X-Foulee,
   ce qu'un autre site ne peut pas ajouter sans autorisation du navigateur.
 """
 
 from __future__ import annotations
 
+import mimetypes
+import os
+import sys
 import threading
 import time
 from datetime import date
@@ -76,16 +84,30 @@ def _metric(key: str) -> str:
     return key
 
 
+LOCAL_HOSTS = ("127.0.0.1", "localhost", "testserver")
+
+mimetypes.add_type("application/manifest+json", ".webmanifest")
+
+
+def allowed_hosts() -> set[str]:
+    """Noms d'hôte acceptés : la machine elle-même, plus ceux de FOULEE_HOTES (séparés par des virgules)."""
+    extra = os.environ.get("FOULEE_HOTES", "")
+    names = {name.strip().lower().rstrip(".").split(":")[0] for name in extra.split(",")}
+    return set(LOCAL_HOSTS) | {name for name in names if name}
+
+
 def create_app() -> FastAPI:
     app = FastAPI(title="Foulée", version=__version__, docs_url=None, redoc_url=None, openapi_url=None)
     job = SyncJob()
     with db.session():
         pass  # crée la base et les vues par défaut si besoin
 
+    hosts = allowed_hosts()
+
     @app.middleware("http")
     async def local_only(request: Request, call_next):
-        host = (request.headers.get("host") or "").split(":")[0]
-        if host not in ("127.0.0.1", "localhost", "testserver"):
+        host = (request.headers.get("host") or "").split(":")[0].lower().rstrip(".")
+        if host not in hosts:
             return JSONResponse({"detail": "Hôte refusé"}, status_code=403)
         if request.method not in ("GET", "HEAD", "OPTIONS") and request.headers.get("x-foulee") != "1":
             return JSONResponse({"detail": "En-tête X-Foulee manquant"}, status_code=403)
@@ -108,6 +130,7 @@ def create_app() -> FastAPI:
                 "objectif": analysis.objective(settings), "profil_fc": analysis.hr_profile(conn, settings),
                 "synchro": sync_module.last_sync_info(conn), "cle": vault.has_key() or config.is_demo(),
                 "dossier_donnees": str(config.data_dir()),
+                "machine": "pc" if sys.platform == "win32" else "serveur",
                 "volumes": db.table_counts(conn),
                 "premiere_date": conn.execute("SELECT MIN(date) AS d FROM daily").fetchone()["d"],
             }
@@ -299,5 +322,16 @@ def create_app() -> FastAPI:
     @app.get("/")
     def index() -> FileResponse:
         return FileResponse(config.STATIC_DIR / "index.html", headers={"Cache-Control": "no-cache"})
+
+    # Appli installable sur l'écran d'accueil du téléphone (servie à la racine pour couvrir tout le site)
+    @app.get("/manifest.webmanifest")
+    def manifest() -> FileResponse:
+        return FileResponse(config.STATIC_DIR / "manifest.webmanifest", media_type="application/manifest+json",
+                            headers={"Cache-Control": "no-cache"})
+
+    @app.get("/sw.js")
+    def service_worker() -> FileResponse:
+        return FileResponse(config.STATIC_DIR / "sw.js", media_type="text/javascript",
+                            headers={"Cache-Control": "no-cache"})
 
     return app
