@@ -281,6 +281,15 @@ fois, en root dans la console du serveur :
 cd /opt/foulee && git pull && bash scripts/mettre-a-jour-serveur.sh
 ```
 
+Pour faire passer tout de suite un serveur en 0.3.0 sur la bêta (la case « Recevoir les
+versions bêta » n'existe qu'à partir de la 0.4), une seule fois, en root :
+
+```
+cd /opt/foulee && git fetch origin beta && git checkout -B beta origin/beta && bash scripts/mettre-a-jour-serveur.sh --canal beta
+```
+
+Une bêta installée continue ensuite de suivre les bêtas, jusqu'à ce que tu décoches la case.
+
 Au quotidien (en root, dans la console du serveur) :
 
 | Commande | Rôle |
