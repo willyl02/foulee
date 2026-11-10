@@ -330,11 +330,23 @@ dialog::backdrop { background: rgba(10, 16, 13, 0.45); }
   .main { padding: 0 16px 40px; border-left: 0; }
   .demo-strip { margin: 0 -16px; padding: 9px 16px; }
   .head h1 { font-size: 28px; }
-  .grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
-  .grid > .tile { grid-column: span 6 !important; }
-  .grid > .tile--kpi { grid-column: span 3 !important; }
-  .grid > .tile--activites, .grid > .tile--seance_tours, .grid > .tile--postes { grid-row: span 3 !important; }
-  .shift-row { grid-template-columns: minmax(110px, 1fr) 70px 70px 0 76px; gap: 8px; }
+  /* Sur téléphone, une seule colonne : chaque tuile garde la hauteur réglée (--h rangées),
+     sauf les chiffres clés qui prennent juste la place de leur contenu. */
+  .grid { grid-template-columns: repeat(6, minmax(0, 1fr)); grid-auto-rows: auto; }
+  .grid > .tile { grid-column: span 6 !important; grid-row: auto !important;
+                  height: calc(var(--h, 2) * var(--row) + (var(--h, 2) - 1) * var(--gap)); }
+  .grid > .tile--kpi { grid-column: span 3 !important; height: auto; min-height: 96px; }
+  .grid > .tile--activites, .grid > .tile--seance_tours, .grid > .tile--postes { height: calc(3 * var(--row) + 2 * var(--gap)); }
+  .grid > .tile--derniere_seance { height: auto; }
+  .grid > .tile--calendrier { height: 250px; }
+  .table .sport-tag { display: none; }
+  .tile-head { flex-wrap: wrap; row-gap: 2px; }
+  .tile-title { white-space: normal; }
+  .kpi-delta { white-space: normal; align-items: flex-start; line-height: 1.3; }
+  .kpi-delta svg { margin-top: 1px; }
+  .kpi-spark { width: 34%; }
+  /* La colonne du graphique disparaît : il reste 4 colonnes (métrique, matin, soir, écart) */
+  .shift-row { grid-template-columns: minmax(0, 1fr) 62px 62px 88px; gap: 8px; }
   .shift-row .bar-cell { display: none; }
   .act-card { grid-template-columns: 1fr; }
   .act-card .trace-box { display: none; }

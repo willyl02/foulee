@@ -235,7 +235,7 @@ async function renderView() {
     grid.appendChild(add);
   }
   if (!view.spec.tuiles.length && !state.editing) {
-    grid.innerHTML = `<div class="tile" style="grid-column:span 12;grid-row:span 1"><div class="tile-msg">Cette vue est vide. Clique sur « Modifier la vue » pour ajouter des tuiles.</div></div>`;
+    grid.innerHTML = `<div class="tile" style="grid-column:span 12;grid-row:span 1;--h:1"><div class="tile-msg">Cette vue est vide. Clique sur « Modifier la vue » pour ajouter des tuiles.</div></div>`;
   }
 }
 
@@ -286,6 +286,7 @@ function renderTile(view, tile, index, ctx) {
   el.className = `tile tile--${tile.type}`;
   el.style.gridColumn = `span ${tile.w}`;
   el.style.gridRow = `span ${tile.h}`;
+  el.style.setProperty("--h", tile.h);  // hauteur utilisée sur téléphone
   if (!renderer || !type) {
     el.innerHTML = `<div class="tile-msg">Type de tuile inconnu : ${F.escape(tile.type)}</div>`;
     return el;

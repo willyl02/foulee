@@ -44,6 +44,8 @@ def test_phone_app_files_are_served(monkeypatch):
 
     page = client.get("/").text
     assert 'rel="manifest"' in page and "apple-touch-icon" in page
+    # Après une mise à jour, le téléphone doit revérifier les fichiers de l'interface
+    assert client.get("/static/css/app.css").headers["cache-control"] == "no-cache"
 
 
 def test_bootstrap_tells_where_foulee_runs(monkeypatch):

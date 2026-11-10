@@ -114,6 +114,10 @@ def create_app() -> FastAPI:
         response = await call_next(request)
         if request.url.path.startswith("/api/"):
             response.headers["Cache-Control"] = "no-store"
+        elif request.url.path.startswith("/static/"):
+            # Le navigateur revérifie chaque fichier (réponse 304 s'il n'a pas changé) :
+            # après une mise à jour, le téléphone charge tout de suite la nouvelle version.
+            response.headers["Cache-Control"] = "no-cache"
         return response
 
     # ------------------------------------------------------------- démarrage
