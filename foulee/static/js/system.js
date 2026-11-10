@@ -89,7 +89,8 @@ export async function keyPanel(box, boot, { toast, onSaved, compact = false }) {
     const refused = info.refus;
     let status;
     if (refused) {
-      status = `<p class="computed warn">${icon("warning")}<span><b>Garmin refuse ta clé</b> depuis le ${F.escape(F.dateTime(refused.depuis))}${refused.statut ? ` (HTTP ${F.escape(refused.statut)})` : ""} : la synchro est en pause. Elle a peut-être été révoquée ou régénérée : remplace-la.</span></p>`;
+      const gone = [404, 410].includes(Number(refused.statut));
+      status = `<p class="computed warn">${icon("warning")}<span><b>${gone ? "Garmin ne connaît plus ta clé" : "Garmin refuse ta clé"}</b> depuis le ${F.escape(F.dateTime(refused.depuis))}${refused.statut ? ` (HTTP ${F.escape(refused.statut)})` : ""} : la synchro est en pause. ${gone ? "Elle a été supprimée ou régénérée dans Garmin Connect" : "Elle a peut-être été révoquée ou régénérée"} : remplace-la par ta clé actuelle.</span></p>`;
     } else if (info.enregistree) {
       status = `<p class="computed ok">${icon("check")}<span>Clé enregistrée ${where}${info.enregistree_le ? ` le ${F.escape(F.dateTime(info.enregistree_le))}` : ""}.</span></p>`;
     } else {

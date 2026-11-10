@@ -20,6 +20,7 @@ from urllib.parse import parse_qs, urlparse
 from garmin_fit_sdk import Encoder, Profile
 
 DAY = dt.timedelta(days=1)
+DELETED_KEY_ID = "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d"  # inventé
 MN = Profile["mesg_num"]
 
 
@@ -65,6 +66,9 @@ class FakeGarmin:
         self.today = dt.date.today()
         self.first = self.today - dt.timedelta(days=days)
         self.requests: list[tuple[str, dict]] = []
+        self.deleted_keys: set[str] = set()  # clés supprimées dans Garmin Connect : 404 à l'échange
+        self.revoked = False  # jetons déjà délivrés refusés (401), comme après la suppression de la clé
+        self.fail_status: int | None = None  # panne de Garmin : ce code pour toute lecture
         self.activities = []
         for i in range(activities):
             day = self.today - dt.timedelta(days=i * 4)
@@ -165,6 +169,10 @@ class FakeGarmin:
                 if self.path.startswith("/personalapitoken-service/") and self.headers.get("Authorization", "").startswith("ApiKey "):
                     if self.headers["Authorization"] == "ApiKey mauvaise-cle":
                         return self._json({"error": "invalid key"}, 401)
+                    if self.headers["Authorization"][len("ApiKey "):] in fake.deleted_keys:
+                        # Réponse réelle de Garmin (novembre 2026) quand la clé a été supprimée ou régénérée
+                        return self._json({"message": f"Personal API Key with ID {DELETED_KEY_ID} does not exist.",
+                                           "error": "NotFoundException"}, 404)
                     if self.headers["Authorization"].startswith("ApiKey GCDC_refuse"):
                         # Réponse qui recopie la clé : Foulée ne doit jamais la réafficher
                         key = self.headers["Authorization"][len("ApiKey "):]
@@ -181,8 +189,10 @@ class FakeGarmin:
                 url = urlparse(self.path)
                 q = {k: v[0] for k, v in parse_qs(url.query).items()}
                 fake.requests.append((url.path, q))
-                if not self.headers.get("Authorization", "").startswith("Bearer "):
+                if not self.headers.get("Authorization", "").startswith("Bearer ") or fake.revoked:
                     return self._json({"error": "unauthorized"}, 401)
+                if fake.fail_status:
+                    return self._json({"error": "unavailable"}, fake.fail_status)
                 p = url.path
                 parts = p.strip("/").split("/")
                 if p == "/usersummary-service/v2/dailysummaries":

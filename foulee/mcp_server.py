@@ -87,7 +87,7 @@ def synchroniser(depuis: str | None = None) -> dict[str, Any]:
     if config.is_demo():
         return {"statut": "demo", "message": "Mode démo : pas de synchro."}
     if not vault.has_key():
-        return {"statut": "erreur", "message": "Aucune clé API Garmin : l'utilisateur doit lancer « foulee setup »."}
+        return {"statut": "erreur", "message": "Aucune clé API Garmin : l'utilisateur doit l'ajouter dans Foulée (Réglages → Clé API Garmin)."}
     box: dict[str, Any] = {}
 
     def work() -> None:

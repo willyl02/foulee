@@ -199,10 +199,24 @@ def init(conn: sqlite3.Connection) -> None:
     conn.execute(
         "INSERT OR IGNORE INTO meta(key, value) VALUES ('schema_version', ?)", (str(SCHEMA_VERSION),)
     )
+    _mask_key_ids(conn)
     conn.commit()
     from . import views  # import local pour éviter un cycle
 
     views.ensure_default_views(conn)
+
+
+def _mask_key_ids(conn: sqlite3.Connection) -> None:
+    """Une seule fois (0.4.1) : Garmin recopiait l'identifiant de la clé dans ses messages d'erreur,
+    gardés tels quels dans le journal des synchros."""
+    if conn.execute("SELECT 1 FROM meta WHERE key = 'journal_masque'").fetchone():
+        return
+    from .garmin.client import KEY_ID
+
+    for row in conn.execute("SELECT id, summary FROM sync_log WHERE summary LIKE '%API Key with ID%'").fetchall():
+        conn.execute("UPDATE sync_log SET summary = ? WHERE id = ?",
+                     (KEY_ID.sub("[identifiant masqué]", row["summary"]), row["id"]))
+    conn.execute("INSERT OR IGNORE INTO meta(key, value) VALUES ('journal_masque', '1')")
 
 
 @contextmanager

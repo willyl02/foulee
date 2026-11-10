@@ -28,8 +28,9 @@ KEY_PAGE = "https://connect.garmin.com/app/settings/personalApiToken"
 class GarminError(Exception):
     """Erreur Garmin expliquée en français.
 
-    ``detail`` : extrait de la réponse de Garmin, sans clé ni jeton.
-    ``key_rejected`` : Garmin a refusé la clé elle-même (HTTP 400, 401 ou 403 à l'échange).
+    ``detail`` : extrait de la réponse de Garmin, sans clé, ni jeton, ni identifiant de clé.
+    ``key_rejected`` : Garmin a refusé la clé elle-même à l'échange (HTTP 400, 401, 403, ou 404
+    quand la clé a été supprimée ou régénérée dans Garmin Connect).
     """
 
     def __init__(self, message: str, status: int | None = None, *, detail: str = "", key_rejected: bool = False):
@@ -43,6 +44,11 @@ _SECRETS = (
     re.compile(r"GCDC_[A-Za-z0-9._~+/=:-]*"),                      # une clé API
     re.compile(r"eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*"),  # un jeton JWT
 )
+# Identifiant de clé que Garmin recopie dans ses erreurs (« Personal API Key with ID … does not exist »)
+KEY_ID = re.compile(r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b")
+# Codes de l'échange qui disent « cette clé ne vaut rien » (et non « réessaie plus tard »)
+KEY_REFUSAL_CODES = (400, 401, 403, 404, 410)
+WHERE_TO_REPLACE = "remplace-la dans Foulée : Réglages → Clé API Garmin"
 
 
 def garmin_detail(text: str | None, secret: str | None = None, limit: int = 200) -> str:
@@ -54,8 +60,13 @@ def garmin_detail(text: str | None, secret: str | None = None, limit: int = 200)
         text = re.sub(r"<[^>]*>", " ", text)
     if secret:
         text = text.replace(secret, "[clé masquée]")
+        # Morceaux de la clé recopiés séparément (identifiant, partie secrète…)
+        for piece in re.split(r"[._\s]+", secret):
+            if len(piece) >= 8:
+                text = text.replace(piece, "[masqué]")
     for pattern in _SECRETS:
         text = pattern.sub("[masqué]", text)
+    text = KEY_ID.sub("[identifiant masqué]", text)
     text = " ".join(text.split())
     return text if len(text) <= limit else text[: limit - 1] + "…"
 
@@ -64,10 +75,12 @@ class GarminSession:
     def __init__(self, api_key: str | None = None, *, pause: float = 0.4, timeout: float = 40):
         key = "".join((api_key or vault.get_key() or "").split())
         if not key:
-            raise GarminError("Aucune clé API Garmin enregistrée. Lance d'abord « foulee setup ».")
+            raise GarminError("Aucune clé API Garmin enregistrée : ajoute-la dans Foulée, Réglages → Clé API Garmin "
+                              "(ou « foulee setup » en ligne de commande).")
         self._key = key
         self.pause = pause
         self.calls = 0
+        self.answered = 0  # appels auxquels Garmin a répondu normalement (même « rien ce jour-là »)
         self._last_call = 0.0
         self.auth = PersonalApiAuthenticator(bearer_token_cache_file=config.token_cache_file(), timeout=timeout)
         try:
@@ -97,13 +110,17 @@ class GarminSession:
             detail = garmin_detail(exc.response_text, self._key)
             quoted = f" Réponse de Garmin : « {detail} »." if detail else ""
             LOG.info("Échange de la clé refusé : HTTP %s%s", status, f" ({detail})" if detail else "")
-            if status in (400, 401, 403):
-                raise GarminError(
-                    f"Garmin a refusé la clé API (HTTP {status}).{quoted} Si elle fonctionnait jusqu'ici, "
-                    "elle a sans doute expiré ou été supprimée : crée-en une nouvelle dans Garmin Connect "
-                    "(page « API personnelle »), puis lance Configurer-cle-Garmin.cmd.",
-                    status, detail=detail, key_rejected=True,
-                ) from exc
+            if status in KEY_REFUSAL_CODES:
+                self._forget_token()
+                if status in (404, 410):
+                    message = (f"Garmin ne connaît plus cette clé API (HTTP {status}) : elle a été supprimée ou "
+                               "régénérée dans Garmin Connect. Reprends ta clé actuelle sur la page « API "
+                               f"personnelle » (ou crée-en une), puis {WHERE_TO_REPLACE}.")
+                else:
+                    message = (f"Garmin a refusé la clé API (HTTP {status}).{quoted} Si elle fonctionnait jusqu'ici, "
+                               "elle a sans doute expiré ou été supprimée : crée-en une nouvelle dans Garmin Connect "
+                               f"(page « API personnelle »), puis {WHERE_TO_REPLACE}.")
+                raise GarminError(message, status, detail=detail, key_rejected=True) from exc
             if status == 429:
                 raise GarminError("Garmin limite les demandes (HTTP 429) : réessaie dans quelques minutes.",
                                   status, detail=detail) from exc
@@ -117,6 +134,13 @@ class GarminSession:
         except UnicodeError as exc:
             raise GarminError("La clé contient des caractères qui ne peuvent pas venir de Garmin : "
                               "recopie-la depuis Garmin Connect.") from exc
+
+    def _forget_token(self) -> None:
+        """Clé refusée : le jeton gardé en cache pour elle ne doit plus servir."""
+        try:
+            self.auth.bearer_token_cache_file.unlink(missing_ok=True)
+        except OSError as exc:
+            LOG.info("Cache du jeton impossible à effacer : %s", exc)
 
     def _throttle(self) -> None:
         wait = self.pause - (time.monotonic() - self._last_call)
@@ -132,7 +156,7 @@ class GarminSession:
             self._throttle()
             self.calls += 1
             try:
-                return getattr(self.client, method)(*args, **kwargs)
+                result = getattr(self.client, method)(*args, **kwargs)
             except HttpError as exc:
                 last_error = exc
                 if exc.status_code == 401 and attempt == 0:
@@ -145,6 +169,7 @@ class GarminSession:
                     delay *= 2
                     continue
                 if exc.status_code in (204, 404):
+                    self.answered += 1
                     return None
                 detail = garmin_detail(exc.response_text, self._key)
                 raise GarminError(
@@ -155,6 +180,9 @@ class GarminSession:
                 last_error = exc
                 time.sleep(delay)
                 delay *= 2
+            else:
+                self.answered += 1
+                return result
         raise GarminError(f"Garmin ne répond pas ({method}) après plusieurs tentatives : {last_error}")
 
     def download_activity(self, activity_id: str | int) -> bytes | None:

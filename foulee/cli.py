@@ -173,7 +173,7 @@ def _enter_key() -> int:
         if clipboard:
             _say("  Tu peux cliquer sur « Terminé » dans Garmin Connect.")
         return 0
-    _say("Trop d'essais pour cette fois : relance Configurer-cle-Garmin.cmd quand tu veux.")
+    _say("Trop d'essais pour cette fois : relance « foulee setup » quand tu veux (ou passe par les Réglages de Foulée).")
     return 2
 
 

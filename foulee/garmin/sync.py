@@ -45,6 +45,14 @@ STREAM_LABELS = {
 }
 
 
+def note_error(summary: dict, label: str, exc: GarminError) -> None:
+    """Erreur sur un flux : notée, et la synchro continue. Sauf une clé refusée, qui arrête tout :
+    inutile de redemander dix fois, et l'interface doit afficher « remplace ta clé »."""
+    if exc.key_rejected:
+        raise exc
+    summary["erreurs"].append(f"{label} : {exc}")
+
+
 def windows(start: date, end: date, max_days: int) -> list[tuple[date, date]]:
     result, current = [], start
     while current <= end:
@@ -191,7 +199,7 @@ def run(conn: sqlite3.Connection, *, since: date | None = None, fit_days: int | 
                 try:
                     payload = session.call(method, a, b)
                 except GarminError as exc:
-                    summary["erreurs"].append(f"{STREAM_LABELS[stream]} ({a} → {b}) : {exc}")
+                    note_error(summary, f"{STREAM_LABELS[stream]} ({a} → {b})", exc)
                     break
                 for item in extractor(payload):
                     day = normalize_daily_item(conn, stream, item)
@@ -215,7 +223,7 @@ def run(conn: sqlite3.Connection, *, since: date | None = None, fit_days: int | 
                 db.put_raw(conn, SOURCE, "fitness_age", today.isoformat(), fitness)
                 db.put_daily(conn, today.isoformat(), parse.parse_fitness_age(fitness))
         except GarminError as exc:
-            summary["erreurs"].append(f"profil : {exc}")
+            note_error(summary, "profil", exc)
 
         # Séances
         last = db.get_sync_state(conn, SOURCE, "activities")
@@ -223,12 +231,14 @@ def run(conn: sqlite3.Connection, *, since: date | None = None, fit_days: int | 
         progress(f"Séances depuis le {start:%d/%m/%Y}…", (len(DAILY_STREAMS) + 1) / total_steps)
         need_fit: list[tuple[str, str]] = []
         offset, page = 0, 20
+        listed = True
         while True:
             try:
                 items = session.call("search_activities", start=offset, limit=page,
                                      start_date=start, end_date=today)
             except GarminError as exc:
-                summary["erreurs"].append(f"séances : {exc}")
+                note_error(summary, "séances", exc)
+                listed = False
                 break
             items = parse.items_of(items, "activityList", "activities")
             if not items:
@@ -249,7 +259,8 @@ def run(conn: sqlite3.Connection, *, since: date | None = None, fit_days: int | 
             if len(items) < page:
                 break
             offset += page
-        db.set_sync_state(conn, SOURCE, "activities", today.isoformat())
+        if listed:  # liste incomplète : la prochaine synchro repartira du même point
+            db.set_sync_state(conn, SOURCE, "activities", today.isoformat())
 
         hrp = analysis.hr_profile(conn, settings)
         for row in conn.execute(
@@ -267,9 +278,12 @@ def run(conn: sqlite3.Connection, *, since: date | None = None, fit_days: int | 
                     if fetch_fit(session, conn, activity_id, settings, hrp) == "ok":
                         summary["fit"] += 1
                 except GarminError as exc:
-                    summary["erreurs"].append(f"FIT {activity_id} : {exc}")
+                    note_error(summary, f"FIT {activity_id}", exc)
                 conn.commit()
 
+        if summary["erreurs"] and not session.answered:
+            # Rien n'a abouti : ce n'est pas une synchro « partielle » mais un échec
+            raise GarminError(f"Aucune donnée n'a pu être lue chez Garmin. {summary['erreurs'][0]}")
         progress("Calcul de la charge d'entraînement…", 0.98)
         analysis.recompute_daily_calc(conn)
         summary["appels"] = session.calls
