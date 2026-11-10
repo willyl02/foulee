@@ -23,12 +23,20 @@ def test_interface_drops_a_request_and_reads_the_state(tmp_path, monkeypatch):
     monkeypatch.setenv("FOULEE_MAJ", str(folder))
     client = TestClient(web.create_app())
     assert client.get("/api/bootstrap").json()["maj"] is True
-    assert client.get("/api/maj").json() == {"disponible": True, "version": web.__version__, "etat": None, "en_attente": False}
+    status = client.get("/api/maj").json()
+    assert (status["mode"], status["disponible"], status["canal"], status["etat"], status["en_attente"]) == \
+        ("serveur", True, "stable", None, False)
 
     assert client.post("/api/maj", json={"action": "rm -rf /"}, headers=WRITE).status_code == 400
     sent = client.post("/api/maj", json={"action": "verifier"}, headers=WRITE).json()
-    assert sent["ok"] and (folder / "demande").read_text() == "verifier"
+    assert sent["ok"] and (folder / "demande").read_text() == "verifier:stable"
     assert client.get("/api/maj").json()["en_attente"] is True
+
+    # Le canal bêta se choisit dans les Réglages et accompagne la demande
+    assert client.put("/api/settings", json={"canal_maj": "nightly"}, headers=WRITE).status_code == 400
+    client.put("/api/settings", json={"canal_maj": "beta"}, headers=WRITE)
+    client.post("/api/maj", json={"action": "installer"}, headers=WRITE)
+    assert (folder / "demande").read_text() == "installer:beta"
 
     (folder / "etat.json").write_text(json.dumps({"statut": "verifie", "message": "À jour", "horodatage": 1.0}))
     assert client.get("/api/maj").json()["etat"]["statut"] == "verifie"
@@ -38,7 +46,8 @@ def test_no_update_button_without_the_service(monkeypatch):
     monkeypatch.delenv("FOULEE_MAJ", raising=False)
     client = TestClient(web.create_app())
     assert client.get("/api/bootstrap").json()["maj"] is False
-    assert client.get("/api/maj").json()["disponible"] is False
+    status = client.get("/api/maj").json()
+    assert status["disponible"] is False and status["mode"] == "dev"
     assert client.post("/api/maj", json={"action": "verifier"}, headers=WRITE).status_code == 404
 
 
@@ -51,6 +60,8 @@ def git(cwd: Path, *args: str) -> None:
 @pytest.fixture
 def project(tmp_path):
     """Un dépôt « GitHub » en 0.2.0 et une installation restée en 0.1.0."""
+    if sys.platform == "win32":
+        pytest.skip("service de mise à jour du serveur : Linux uniquement")
     origin = tmp_path / "origin"
     (origin / "foulee").mkdir(parents=True)
     (origin / "scripts").mkdir()
@@ -105,3 +116,61 @@ def test_unknown_request_and_unreachable_github_are_reported(project):
     shutil.rmtree(origin)  # GitHub injoignable
     failed = run_updater(install, state, "verifier")
     assert failed["statut"] == "erreur" and "a échoué" in failed["message"]
+
+
+def write_version(repo: Path, version: str, message: str) -> None:
+    (repo / "foulee" / "__init__.py").write_text(f'__version__ = "{version}"\n')
+    git(repo, "commit", "-qam", message)
+
+
+def test_beta_channel_and_no_downgrade(project):
+    origin, install, state = project
+    git(origin, "checkout", "-q", "-b", "beta")
+    write_version(origin, "0.3.0b1", "Foulée 0.3.0b1 : essai")
+    git(origin, "checkout", "-q", "main")
+
+    beta = run_updater(install, state, "verifier", "--canal", "beta")
+    assert beta["disponible"] == "0.3.0b1" and beta["retard"] >= 1 and beta["canal"] == "beta"
+    assert run_updater(install, state, "installer", "--canal", "beta")["statut"] == "termine"
+    assert '"0.3.0b1"' in (install / "foulee" / "__init__.py").read_text()
+
+    # Retour au canal stable : la 0.2.0 est plus ancienne que la bêta, on ne redescend pas
+    stable = run_updater(install, state, "verifier", "--canal", "stable")
+    assert stable["retard"] == 0 and stable["en_avance"] and "bêta" in stable["message"]
+    refused = run_updater(install, state, "installer", "--canal", "stable")
+    assert refused["statut"] == "erreur" and "jamais en arrière" in refused["message"]
+
+    # La version stable rattrape la bêta : on repasse sur main
+    write_version(origin, "0.3.0", "Foulée 0.3.0")
+    assert run_updater(install, state, "verifier", "--canal", "stable")["retard"] >= 1
+    assert run_updater(install, state, "installer", "--canal", "stable")["statut"] == "termine"
+    assert '"0.3.0"' in (install / "foulee" / "__init__.py").read_text()
+    head = subprocess.run(["git", "-C", str(install), "rev-parse", "--abbrev-ref", "HEAD"],
+                          capture_output=True, text=True).stdout.strip()
+    assert head == "main"
+
+
+def test_missing_beta_branch_is_explained(project):
+    origin, install, state = project
+    missing = run_updater(install, state, "verifier", "--canal", "beta")
+    assert missing["statut"] == "erreur" and "n'existe pas encore" in missing["message"]
+
+
+def test_channel_is_read_without_leaving_files_behind(tmp_path, monkeypatch):
+    """Le service de mise à jour tourne en root : il lit le canal sans créer de fichier à côté de la base."""
+    import importlib.util
+
+    from foulee import db
+
+    monkeypatch.setenv("FOULEE_DATA", str(tmp_path / "donnees"))
+    with db.session() as conn:
+        db.set_setting(conn, "canal_maj", "beta")
+        conn.commit()
+    spec = importlib.util.spec_from_file_location("maj_serveur", SCRIPT)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    before = sorted(p.name for p in (tmp_path / "donnees").iterdir())
+    assert module.configured_channel() == "beta"
+    assert sorted(p.name for p in (tmp_path / "donnees").iterdir()) == before
+    monkeypatch.setenv("FOULEE_DATA", str(tmp_path / "vide"))
+    assert module.configured_channel() == "stable"

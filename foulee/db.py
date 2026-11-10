@@ -171,6 +171,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "fit_auto_jours": 180,     # télécharge automatiquement les FIT des N derniers jours
     "historique_depuis": None,  # date du premier import
     "carte_fond": "osm",       # osm | ign | aucun
+    "canal_maj": "stable",     # stable | beta : quelles versions proposer aux mises à jour
     "charge_source": "garmin",  # garmin (charge Garmin si dispo) | trimp
 }
 
@@ -225,6 +226,10 @@ def session(*, readonly: bool = False) -> Iterator[sqlite3.Connection]:
 def get_meta(conn: sqlite3.Connection, key: str, default: str | None = None) -> str | None:
     row = conn.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
     return row["value"] if row else default
+
+
+def delete_meta(conn: sqlite3.Connection, key: str) -> None:
+    conn.execute("DELETE FROM meta WHERE key = ?", (key,))
 
 
 def set_meta(conn: sqlite3.Connection, key: str, value: str) -> None:

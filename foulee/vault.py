@@ -1,10 +1,12 @@
-"""Rangement de ta clé API Garmin.
+"""Rangement de tes secrets : la clé API Garmin, et le jeton GitHub éventuel (pour
+chercher les mises à jour tant que le dépôt de Foulée est privé).
 
 - Windows : Gestionnaire d'identification Windows (entrée « Foulee »), chiffré
   avec ta session. Si la clé était trop longue pour lui, repli automatique sur
   un fichier chiffré par DPAPI : même protection, seule ta session Windows
   peut le relire.
-- Autres systèmes (utile pour les tests) : fichier lisible par toi seul.
+- Autres systèmes (le serveur, les tests) : fichier lisible par toi seul
+  (FOULEE_COFFRE=fichier impose ce mode, y compris sous Windows : tests).
 - La variable d'environnement GARMIN_PERSONAL_API_KEY, si elle existe, passe
   avant tout le reste.
 
@@ -24,13 +26,24 @@ SERVICE = "Foulee"
 USERNAME = "garmin-personal-api-key"
 ENV_VAR = "GARMIN_PERSONAL_API_KEY"
 
+# Secrets rangés par Foulée : nom → (entrée du Gestionnaire d'identification, nom de fichier, variable d'environnement)
+SECRETS = {
+    "garmin": (USERNAME, "garmin-cle", ENV_VAR),
+    "github": ("github-jeton", "github-jeton", "FOULEE_GITHUB_TOKEN"),  # dépôt privé : vérifier les mises à jour
+}
 
-def _dpapi_file() -> Path:
-    return config.secrets_dir() / "garmin-cle.dpapi"
+
+def _windows_store() -> bool:
+    """Gestionnaire d'identification Windows (sinon : fichier protégé)."""
+    return sys.platform == "win32" and os.environ.get("FOULEE_COFFRE") != "fichier"
 
 
-def _plain_file() -> Path:
-    return config.secrets_dir() / "garmin-cle.txt"
+def _dpapi_file(name: str = "garmin") -> Path:
+    return config.secrets_dir() / f"{SECRETS[name][1]}.dpapi"
+
+
+def _plain_file(name: str = "garmin") -> Path:
+    return config.secrets_dir() / f"{SECRETS[name][1]}.txt"
 
 
 # ------------------------------------------------------------------ DPAPI
@@ -70,72 +83,88 @@ def _dpapi(data: bytes, *, protect: bool) -> bytes:  # pragma: no cover - Window
 
 
 # ----------------------------------------------------------------- public
-def get_key() -> str | None:
-    env = os.environ.get(ENV_VAR, "").strip()
+def get_secret(name: str) -> str | None:
+    username, _file, env_var = SECRETS[name]
+    env = os.environ.get(env_var, "").strip()
     if env:
         return env
-    if sys.platform == "win32":  # pragma: no cover - Windows uniquement
+    if _windows_store():  # pragma: no cover - Windows uniquement
         try:
             import keyring
 
-            value = keyring.get_password(SERVICE, USERNAME)
+            value = keyring.get_password(SERVICE, username)
             if value:
                 return value.strip()
         except Exception:
             pass
-        path = _dpapi_file()
+        path = _dpapi_file(name)
         if path.exists():
             try:
                 return _dpapi(path.read_bytes(), protect=False).decode("utf-8").strip()
             except OSError:
                 return None
         return None
-    path = _plain_file()
+    path = _plain_file(name)
     if path.exists():
         value = path.read_text(encoding="utf-8").strip()
         return value or None
     return None
 
 
-def set_key(key: str) -> str:
-    """Range la clé et renvoie une phrase décrivant où elle est."""
-    key = key.strip()
-    if not key:
-        raise ValueError("Clé vide")
-    if sys.platform == "win32":  # pragma: no cover - Windows uniquement
+def set_secret(name: str, value: str) -> str:
+    """Range un secret et renvoie une phrase décrivant où il est."""
+    username = SECRETS[name][0]
+    value = value.strip()
+    if not value:
+        raise ValueError("Valeur vide")
+    if _windows_store():  # pragma: no cover - Windows uniquement
         try:
             import keyring
 
-            keyring.set_password(SERVICE, USERNAME, key)
-            if _dpapi_file().exists():
-                _dpapi_file().unlink()
+            keyring.set_password(SERVICE, username, value)
+            if _dpapi_file(name).exists():
+                _dpapi_file(name).unlink()
             return "Gestionnaire d'identification Windows (entrée « Foulee »)"
         except Exception:
-            _dpapi_file().write_bytes(_dpapi(key.encode("utf-8"), protect=True))
-            return f"fichier chiffré par Windows (DPAPI) : {_dpapi_file()}"
-    path = _plain_file()
+            _dpapi_file(name).write_bytes(_dpapi(value.encode("utf-8"), protect=True))
+            return f"fichier chiffré par Windows (DPAPI) : {_dpapi_file(name)}"
+    path = _plain_file(name)
     descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
-        handle.write(key)
+        handle.write(value)
     return f"fichier protégé : {path}"
 
 
-def delete_key() -> bool:
+def delete_secret(name: str) -> bool:
+    username = SECRETS[name][0]
     removed = False
-    if sys.platform == "win32":  # pragma: no cover - Windows uniquement
+    if _windows_store():  # pragma: no cover - Windows uniquement
         try:
             import keyring
 
-            keyring.delete_password(SERVICE, USERNAME)
+            keyring.delete_password(SERVICE, username)
             removed = True
         except Exception:
             pass
-        if _dpapi_file().exists():
-            _dpapi_file().unlink()
+        if _dpapi_file(name).exists():
+            _dpapi_file(name).unlink()
             removed = True
-    elif _plain_file().exists():
-        _plain_file().unlink()
+    elif _plain_file(name).exists():
+        _plain_file(name).unlink()
         removed = True
+    return removed
+
+
+def get_key() -> str | None:
+    return get_secret("garmin")
+
+
+def set_key(key: str) -> str:
+    return set_secret("garmin", key)
+
+
+def delete_key() -> bool:
+    removed = delete_secret("garmin")
     token = config.token_cache_file()
     if token.exists():
         token.unlink()

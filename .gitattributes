@@ -5,3 +5,5 @@
 *.png binary
 *.woff2 binary
 *.fit binary
+*.iss text eol=crlf
+*.ico binary

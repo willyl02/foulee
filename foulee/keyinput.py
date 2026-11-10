@@ -18,7 +18,7 @@ GARMIN_PREFIX = "GCDC_"
 CF_UNICODETEXT = 13
 
 # Caractères invisibles qu'une page web ou un gestionnaire de mots de passe peut glisser dans une copie
-_INVISIBLES = dict.fromkeys(map(ord, "​‌‍⁠﻿­"), None)
+_INVISIBLES = dict.fromkeys(map(ord, "\u200b\u200c\u200d\u2060\ufeff\u00ad"), None)
 _QUOTES = "\"'`«»“”‘’"
 
 

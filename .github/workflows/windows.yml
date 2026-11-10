@@ -1,0 +1,109 @@
+# Application Windows : tests sous Windows, installateur Foulee-Setup-<version>.exe, essai complet
+# (installation, relance, Claude, mise à jour, désinstallation), puis publication sur GitHub.
+#
+# - une étiquette v0.4.0 publie une version stable ; v0.4.0b1 (a, b ou rc) une bêta (pré-version) ;
+# - lancé à la main (Actions → Windows → Run workflow), il construit et essaie sans rien publier.
+name: Windows
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: pwsh
+
+jobs:
+  tests:
+    name: Tests (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Bibliothèques
+        run: uv sync --frozen
+      - name: Tests
+        run: |
+          $ErrorActionPreference = "Continue"
+          $env:PYTHONUTF8 = "1"
+          uv run --frozen pytest -q -p no:cacheprovider -rfE 2>&1 | Tee-Object -FilePath tests.log
+          $code = $LASTEXITCODE
+          if ($code -ne 0) {
+            # Les journaux ne se lisent pas toujours de l'extérieur : le résumé part dans une annotation
+            $tail = ((Get-Content tests.log -Tail 70) -join "`n").Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+            Write-Host "::error title=Tests Windows::$tail"
+            exit $code
+          }
+
+  installateur:
+    name: Installateur
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Inno Setup
+        run: |
+          choco upgrade innosetup -y --no-progress | Select-Object -Last 3
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          Write-Host "Inno Setup $((Get-Item $iscc).VersionInfo.ProductVersion)"
+      - name: Construction
+        run: |
+          try {
+            ./packaging/build.ps1 *>&1 | Tee-Object -FilePath build.log
+          } catch {
+            $_ | Out-String | Add-Content build.log
+            $tail = ((Get-Content build.log -Tail 60) -join "`n").Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+            Write-Host "::error title=Construction::$tail"
+            exit 1
+          }
+      - name: Essai complet de l'installateur
+        run: ./packaging/smoke-test.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Foulee-Setup
+          path: build/out/*
+          if-no-files-found: error
+
+  publication:
+    name: Publication
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [tests, installateur]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: Foulee-Setup
+          path: out
+      - name: Version GitHub
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          code_version=$(sed -n 's/^__version__ = "\(.*\)"/\1/p' foulee/__init__.py)
+          if [ "$version" != "$code_version" ]; then
+            echo "::error title=Version::L'étiquette $TAG ne correspond pas à la version du code ($code_version)"
+            exit 1
+          fi
+          python3 packaging/notes_de_version.py "$version" > notes.md
+          (cd out && sha256sum -c SHA256SUMS.txt)
+          flags=(--title "Foulée $version" --notes-file notes.md --verify-tag)
+          if [[ "$version" =~ (a|b|rc)[0-9]*$ ]]; then flags+=(--prerelease); else flags+=(--latest); fi
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" out/* --clobber
+          else
+            gh release create "$TAG" out/* "${flags[@]}"
+          fi

@@ -1,9 +1,11 @@
 """Ligne de commande : « foulee <commande> ».
 
+    foulee app             l'application (icône près de l'horloge, synchro automatique)
     foulee setup           enregistrer ta clé API Garmin et la tester
     foulee sync            synchroniser (incrémental)
     foulee web             ouvrir l'interface (http://127.0.0.1:8770)
     foulee mcp             serveur pour Claude Desktop (lancé par Claude Desktop lui-même)
+    foulee dossier         voir ou changer le dossier des données
     foulee demo            créer la base de démonstration
     foulee status          état général
     foulee diagnostic      tester chaque flux Garmin (rapport sans tes valeurs)
@@ -17,14 +19,12 @@ import json
 import logging
 import os
 import socket
-import subprocess
 import sys
 import threading
 import time
 import webbrowser
 from datetime import date, datetime, timedelta
 from logging.handlers import RotatingFileHandler
-from pathlib import Path
 
 from . import __version__, config, db, vault
 
@@ -394,147 +394,133 @@ def cmd_fit(args: argparse.Namespace) -> int:
     return 0
 
 
-CLAUDE_DATA = "Claude-Data"
-
-
-def claude_config_paths() -> list[Path]:
-    """Emplacements possibles du fichier de configuration de Claude Desktop, le plus probable d'abord.
-
-    Sous Windows, la version « paquet » (Microsoft Store / MSIX) lit
-    %LOCALAPPDATA%\\Claude-Data\\claude_<paquet>\\claude_desktop_config.json ; les anciennes
-    versions lisaient %APPDATA%\\Claude ou le dossier LocalCache du paquet.
-    """
-    paths: list[Path] = []
-    if sys.platform == "win32":
-        local = os.environ.get("LOCALAPPDATA")
-        appdata = os.environ.get("APPDATA")
-        if local:
-            paths += [folder / "claude_desktop_config.json"
-                      for folder in sorted((Path(local) / CLAUDE_DATA).glob("claude_*")) if folder.is_dir()]
-        if appdata:
-            paths.append(Path(appdata) / "Claude" / "claude_desktop_config.json")
-        if local:
-            paths += [package / "LocalCache" / "Roaming" / "Claude" / "claude_desktop_config.json"
-                      for package in sorted((Path(local) / "Packages").glob("Claude_*"))]
-    elif sys.platform == "darwin":
-        paths.append(Path.home() / "Library" / "Application Support" / "Claude" / "claude_desktop_config.json")
-    else:
-        paths.append(Path.home() / ".config" / "Claude" / "claude_desktop_config.json")
-    return paths
-
-
-def claude_config_targets() -> list[Path]:
-    """Fichiers à modifier : ceux qui existent, plus celui de la version « paquet » s'il n'existe pas encore."""
-    candidates = claude_config_paths()
-    targets = [p for p in candidates if p.exists() or p.parent.parent.name == CLAUDE_DATA]
-    return targets or candidates[:1]
-
-
-def mcp_entry() -> dict:
-    return {
-        "command": sys.executable,
-        "args": ["-m", "foulee", "mcp"],
-        "env": {"PYTHONUTF8": "1", "FOULEE_DATA": str(config.data_dir())},
-    }
-
-
-def _run_quiet(command: list[str], timeout: float = 30) -> str:
-    """Lance une commande Windows sans fenêtre et renvoie sa sortie ("" en cas d'échec)."""
-    try:
-        result = subprocess.run(command, capture_output=True, timeout=timeout,
-                                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-    except (OSError, subprocess.SubprocessError):
-        return ""
-    return result.stdout.decode("utf-8", errors="replace") + result.stderr.decode("utf-8", errors="replace")
-
-
-def claude_desktop_running() -> bool:
-    if sys.platform != "win32":
-        return False
-    return "claude.exe" in _run_quiet(["tasklist", "/FI", "IMAGENAME eq claude.exe", "/NH"]).lower()
-
-
 def _make_sure_claude_is_closed() -> None:
     """Claude Desktop réécrit son fichier de configuration : il doit être fermé pendant qu'on le modifie."""
-    if not claude_desktop_running():
+    from . import claude_desktop
+
+    if not claude_desktop.is_running():
         return
     _say("Claude Desktop est ouvert. Il garde ses réglages dans ce fichier et pourrait effacer la modification.")
     _ask("Quitte-le (clic droit sur son icône près de l'horloge → Quitter), puis appuie sur Entrée.")
     for _ in range(10):
-        if not claude_desktop_running():
+        if not claude_desktop.is_running():
             return
         time.sleep(1)
     if _ask("Claude tourne encore. Le fermer de force ? (ferme aussi Claude Code s'il est ouvert) [o/N]",
             "n").lower() in ("o", "oui", "y"):
-        _run_quiet(["taskkill", "/IM", "claude.exe", "/F"])
+        claude_desktop.close()
         time.sleep(2)
     else:
         _say("  J'écris quand même. Si Foulée n'apparaît pas après redémarrage, relance cette commande Claude fermé.")
 
 
-def _read_claude_config(path: Path) -> tuple[dict, str] | None:
-    """(contenu, texte d'origine) ; None si le fichier n'est pas un objet JSON valide."""
-    raw = path.read_text(encoding="utf-8-sig").strip() if path.exists() else ""  # tolère un BOM
-    if not raw:
-        return {}, ""
-    try:
-        data = json.loads(raw)
-    except json.JSONDecodeError:
-        return None
-    return (data, raw) if isinstance(data, dict) else None
-
-
 def cmd_claude_config(args: argparse.Namespace) -> int:
-    entry = mcp_entry()
+    from . import claude_desktop
+
     if not (args.ecrire or args.retirer):
         _say("Bloc à placer dans « mcpServers » du fichier de configuration de Claude Desktop :\n")
-        _say(json.dumps({"mcpServers": {"foulee": entry}}, indent=2, ensure_ascii=False))
+        _say(json.dumps({"mcpServers": {"foulee": claude_desktop.mcp_entry()}}, indent=2, ensure_ascii=False))
         _say("\nFichiers de configuration de Claude Desktop sur ce PC :")
-        found = False
-        for path in claude_config_paths():
-            if path.exists():
-                found = True
-                loaded = _read_claude_config(path)
-                servers = (loaded[0].get("mcpServers") or {}) if loaded else {}
-                state = "JSON invalide" if loaded is None else (
-                    "Foulée présent" if isinstance(servers, dict) and "foulee" in servers else "sans Foulée")
-                _say(f"  {path}  ({state})")
-        if not found:
+        info = claude_desktop.status()
+        for item in info["fichiers"]:
+            state = "JSON invalide" if not item["valide"] else (
+                "Foulée présent" if item["foulee"] else "sans Foulée")
+            _say(f"  {item['chemin']}  ({state})")
+        if not info["fichiers"]:
             _say("  aucun pour l'instant")
         _say("\nPour l'y ajouter : foulee claude-config --ecrire")
         return 0
     _make_sure_claude_is_closed()
-    code = 0
-    for path in claude_config_targets():
-        loaded = _read_claude_config(path)
-        if loaded is None:
-            _say(f"✗ {path} n'est pas un JSON valide : je n'y touche pas.")
-            code = 2
-            continue
-        data, raw = loaded
-        servers = data.setdefault("mcpServers", {})
-        if not isinstance(servers, dict):
-            _say(f"✗ {path} : la rubrique « mcpServers » a une forme inattendue, je n'y touche pas.")
-            code = 2
-            continue
-        if args.retirer:
-            if "foulee" not in servers:
-                continue
-            del servers["foulee"]
-        else:
-            servers["foulee"] = entry
-        path.parent.mkdir(parents=True, exist_ok=True)
-        if raw:
-            backup = path.with_name(f"{path.name}.sauvegarde-{datetime.now():%Y%m%d-%H%M%S}")
-            backup.write_text(raw, encoding="utf-8")
-            _say(f"  Sauvegarde : {backup}")
-        # UTF-8 sans BOM : Claude Desktop ne lit pas un JSON précédé d'un BOM
-        path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    report = claude_desktop.write(remove=args.retirer)
+    for backup in report["sauvegardes"]:
+        _say(f"  Sauvegarde : {backup}")
+    for path in report["modifies"]:
         _say(f"✓ Foulée {'retiré de' if args.retirer else 'ajouté à'} : {path}")
+    for error in report["erreurs"]:
+        _say(f"✗ {error}")
     if not args.retirer:
         _say("  Relance Claude Desktop. Au tout premier démarrage, Foulée peut mettre une vingtaine")
         _say("  de secondes à apparaître (Paramètres → Développeur, ou bouton + → Connecteurs).")
-    return code
+    return 2 if report["erreurs"] else 0
+
+
+def cmd_app(args: argparse.Namespace) -> int:
+    from . import desktop
+
+    if args.quitter:
+        stopped = desktop.quit_running()
+        _say("Foulée est fermé." if stopped else "Foulée ne répond pas : ferme-le depuis son icône près de l'horloge.")
+        return 0 if stopped else 1
+    return desktop.main(port=args.port, at_login=args.demarrage, after_update=args.apres_maj,
+                        no_browser=args.sans_navigateur, no_tray=args.sans_icone)
+
+
+def _size(octets: int) -> str:
+    for unit in ("o", "Ko", "Mo", "Go"):
+        if octets < 1024 or unit == "Go":
+            return f"{octets:.0f} {unit}" if unit == "o" else f"{octets:.1f} {unit}".replace(".", ",")
+        octets /= 1024
+    return ""
+
+
+def cmd_folder(args: argparse.Namespace) -> int:
+    from . import datadir
+
+    if not args.chemin and not args.defaut:
+        info = datadir.describe()
+        source = {"env": "imposé par FOULEE_DATA", "reglages": "choisi dans les Réglages",
+                  "defaut": "dossier par défaut"}[info["source"]]
+        _say(f"Dossier des données : {info['chemin']}  ({source}, {_size(info['taille'])})")
+        content = info["contenu"]
+        if content and not content.get("illisible"):
+            _say(f"  {content['seances']} séances, {content['valeurs']} valeurs du {content['debut']} au {content['fin']}")
+        if info["onedrive"]:
+            _say("  ! Ce dossier est synchronisé par OneDrive : tes données de santé partent dans le cloud.")
+        for old in datadir.previous_installs():
+            _say(f"  Autres données Foulée sur ce PC : {old['chemin']} ({old['contenu']['seances']} séances)"
+                 f" → foulee dossier \"{old['chemin']}\" --importer")
+        return 0
+    target = str(config.default_data_dir()) if args.defaut else args.chemin
+    if args.utiliser:
+        mode = "utiliser"
+    elif args.importer:
+        mode = "importer"
+    elif args.defaut and datadir.summary(config.default_data_dir()):
+        mode = "utiliser"
+    else:
+        mode = "deplacer"
+    verb = {"deplacer": "Copie des données vers", "utiliser": "Passage sur", "importer": "Import des données de"}[mode]
+    _say(f"{verb} {target}…")
+    try:
+        report = datadir.change(target, mode)
+    except datadir.DataDirError as exc:
+        _say(f"✗ {exc}")
+        return 1
+    base = report.get("base") or {}
+    if mode == "importer":
+        _say(f"✓ Données importées : {base.get('seances', 0)} séances, {base.get('valeurs', 0)} valeurs, "
+             f"{report.get('fichiers_fit', 0)} fichiers FIT.")
+        return 0
+    _say(f"✓ Foulée utilise maintenant {report['nouveau']}"
+         + (f" ({base.get('seances', 0)} séances, {base.get('valeurs', 0)} valeurs)." if base else "."))
+    if mode == "deplacer":
+        _say(f"  L'ancien dossier ({report['ancien']}) n'a pas été effacé : supprime-le toi-même une fois rassuré.")
+    for path in report.get("claude", []):
+        _say(f"  Claude Desktop mis à jour : {path}")
+    if report.get("onedrive"):
+        _say("  ! Ce dossier est synchronisé par OneDrive : tes données de santé partiront dans le cloud.")
+    return 0
+
+
+def cmd_before_uninstall(args: argparse.Namespace) -> int:
+    from . import uninstall
+
+    report = uninstall.before_uninstall(erase=args.effacer_donnees)
+    for path in report.get("claude", {}).get("modifies", []):
+        _say(f"Foulée retiré de Claude Desktop : {path}")
+    if args.effacer_donnees:
+        _say(f"{len(report['effaces'])} élément(s) effacé(s).")
+    return 0
 
 
 def cmd_forget_key(args: argparse.Namespace) -> int:
@@ -557,6 +543,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="foulee", description="Foulée — ton hub local de données sport et santé.")
     parser.add_argument("--version", action="version", version=f"Foulée {__version__}")
     sub = parser.add_subparsers(dest="cmd", metavar="commande")
+
+    p = sub.add_parser("app", help="l'application : icône près de l'horloge, interface et synchro automatique")
+    p.add_argument("--port", type=int, default=config.DEFAULT_PORT, help="port de l'interface (8770 par défaut)")
+    p.add_argument("--demarrage", action="store_true", help="lancement à l'ouverture de session : sans navigateur")
+    p.add_argument("--apres-maj", action="store_true", help="relance après une mise à jour : sans navigateur")
+    p.add_argument("--sans-navigateur", action="store_true", help="ne pas ouvrir l'interface")
+    p.add_argument("--sans-icone", action="store_true", help="pas d'icône près de l'horloge")
+    p.add_argument("--quitter", action="store_true", help="fermer l'application qui tourne")
+    p.set_defaults(func=cmd_app)
 
     p = sub.add_parser("setup", help="enregistrer ta clé API Garmin, la tester et lancer le premier import")
     p.add_argument("--sans-import", action="store_true", help="ne pas proposer l'import")
@@ -606,6 +601,19 @@ def build_parser() -> argparse.ArgumentParser:
     action.add_argument("--retirer", action="store_true", help="retirer Foulée de Claude Desktop (avec sauvegarde)")
     p.set_defaults(func=cmd_claude_config)
 
+    p = sub.add_parser("dossier", help="voir ou changer le dossier des données")
+    p.add_argument("chemin", nargs="?", help="nouveau dossier (chemin complet)")
+    how = p.add_mutually_exclusive_group()
+    how.add_argument("--utiliser", action="store_true", help="utiliser les données déjà présentes dans ce dossier")
+    how.add_argument("--importer", action="store_true", help="copier ici les données de ce dossier")
+    how.add_argument("--defaut", action="store_true", help="revenir au dossier par défaut")
+    p.set_defaults(func=cmd_folder)
+
+    p = sub.add_parser("avant-desinstallation", help="ménage lancé par le désinstalleur de Windows")
+    p.add_argument("--effacer-donnees", action="store_true",
+                   help="effacer aussi la base, les fichiers FIT, la configuration et les secrets")
+    p.set_defaults(func=cmd_before_uninstall)
+
     p = sub.add_parser("forget-key", help="supprimer la clé API enregistrée sur cet ordinateur")
     p.set_defaults(func=cmd_forget_key)
 
@@ -625,7 +633,10 @@ def main(argv: list[str] | None = None) -> int:
     if not getattr(args, "func", None):
         parser.print_help()
         return 0
-    _setup_logging(args.cmd, quiet=getattr(args, "quiet", False), to_console=args.cmd != "mcp")
+    if args.cmd == "avant-desinstallation":
+        logging.basicConfig(level=logging.WARNING)  # aucun journal dans un dossier qu'on va peut-être effacer
+    else:
+        _setup_logging(args.cmd, quiet=getattr(args, "quiet", False), to_console=args.cmd not in ("mcp", "app"))
     try:
         return int(args.func(args) or 0)
     except KeyboardInterrupt:

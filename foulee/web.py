@@ -31,8 +31,22 @@ from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import __version__, access, analysis, config, db, metrics, vault, views
+from . import (
+    __version__,
+    access,
+    analysis,
+    claude_desktop,
+    config,
+    datadir,
+    db,
+    keyinput,
+    metrics,
+    updates,
+    vault,
+    views,
+)
 from . import sync as sync_module
+from .garmin.client import KEY_PAGE, GarminError, check_key
 
 DERIVED_KEYS = {"vma_kmh", "fc_max", "fc_repos", "sexe", "zones_allure_pct_vma", "charge_source"}
 
@@ -45,13 +59,13 @@ class SyncJob:
         self.state: dict[str, Any] = {"en_cours": False, "message": "", "progression": None, "resultat": None,
                                       "erreur": None}
 
-    def start(self) -> bool:
+    def start(self, since: date | None = None) -> bool:
         with self.lock:
             if self.state["en_cours"] or sync_module.is_running():
                 return False
             self.state = {"en_cours": True, "message": "Démarrage…", "progression": 0.0, "resultat": None,
                           "erreur": None, "debut": time.time()}
-        threading.Thread(target=self._run, daemon=True).start()
+        threading.Thread(target=self._run, args=(since,), name="foulee-synchro", daemon=True).start()
         return True
 
     def _progress(self, message: str, fraction: float | None = None) -> None:
@@ -60,9 +74,9 @@ class SyncJob:
             if fraction is not None:
                 self.state["progression"] = round(fraction, 3)
 
-    def _run(self) -> None:
+    def _run(self, since: date | None) -> None:
         try:
-            result = sync_module.run(progress=self._progress)
+            result = sync_module.run(since=since, progress=self._progress)
             with self.lock:
                 self.state.update({"en_cours": False, "resultat": result, "message": "Synchro terminée",
                                    "progression": 1.0})
@@ -130,6 +144,9 @@ def update_dir() -> Path | None:
 def create_app() -> FastAPI:
     app = FastAPI(title="Foulée", version=__version__, docs_url=None, redoc_url=None, openapi_url=None)
     job = SyncJob()
+    app.state.sync_job = job  # l'application de bureau s'en sert pour la synchro automatique
+    app.state.quit = None     # fourni par l'application de bureau : arrêt propre
+    demo_build = {"en_cours": False, "erreur": None}
     with db.session():
         pass  # crée la base et les vues par défaut si besoin
 
@@ -180,6 +197,9 @@ def create_app() -> FastAPI:
                 "dossier_donnees": str(config.data_dir()),
                 "machine": "pc" if sys.platform == "win32" else "serveur",
                 "acces": "local" if request.state.local else "reseau",
+                "installation": updates.mode(),
+                "application": app.state.quit is not None,
+                "cle_refusee": sync_module.key_refused(conn),
                 "demarre_le": STARTED_AT,
                 "maj": update_dir() is not None,
                 "volumes": db.table_counts(conn),
@@ -270,7 +290,6 @@ def create_app() -> FastAPI:
             if not row:
                 raise HTTPException(404, "Séance introuvable")
             if fetch and row["has_streams"] == 0 and vault.has_key() and not config.is_demo():
-                from .garmin.client import GarminError
                 from .garmin.sync import ensure_streams
 
                 try:
@@ -338,6 +357,8 @@ def create_app() -> FastAPI:
     def put_settings(payload: dict = Body(...)) -> dict:
         allowed = set(db.DEFAULT_SETTINGS)
         changed = [k for k in payload if k in allowed]
+        if "canal_maj" in payload and payload["canal_maj"] not in updates.CHANNELS:
+            raise HTTPException(400, "Canal inconnu : « stable » ou « beta ».")
         with db.session() as conn:
             for key in changed:
                 db.set_setting(conn, key, payload[key])
@@ -353,12 +374,20 @@ def create_app() -> FastAPI:
 
     # ------------------------------------------------------------------ synchro
     @app.post("/api/sync")
-    def start_sync() -> dict:
+    def start_sync(payload: dict = Body(default={})) -> dict:
         if config.is_demo():
             return {"lance": False, "message": "Mode démo : les données sont fictives, pas de synchro."}
         if not vault.has_key():
-            return {"lance": False, "message": "Aucune clé API : lance « foulee setup » dans un terminal."}
-        started = job.start()
+            return {"lance": False, "message": "Aucune clé API : ajoute-la dans les Réglages (Clé API Garmin)."}
+        since = None
+        if payload.get("depuis"):
+            try:
+                since = date.fromisoformat(str(payload["depuis"]))
+            except ValueError as exc:
+                raise HTTPException(400, "Date de début illisible (AAAA-MM-JJ).") from exc
+            if since > date.today():
+                raise HTTPException(400, "La date de début est dans le futur.")
+        started = job.start(since)
         return {"lance": started, "message": "Synchro lancée" if started else "Une synchro est déjà en cours"}
 
     @app.get("/api/sync")
@@ -439,32 +468,236 @@ def create_app() -> FastAPI:
         return lan_status(request)
 
     # ------------------------------------------------------- mises à jour
-    # L'interface ne fait que déposer une demande ; le service foulee-maj (root) la traite
-    # et décrit où il en est dans etat.json.
+    # Serveur : l'interface dépose une demande que le service foulee-maj (root) traite, et lit
+    # où il en est dans etat.json. PC installé par le .exe : Foulée s'en charge elle-même.
+    local_job = updates.LocalJob()
+
+    def update_channel() -> str:
+        with db.session(readonly=True) as conn:
+            channel = db.get_settings(conn).get("canal_maj") or "stable"
+        return channel if channel in updates.CHANNELS else "stable"
+
     @app.get("/api/maj")
     def update_status() -> dict:
+        how = updates.mode()
         folder = update_dir()
         state = None
-        if folder:
+        if how == "serveur" and folder:
             try:
                 state = json.loads((folder / "etat.json").read_text(encoding="utf-8"))
             except (OSError, ValueError):
                 state = None
-        return {"disponible": folder is not None, "version": __version__, "etat": state,
-                "en_attente": bool(folder and (folder / "demande").exists())}
+        elif how == "exe":
+            state = local_job.snapshot()
+        return {
+            "mode": how, "disponible": how in ("exe", "serveur"), "version": __version__,
+            "canal": update_channel(), "etat": state, "depot": updates.repo(),
+            "en_attente": bool(how == "serveur" and folder and (folder / "demande").exists()),
+            "jeton_github": bool(vault.get_secret("github")) if how == "exe" else None,
+        }
 
     @app.post("/api/maj")
     def update_request(payload: dict = Body(...)) -> dict:
         action = payload.get("action")
         if action not in ("verifier", "installer"):
             raise HTTPException(400, "Action inconnue : « verifier » ou « installer ».")
-        folder = update_dir()
-        if folder is None:
-            raise HTTPException(404, "La mise à jour depuis l'interface n'existe que sur le serveur.")
-        temporary = folder / "demande.tmp"
-        temporary.write_text(action, encoding="utf-8")
-        os.replace(temporary, folder / "demande")
-        return {"ok": True, "action": action, "horodatage": time.time()}
+        how = updates.mode()
+        channel = update_channel()
+        if how == "serveur":
+            folder = update_dir()
+            temporary = folder / "demande.tmp"
+            temporary.write_text(f"{action}:{channel}", encoding="utf-8")
+            os.replace(temporary, folder / "demande")
+            return {"ok": True, "action": action, "canal": channel, "horodatage": time.time()}
+        if how == "exe":
+            try:
+                stamp = local_job.start(action, channel)
+            except updates.UpdateError as exc:
+                raise HTTPException(409, str(exc)) from exc
+            return {"ok": True, "action": action, "canal": channel, "horodatage": stamp}
+        raise HTTPException(404, "Sur cette installation, la mise à jour se fait avec Mettre-a-jour-Foulee.cmd.")
+
+    @app.put("/api/github-jeton")
+    def github_token_set(request: Request, payload: dict = Body(...)) -> dict:
+        require_local(request)
+        token = "".join(str(payload.get("jeton") or "").split())
+        if not token:
+            raise HTTPException(400, "Colle le jeton GitHub.")
+        try:
+            updates.list_releases(token)  # vérifie qu'il ouvre bien le dépôt
+        except updates.UpdateError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        vault.set_secret("github", token)
+        return update_status()
+
+    @app.delete("/api/github-jeton")
+    def github_token_delete(request: Request) -> dict:
+        require_local(request)
+        vault.delete_secret("github")
+        return update_status()
+
+    # -------------------------------------------------------------- clé Garmin
+    def key_info() -> dict:
+        with db.session(readonly=True) as conn:
+            refused = sync_module.key_refused(conn)
+            saved = db.get_meta(conn, "cle_enregistree_le")
+        return {"enregistree": vault.has_key(), "enregistree_le": saved, "refus": refused,
+                "demo": config.is_demo(), "page_garmin": KEY_PAGE}
+
+    @app.get("/api/cle")
+    def key_status() -> dict:
+        return key_info()
+
+    @app.put("/api/cle")
+    def key_replace(request: Request, payload: dict = Body(...)) -> dict:
+        # La clé ne transite que par la machine elle-même ou par Tailscale (chiffré)
+        require_local(request)
+        if config.is_demo():
+            raise HTTPException(400, "Inutile en mode démo : les données sont fictives.")
+        key, notes = keyinput.normalize_key(str(payload.get("cle") or ""))
+        problem = keyinput.key_problem(key)
+        if problem:
+            raise HTTPException(400, f"Ce texte ne peut pas être une clé Garmin : {problem}.")
+        try:
+            info = check_key(key)
+        except GarminError as exc:
+            if exc.key_rejected:
+                detail = f" Réponse de Garmin : « {exc.detail} »." if exc.detail else ""
+                raise HTTPException(400, f"Garmin refuse cette clé (HTTP {exc.status}).{detail} Vérifie qu'elle est "
+                                         "complète et toujours active sur la page « API personnelle ».") from exc
+            raise HTTPException(502, str(exc)) from exc
+        where = vault.set_key(key)
+        with db.session() as conn:
+            db.set_meta(conn, "cle_enregistree_le", db.now_iso())
+            db.delete_meta(conn, sync_module.KEY_REFUSED)
+            conn.commit()
+        return {**key_info(), "emplacement": where, "jeton_expire": info["jeton_expire"],
+                "lu": keyinput.describe_key(key), "corrections": notes, "profil_erreur": info.get("profil_erreur")}
+
+    @app.delete("/api/cle")
+    def key_forget(request: Request) -> dict:
+        require_local(request)
+        vault.delete_key()
+        return key_info()
+
+    # -------------------------------------------------- dossier des données
+    @app.get("/api/dossier")
+    def folder_status(anciennes: int = 0) -> dict:
+        info = {**datadir.describe(), "choix_fenetre": sys.platform == "win32"}
+        if anciennes:
+            info["anciennes"] = datadir.previous_installs()
+        return info
+
+    @app.post("/api/dossier/examiner")
+    def folder_inspect(request: Request, payload: dict = Body(...)) -> dict:
+        require_local(request)
+        return datadir.inspect(str(payload.get("chemin") or ""))
+
+    @app.post("/api/dossier/parcourir")
+    def folder_pick(request: Request, payload: dict = Body(default={})) -> dict:
+        require_local(request)
+        if sys.platform != "win32":
+            raise HTTPException(404, "La fenêtre de choix n'existe que sur le PC.")
+        return {"chemin": datadir.pick_folder(payload.get("depart"))}
+
+    @app.put("/api/dossier")
+    def folder_change(request: Request, payload: dict = Body(...)) -> dict:
+        require_local(request)
+        try:
+            report = datadir.change(str(payload.get("chemin") or ""), str(payload.get("mode") or ""))
+        except datadir.DataDirError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return {"rapport": report, "dossier": folder_status()}
+
+    # ------------------------------------------------------------ Claude Desktop
+    @app.get("/api/claude")
+    def claude_status() -> dict:
+        return {**claude_desktop.status(), "possible": sys.platform in ("win32", "darwin")}
+
+    @app.post("/api/claude")
+    def claude_connect(request: Request, payload: dict = Body(default={})) -> dict:
+        require_local(request)
+        if sys.platform not in ("win32", "darwin"):
+            raise HTTPException(404, "Claude Desktop se branche depuis le PC où il est installé.")
+        if claude_desktop.is_running():
+            if not payload.get("fermer"):
+                raise HTTPException(409, "Claude Desktop est ouvert : il faut le fermer pendant la modification.")
+            claude_desktop.close()
+            time.sleep(2)
+        report = claude_desktop.write(remove=payload.get("action") == "retirer")
+        return {"rapport": report, **claude_status()}
+
+    # ------------------------------------------------- application de bureau
+    def app_info() -> dict:
+        from . import desktop
+
+        running = app.state.quit is not None
+        return {
+            "application": running,
+            "demarrage_windows": desktop.startup_enabled() if running and desktop.startup_supported() else None,
+            "synchro_auto_heures": desktop.SYNC_EVERY // 3600 if running else None,
+        }
+
+    @app.get("/api/app")
+    def app_status() -> dict:
+        return app_info()
+
+    @app.put("/api/app")
+    def app_settings(request: Request, payload: dict = Body(...)) -> dict:
+        from . import desktop
+
+        require_local(request)
+        if "demarrage_windows" in payload:
+            if app.state.quit is None or not desktop.startup_supported():
+                raise HTTPException(404, "Réglage propre à l'application Windows.")
+            try:
+                desktop.set_startup(bool(payload["demarrage_windows"]))
+            except OSError as exc:
+                raise HTTPException(500, f"Réglage impossible : {exc}") from exc
+        return app_info()
+
+    @app.post("/api/app/quitter")
+    def app_quit(request: Request) -> dict:
+        require_local(request)
+        if app.state.quit is None:
+            raise HTTPException(404, "Foulée ne tourne pas en application ici.")
+        threading.Timer(0.3, app.state.quit).start()  # le temps de répondre
+        return {"ok": True}
+
+    @app.get("/api/demo")
+    def demo_status() -> dict:
+        return {"actif": config.is_demo(), "preparation": demo_build["en_cours"], "erreur": demo_build["erreur"]}
+
+    @app.post("/api/demo")
+    def demo_switch(request: Request, payload: dict = Body(...)) -> dict:
+        """Découvrir Foulée avec des données fictives, puis revenir à ses vraies données."""
+        require_local(request)
+        if not payload.get("actif"):
+            config.set_demo(False)
+            return demo_status()
+        if demo_build["en_cours"]:
+            return demo_status()
+        config.set_demo(True)  # base séparée (foulee-demo.db) : les vraies données ne sont pas touchées
+        if config.db_path().exists():
+            with db.session(readonly=True) as conn:
+                if db.table_counts(conn).get("activities"):
+                    return demo_status()  # déjà prête
+
+        def build() -> None:
+            from . import demo
+
+            try:
+                demo.build()
+                demo_build["erreur"] = None
+            except Exception as exc:  # affiché dans l'interface
+                demo_build["erreur"] = str(exc)
+                config.set_demo(False)
+            finally:
+                demo_build["en_cours"] = False
+
+        demo_build["en_cours"] = True
+        threading.Thread(target=build, name="foulee-demo", daemon=True).start()
+        return demo_status()
 
     # Appli installable sur l'écran d'accueil du téléphone (servie à la racine pour couvrir tout le site)
     @app.get("/manifest.webmanifest")

@@ -32,6 +32,9 @@ class SyncBusy(Exception):
     pass
 
 
+KEY_REFUSED = "cle_refusee"
+
+
 def _pid_alive(pid: int) -> bool:
     """Le processus existe-t-il encore ? (une synchro coupée net laisse son verrou derrière elle)"""
     if pid <= 0:
@@ -129,10 +132,19 @@ def run(*, since: date | None = None, fit_days: int | None = None, with_fit: boo
                                                   progress=progress)
                     if results[name].get("erreurs"):
                         status = "partiel"
+                    if name == "garmin":
+                        db.delete_meta(conn, KEY_REFUSED)
                 except Exception as exc:  # on note l'échec d'une source sans bloquer les autres
                     LOG.exception("Synchro %s en échec", name)
                     results[name] = {"erreur": str(exc)}
                     status = "echec"
+                    if name == "garmin" and getattr(exc, "key_rejected", False):
+                        # L'interface affichera « Garmin refuse ta clé : remplace-la »
+                        previous = key_refused(conn) or {}
+                        db.set_meta(conn, KEY_REFUSED, json.dumps({
+                            "depuis": previous.get("depuis") or db.now_iso(),
+                            "statut": getattr(exc, "status", None), "detail": getattr(exc, "detail", ""),
+                        }, ensure_ascii=False))
             finished = db.now_iso()
             conn.execute(
                 "INSERT INTO sync_log(started_at, finished_at, source, status, summary) VALUES (?, ?, ?, ?, ?)",
@@ -143,6 +155,15 @@ def run(*, since: date | None = None, fit_days: int | None = None, with_fit: boo
             conn.commit()
     progress("Synchro terminée", 1.0)
     return {"statut": status, "debut": started, "fin": finished, "sources": results}
+
+
+def key_refused(conn) -> dict | None:
+    """Depuis quand Garmin refuse la clé enregistrée (None si tout va bien)."""
+    raw = db.get_meta(conn, KEY_REFUSED)
+    try:
+        return json.loads(raw) if raw else None
+    except ValueError:
+        return None
 
 
 def last_sync_info(conn) -> dict:

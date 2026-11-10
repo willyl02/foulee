@@ -5,6 +5,7 @@ import * as E from "./editor.js";
 import * as F from "./format.js";
 import { icon } from "./icons.js";
 import { renderSettings } from "./settings.js";
+import { renderWelcome } from "./welcome.js";
 import * as A from "./tiles-activity.js";
 import * as D from "./tiles-data.js";
 
@@ -54,10 +55,20 @@ async function start() {
   registerServiceWorker();
   state.days = Number(store("foulee-period")) || 90;
   setupChrome();
+  // Premier lancement (ni clé, ni données) : la page d'accueil guide pas à pas
+  if (needsWelcome() && (!location.hash || location.hash === "#/")) history.replaceState(null, "", "#/bienvenue");
   window.addEventListener("hashchange", route);
   matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { if (themeChoice() === "auto") rerender(); });
   route();
   if (state.boot.synchro?.en_cours) pollSync();
+}
+
+function noData() { return !state.boot.volumes.daily && !state.boot.volumes.activities; }
+
+function needsWelcome() {
+  const b = state.boot;
+  // Ni données ni démo : clé à enregistrer, premier import à lancer, ou ancienne installation à reprendre
+  return b.acces === "local" && !b.demo && noData() && store("foulee-bienvenue") !== "vu";
 }
 
 function isLocalHost() {
@@ -87,15 +98,40 @@ function setupChrome() {
   $("#menu-btn").addEventListener("click", () => $("#rail").classList.toggle("open"));
   $("#theme-btn").addEventListener("click", cycleTheme);
   paintTheme();
-  if (state.boot.demo) {
-    $("#demo-strip").innerHTML = `<div class="demo-strip">${icon("info")}<span>Mode démo : toutes les données sont fictives. Pour les tiennes, lance « foulee setup » puis « foulee web ».</span></div>`;
-  } else if (!state.boot.volumes.daily && !state.boot.volumes.activities) {
-    $("#demo-strip").innerHTML = state.boot.cle
-      ? `<div class="demo-strip">${icon("info")}<span>Pas encore de données : clique sur « Synchroniser » à gauche pour lancer le premier import.</span></div>`
-      : `<div class="demo-strip">${icon("info")}<span>Pas encore de clé API : double-clique sur « Configurer-cle-Garmin.cmd » dans le dossier Foulee, puis reviens ici.</span></div>`;
-  }
+  renderStrip();
   renderNav();
   renderSyncLine();
+}
+
+// Bandeau d'information en haut de page : démo, clé refusée ou absente, pas encore de données
+function renderStrip() {
+  const b = state.boot;
+  const local = b.acces === "local";
+  const strip = (kind, text, action = "") => `<div class="demo-strip${kind ? ` ${kind}` : ""}">${icon(kind ? "warning" : "info")}<span>${text}</span>${action}</div>`;
+  let html = "";
+  if (b.demo) {
+    html = strip("", "Mode démo : toutes les données sont fictives.",
+      local ? `<button class="btn btn-ghost" type="button" data-demo-off>Quitter la démo</button>` : "");
+  } else if (b.cle_refusee) {
+    html = strip("alert", `Garmin refuse ta clé API depuis le ${F.escape(F.dateTime(b.cle_refusee.depuis))} : la synchro est en pause.`,
+      local ? `<a class="btn btn-ghost" href="#/reglages?section=cle">Remplacer la clé</a>` : "");
+  } else if (!b.cle) {
+    html = noData()
+      ? strip("", "Pas encore de clé API Garmin : l'accueil te guide en trois étapes.", local ? `<a class="btn btn-ghost" href="#/bienvenue">Commencer</a>` : "")
+      : strip("alert", "Aucune clé API Garmin enregistrée : la synchro est en pause.", local ? `<a class="btn btn-ghost" href="#/reglages?section=cle">Ajouter ma clé</a>` : "");
+  } else if (noData()) {
+    html = strip("", "Pas encore de données : lance le premier import.", `<a class="btn btn-ghost" href="#/bienvenue">Premier import</a>`);
+  }
+  $("#demo-strip").innerHTML = html;
+  $("#demo-strip [data-demo-off]")?.addEventListener("click", async () => {
+    try {
+      await api.post("/api/demo", { actif: false });
+      location.hash = "#/";
+      location.reload();
+    } catch (err) {
+      toast(err.message, { error: true });
+    }
+  });
 }
 
 function closeMenu() { $("#rail").classList.remove("open"); }
@@ -151,11 +187,13 @@ function wireNavDrag(item) {
   });
 }
 
-function isSettings() { return location.hash.startsWith("#/reglages"); }
+function isSettings() { return location.hash.startsWith("#/reglages") || location.hash.startsWith("#/bienvenue"); }
 
 function route() {
   const [path, query] = location.hash.slice(1).split("?");
-  if (path === "/reglages") { showSettings(); return; }
+  $("#demo-strip").hidden = path === "/bienvenue";  // l'accueil dit déjà tout
+  if (path === "/reglages") { showSettings(new URLSearchParams(query || "").get("section")); return; }
+  if (path === "/bienvenue") { showWelcome(); return; }
   const match = path.match(/^\/vue\/([^/]+)/);
   const wanted = match ? decodeURIComponent(match[1]) : null;
   const view = state.views.find((v) => v.id === wanted) || state.views[0];
@@ -169,6 +207,7 @@ function route() {
 function currentView() { return state.views.find((v) => v.id === state.viewId); }
 
 function rerender() {
+  if (location.hash.startsWith("#/bienvenue")) return;  // formulaires en cours : on ne redessine pas
   if (isSettings()) showSettings(); else renderView();
 }
 
@@ -507,12 +546,25 @@ async function renderPicker(box) {
 }
 
 // =================================================================== réglages
-function showSettings() {
+function showWelcome() {
+  disposePass();
+  state.editing = false;
+  closeMenu();
+  renderNav();
+  renderWelcome($("#page"), state.boot, {
+    toast,
+    onImport: () => pollSync(),
+    onDone: () => { store("foulee-bienvenue", "vu"); location.hash = "#/"; },
+  });
+}
+
+function showSettings(section = null) {
   disposePass();
   state.editing = false;
   renderNav();
   renderSettings($("#page"), state.boot, {
     toast,
+    section,
     onSaved: (settings) => { state.boot.reglages = settings; api.clearCache(); },
     resetViews: async () => {
       const ok = await E.confirm("Restaurer les vues d'origine ?", "Les cinq vues fournies avec Foulée reprennent leur contenu de départ. Tes vues personnelles ne bougent pas.", "Restaurer");
@@ -539,7 +591,14 @@ function renderSyncLine(job) {
   bar.hidden = true;
   $("#sync-btn").disabled = false;
   if (state.boot.demo) { line.innerHTML = "Données fictives : la synchro est désactivée en mode démo."; return; }
-  if (!state.boot.cle) { line.innerHTML = "Aucune clé API : lance « foulee setup » dans un terminal."; return; }
+  if (!state.boot.cle) {
+    line.innerHTML = state.boot.acces === "local" ? `Aucune clé API : <a href="#/reglages?section=cle">ajoute-la</a>.` : "Aucune clé API enregistrée.";
+    return;
+  }
+  if (state.boot.cle_refusee) {
+    line.innerHTML = `<strong>Synchro en pause</strong><br>Garmin refuse la clé API.`;
+    return;
+  }
   const last = s.derniere_reussie;
   line.innerHTML = last ? `Dernière synchro <strong>${F.escape(F.relative(last))}</strong>` : "Jamais synchronisé";
   if (s.derniere?.statut === "echec") line.innerHTML += "<br>La dernière tentative a échoué.";
@@ -574,6 +633,7 @@ function pollSync() {
     }
     api.clearCache();
     await loadBoot();
+    renderStrip();
     renderSyncLine();
     renderNav();
     rerender();

@@ -2,6 +2,9 @@
 # Met Foulée à jour sur le serveur (en root), comme le bouton « Mettre à jour » des Réglages :
 # récupère la dernière version sur GitHub, met à jour les bibliothèques et les services,
 # puis relance l'interface. Tes données, ta clé et tes vues ne bougent pas.
+#
+#   mettre-a-jour-serveur.sh                 canal choisi dans les Réglages (stable par défaut)
+#   mettre-a-jour-serveur.sh --canal beta    dernière bêta (branche beta du dépôt)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -15,4 +18,4 @@ export HOME="${HOME:-/root}" GIT_TERMINAL_PROMPT=0 PATH="/usr/local/bin:$PATH"
 export UV_PYTHON_INSTALL_DIR=/opt/uv/python UV_CACHE_DIR=/opt/uv/cache
 export FOULEE_MAJ="${FOULEE_MAJ:-/var/lib/foulee/maj}"
 
-exec "$ROOT/.venv/bin/python" "$ROOT/scripts/maj_serveur.py" installer --console
+exec "$ROOT/.venv/bin/python" "$ROOT/scripts/maj_serveur.py" installer --console "$@"

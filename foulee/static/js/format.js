@@ -195,6 +195,25 @@ export function shiftOf(date, settings, weekdaysOnly = null) {
   return week % 2 === 1 ? (postes.impaires || "matin") : (postes.paires || "soir");
 }
 
+/** « 2026-11-10 14:02:33 » → « 10 nov. 2026 à 14 h 02 ». */
+export function dateTime(isoDateTime) {
+  if (!isoDateTime) return "–";
+  const text = String(isoDateTime);
+  const day = parseDate(text);
+  const time = text.length >= 16 ? ` à ${text.slice(11, 13)}\u00a0h\u00a0${text.slice(14, 16)}` : "";
+  return `${day.getDate()}\u00a0${MONTHS[day.getMonth()]} ${day.getFullYear()}${time}`;
+}
+
+/** Taille d'un fichier ou d'un dossier : « 12,4 Mo ». */
+export function size(bytes) {
+  if (!isNum(bytes)) return "–";
+  const units = ["o", "Ko", "Mo", "Go", "To"];
+  let value = bytes;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) { value /= 1024; unit += 1; }
+  return unit === 0 ? `${value} o` : `${value < 10 ? NB1.format(value) : NB.format(Math.round(value))} ${units[unit]}`;
+}
+
 export function escape(text) {
   return String(text ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }

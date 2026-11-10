@@ -6,7 +6,7 @@ import os
 import pytest
 from fake_garmin import FakeGarmin
 
-from foulee import cli, keyinput, sync, vault
+from foulee import claude_desktop, cli, keyinput, sync, vault
 from foulee.garmin.client import garmin_detail
 
 KEY = "GCDC_0f1e2d3c-test.4b5a6978-cle.SecretDeTest"
@@ -16,7 +16,7 @@ KEY = "GCDC_0f1e2d3c-test.4b5a6978-cle.SecretDeTest"
 @pytest.mark.parametrize("raw, notes", [
     (f"  {KEY} \r\n", []),
     (f"{KEY[:20]}\n{KEY[20:]}", ["2 morceaux recollés"]),
-    (f"​{KEY}﻿", []),
+    (f"\u200b{KEY}﻿", []),
     (f"« {KEY} »", ["guillemets retirés"]),
     (KEY + KEY, ["clé présente deux fois, un seul exemplaire gardé"]),
     (f"{KEY}\r\n{KEY}\r\n", ["2 morceaux recollés", "clé présente deux fois, un seul exemplaire gardé"]),
@@ -128,9 +128,9 @@ def test_claude_config_finds_the_packaged_app_and_keeps_its_settings(tmp_path, m
     monkeypatch.setenv("LOCALAPPDATA", str(local))
     monkeypatch.setenv("APPDATA", str(roaming))
     monkeypatch.setattr(cli.sys, "platform", "win32")
-    monkeypatch.setattr(cli, "claude_desktop_running", lambda: False)
+    monkeypatch.setattr(claude_desktop, "is_running", lambda: False)
 
-    assert cli.claude_config_paths()[0] == packaged_config
+    assert claude_desktop.config_paths()[0] == packaged_config
     assert cli.main(["claude-config", "--ecrire"]) == 0
     for path in (packaged_config, old_config):
         raw = path.read_bytes()
@@ -156,7 +156,7 @@ def test_claude_config_creates_the_file_of_a_fresh_packaged_install(tmp_path, mo
     monkeypatch.setenv("LOCALAPPDATA", str(local))
     monkeypatch.setenv("APPDATA", str(tmp_path / "Roaming"))
     monkeypatch.setattr(cli.sys, "platform", "win32")
-    monkeypatch.setattr(cli, "claude_desktop_running", lambda: False)
+    monkeypatch.setattr(claude_desktop, "is_running", lambda: False)
     assert cli.main(["claude-config", "--ecrire"]) == 0
     assert "foulee" in json.loads((packaged / "claude_desktop_config.json").read_text(encoding="utf-8"))["mcpServers"]
     assert not (tmp_path / "Roaming" / "Claude").exists()
