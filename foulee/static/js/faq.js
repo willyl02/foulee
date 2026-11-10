@@ -1,0 +1,239 @@
+// Page « Aide » : les questions fréquentes, rangées par thème, avec une recherche.
+// Chaque réponse est un petit bout de HTML écrit ici (aucune donnée extérieure) ;
+// les liens « réglages(…) » mènent droit à la bonne rubrique.
+import * as F from "./format.js";
+import { icon } from "./icons.js";
+
+const KEY_PAGE = "https://connect.garmin.com/app/settings/personalApiToken";
+const reglages = (section, label) => `<a href="#/reglages?section=${section}">${label}</a>`;
+const ext = (url, label) => `<a href="${url}" target="_blank" rel="noopener">${label}${icon("external")}</a>`;
+
+/** Questions fréquentes : { id, titre, icone, questions: [{ id, q, r(boot) }] }. */
+export const FAQ = [
+  {
+    id: "debut", titre: "Pour commencer", icone: "home",
+    questions: [
+      { id: "quoi", q: "Qu'est-ce que Foulée ?", r: () => `<p>Foulée récupère tes données Garmin (séances, sommeil, VFC, FC de repos, Body Battery…) grâce à ta clé API personnelle, les range dans une base <b>sur ta machine</b> et te les montre dans des tableaux de bord que tu composes. Il les met aussi à disposition de Claude Desktop pour les analyser avec toi.</p>` },
+      { id: "abonnement", q: "Faut-il un abonnement ou un compte Foulée ?", r: () => `<p>Non. Il te faut seulement un compte Garmin Connect et ta clé API personnelle, gratuite. Pas de compte Foulée, pas de serveur chez quelqu'un d'autre : tout tourne chez toi.</p>` },
+      { id: "montres", q: "Quelles montres fonctionnent ?", r: () => `<p>Toute montre Garmin qui se synchronise avec Garmin Connect. Certaines mesures dépendent du modèle et de ses réglages : VFC la nuit, SpO2 (oxymètre à activer la nuit), dynamique de course (montre ou ceinture compatible), puissance en course. Quand une mesure manque, Foulée laisse simplement la case vide.</p>` },
+      { id: "demo", q: "Puis-je essayer Foulée sans ma clé ?", r: () => `<p>Oui : sur la page de bienvenue, « Découvrir avec des données fictives » ouvre une démo complète (un coureur inventé, plus d'un an d'historique). Le bandeau en haut de page permet de la quitter ; tes vraies données ne sont jamais mélangées à la démo.</p>` },
+      { id: "par-ou", q: "Par où commencer ?", r: () => `<p>L'<a href="#/vue/accueil">Accueil</a> résume ta journée. Passe ensuite par les ${reglages("coureur", "Réglages")} : ta VMA, ton objectif, tes horaires de travail et tes zones. Puis compose tes vues : « Modifier la vue », puis « Ajouter une tuile ».</p>` },
+    ],
+  },
+  {
+    id: "cle", titre: "Clé API Garmin", icone: "key",
+    questions: [
+      { id: "trouver", q: "Où trouver ma clé API personnelle ?", r: () => `<p>Dans Garmin Connect, sur le web : page ${ext(KEY_PAGE, "API personnelle")}. Crée une clé, copie-la avec le bouton « Copier », puis colle-la dans ${reglages("cle", "Réglages → Clé API Garmin")}. Foulée la fait vérifier par Garmin avant de l'enregistrer.</p>` },
+      { id: "securite", q: "Où ma clé est-elle rangée ? Qui peut la voir ?", r: () => `<p>Sur le PC, dans le Gestionnaire d'identification de Windows ; sur un serveur, dans un fichier que seul Foulée peut lire. Ni l'interface, ni Claude, ni les messages d'erreur ne la montrent jamais.</p>` },
+      { id: "refusee", q: "« Garmin refuse ta clé » ou « ne connaît plus ta clé » : que faire ?", r: () => `<p>La clé a expiré, ou elle a été supprimée ou régénérée dans Garmin Connect (par exemple en créant une clé pour un autre appareil). La synchro se met en pause : reprends ta clé actuelle sur la page ${ext(KEY_PAGE, "API personnelle")}, puis remplace-la dans ${reglages("cle", "Réglages → Clé API Garmin")}.</p>` },
+      { id: "deux", q: "Puis-je utiliser la même clé sur le PC et sur le serveur ?", r: () => `<p>Oui. Si tu crées une nouvelle clé, mets-la à jour sur les deux installations : l'ancienne peut cesser de fonctionner.</p>` },
+      { id: "telephone", q: "Pourquoi ne puis-je pas changer la clé depuis mon téléphone ?", r: () => `<p>Par sécurité, la clé Garmin (comme le mot de passe du réseau local et le jeton GitHub) ne se change que depuis la machine elle-même ou par Tailscale, jamais par le réseau local de la maison.</p>` },
+    ],
+  },
+  {
+    id: "synchro", titre: "Synchro et données", icone: "sync",
+    questions: [
+      { id: "quand", q: "Quand Foulée récupère-t-il mes nouvelles données ?", r: () => `<p>Sur le PC, toutes les 3 heures tant que Foulée tourne (son icône près de l'horloge), et dès que tu cliques sur « Synchroniser » dans la colonne de gauche. Sur un serveur, toutes les 3 heures, jour et nuit.</p>` },
+      { id: "seance-absente", q: "Ma séance de ce matin n'apparaît pas.", r: () => `<p>Foulée lit Garmin Connect : il faut d'abord que ta montre se soit synchronisée avec l'appli Garmin Connect de ton téléphone. Clique ensuite sur « Synchroniser ».</p>` },
+      { id: "historique", q: "Jusqu'à quand remonte mon historique ? Puis-je aller plus loin ?", r: () => `<p>Jusqu'à la date choisie au premier import (2 ans conseillé). Pour remonter plus loin, demande à Claude : « Synchronise depuis le 1er janvier 2023 », ou lance la commande <code>foulee sync --depuis 2023-01-01</code>. Les données déjà présentes ne sont pas dupliquées.</p>` },
+      { id: "nuit", q: "Pourquoi une nuit de sommeil compte-t-elle pour le lendemain ?", r: () => `<p>Une nuit est rattachée au jour du réveil, comme dans Garmin Connect : la nuit du lundi au mardi compte pour mardi.</p>` },
+      { id: "fit", q: "Que sont les fichiers FIT ?", r: () => `<p>Le fichier d'origine de chaque séance, seconde par seconde : FC, allure, GPS, cadence, tours… Foulée télécharge d'office ceux des derniers mois (${reglages("synchro", "Réglages → Synchro et calculs")}) ; les plus anciens arrivent quand tu ouvres la séance.</p>` },
+      { id: "manque", q: "Pourquoi certaines valeurs manquent-elles (VFC, SpO2, Body Battery…) ?", r: () => `<p>Elles dépendent de ta montre, de ses réglages (oxymètre la nuit…) et du port de la montre : sans montre la nuit, pas de VFC ni de sommeil. Les jours sans mesure restent vides dans les courbes.</p>` },
+      { id: "ecarts", q: "Mes chiffres diffèrent un peu de ceux de Garmin Connect.", r: () => `<p>Foulée reprend les valeurs de Garmin telles quelles ; les écarts viennent des moyennes (Foulée fait la moyenne des jours de la période, Garmin parfois sur 7 jours glissants), des arrondis ou d'une synchro qui date. La charge, la forme et la fraîcheur sont calculées par Foulée (voir « Entraînement et calculs »).</p>` },
+      { id: "journee", q: "D'où viennent les courbes de la « Journée en détail » ?", r: () => `<p>FC minute par minute, phases du sommeil et VFC de la nuit sont demandées à Garmin quand la tuile les affiche (un appel par jour), puis gardées dans ta base. Le jour même est redemandé au plus toutes les 15 minutes. La Body Battery de la journée vient de la synchro.</p>` },
+      { id: "dossier", q: "Où sont mes données ? Comment les sauvegarder ?", r: (b) => `<p>Dans le dossier ${b.dossier_donnees ? `<code>${F.escape(b.dossier_donnees)}</code>` : "des données"} : la base (SQLite) et les fichiers FIT. Sauvegarder Foulée, c'est copier ce dossier. Tu peux aussi le déplacer, sur un autre disque par exemple : ${reglages("dossier", "Réglages → Dossier des données")}.</p>` },
+      { id: "brut", q: "Foulée garde-t-il les réponses de Garmin ?", r: () => `<p>Oui, telles quelles : tout peut être recalculé sans rien redemander à Garmin, et chaque valeur qu'elles contiennent peut servir dans une tuile (les « données brutes »).</p>` },
+    ],
+  },
+  {
+    id: "vues", titre: "Tableaux de bord", icone: "chart",
+    questions: [
+      { id: "modifier", q: "Comment modifier une vue ?", r: () => `<p>« Modifier la vue » en haut à droite : déplace les tuiles (glisser, ou flèches), change leur largeur et leur hauteur, règle-les avec la roue dentée, retire-les ou ajoute-en. Tout s'enregistre au fur et à mesure ; « Terminer » quand c'est fini.</p>` },
+      { id: "creer", q: "Comment créer une vue ou changer leur ordre ?", r: () => `<p>« Nouvelle vue » dans la colonne de gauche : un nom, une icône, puis tes tuiles. En mode modification, glisse les vues dans la colonne pour les réordonner.</p>` },
+      { id: "donnee-absente", q: "Je cherche une donnée Garmin qui n'est pas dans la liste.", r: () => `<p>Dans le choix d'une métrique, tape quelques mots dans la recherche : en plus des métriques de Foulée, la liste propose toutes les valeurs des réponses de Garmin (« Données brutes »), avec un exemple de valeur pour t'aider à choisir.</p>` },
+      { id: "periode", q: "À quoi sert le sélecteur 7 j, 30 j, 90 j… ?", r: () => `<p>Il règle la période des tuiles qui suivent celle de la vue. Une tuile peut avoir sa propre période : roue dentée, puis « Période ».</p>` },
+      { id: "restaurer", q: "J'ai trop modifié mes vues : comment revenir en arrière ?", r: () => `<p>${reglages("vues", "Réglages → Vues")} → « Restaurer les vues d'origine » : les six vues fournies avec Foulée reprennent leur contenu de départ ; tes vues personnelles ne bougent pas.</p>` },
+      { id: "partager", q: "Comment partager une vue ?", r: () => `<p>En mode modification, « Exporter » crée un fichier ; « Importer une vue » le reprend, ici ou chez quelqu'un d'autre. Pour tout transférer d'un coup (réglages, vues, photo) : ${reglages("sauvegarde", "Réglages → Sauvegarde des réglages")}.</p>` },
+      { id: "vide", q: "Une tuile affiche « Pas de données sur cette période ».", r: () => `<p>Élargis la période (sélecteur en haut de la vue), vérifie que ta montre mesure bien cette donnée et que la dernière synchro est récente.</p>` },
+      { id: "carte", q: "La carte de ma séance reste grise.", r: () => `<p>Le fond de carte vient d'Internet (OpenStreetMap ou Plan IGN) : sans connexion, seul le tracé s'affiche. Tu peux aussi n'afficher que le tracé, sans rien demander à Internet : ${reglages("synchro", "Réglages → Synchro et calculs")} → Fond de carte → Aucun.</p>` },
+      { id: "logo", q: "Comment changer le logo ou mettre ma photo ?", r: () => `<p>${reglages("profil", "Réglages → Profil et logo")} : choisis un des logos, ou importe ta photo (recadrée en carré, réduite, sans métadonnées) ; elle peut aussi venir de Garmin Connect.</p>` },
+      { id: "theme", q: "Comment passer en thème sombre ?", r: () => `<p>Le petit bouton à droite de « Réglages », en bas de la colonne de gauche : chaque clic passe d'automatique (comme ton système) à clair, puis à sombre.</p>` },
+    ],
+  },
+  {
+    id: "entrainement", titre: "Entraînement et calculs", icone: "run",
+    questions: [
+      { id: "charge", q: "Comment sont calculées la charge, la forme et la fraîcheur ?", r: () => `<p>Chaque séance a une charge : celle de Garmin, ou un TRIMP calculé sur ta FC (${reglages("synchro", "Réglages → Synchro et calculs")}). La charge chronique est une moyenne pondérée sur environ 42 jours (ta forme de fond), la charge aiguë sur environ 7 jours (ta fatigue récente) ; la fraîcheur, c'est la chronique moins l'aiguë de la veille.</p>` },
+      { id: "lire-charge", q: "Fraîcheur négative, ratio aiguë / chronique : comment les lire ?", r: () => `<ul><li>Fraîcheur entre −10 et −30 : tu encaisses une charge productive ; sous −30, la fatigue s'accumule ; au-dessus de +5, tu es frais (idéal avant une course).</li><li>Ratio aiguë / chronique entre 0,8 et 1,3 : progression maîtrisée ; au-delà de 1,5 : hausse brutale de la charge.</li></ul>` },
+      { id: "zones-fc", q: "Mes zones FC ne correspondent pas à celles de Garmin ou de Strava.", r: () => `<p>${reglages("zones-fc", "Réglages → Zones de fréquence cardiaque")} : choisis la méthode (zones de ta montre, % FC max, % FC de réserve, % du seuil), ou « Bornes à la main » pour recopier celles de Strava. Les séances sont recalculées aussitôt.</p>` },
+      { id: "fc-max", q: "Pourquoi la FC max ou la FC de repos affichées ne sont-elles pas les miennes ?", r: () => `<p>Sans réglage, Foulée prend la FC max de tes zones Garmin (à défaut, la plus haute relevée en séance sur deux ans) et la médiane de ta FC de repos sur 30 jours. Saisis tes valeurs dans ${reglages("coureur", "Réglages → Profil de coureur")} pour les imposer.</p>` },
+      { id: "tableau", q: "Comment est construit le tableau d'allures ?", r: () => `<p>Comme le classeur du club : allure = 60 ÷ (VMA × %) minutes par kilomètre, temps de passage = distance ÷ (VMA × %), secondes tronquées. Survole une bande de couleur pour savoir à quoi elle sert (footing, seuil, fractions…).</p>` },
+      { id: "vma", q: "Comment estimer ma VMA ?", r: () => `<p>Avec un test VAMEVAL : tuile « Allures selon ta VMA » → onglet « Test VAMEVAL », saisis ton temps puis « Lire le barème » : Foulée donne le palier, la VMA du palier validé et la VMA interpolée, et peut la prendre comme VMA. Tu peux aussi la saisir dans ${reglages("coureur", "Réglages → Profil de coureur")}.</p>` },
+      { id: "fractions", q: "Que sont les « fractions rapides » ?", r: () => `<p>Les tours de tes séances de course plus rapides qu'un pourcentage de ta VMA (85 % par défaut, réglable dans ${reglages("zones", "Réglages → Zones d'allure et fractions")}). La tuile compare leur allure moyenne à ton allure cible.</p>` },
+      { id: "forme", q: "La « forme du jour » est-elle un avis médical ?", r: () => `<p>Non : elle compare tes mesures du jour (FC de repos, VFC, sommeil, Body Battery, fraîcheur, SpO2) à tes propres habitudes. Au moindre doute sur ta santé, parles-en à un médecin.</p>` },
+      { id: "allure-pente", q: "Allure réelle ou ajustée à la pente ?", r: () => `<p>Les allures affichées sont réelles. L'allure ajustée à la pente, calculée par Garmin, existe aussi comme métrique : « Allure ajustée à la pente ».</p>` },
+      { id: "records", q: "D'où viennent mes records ?", r: () => `<p>Garmin calcule, pour chaque sortie, ton meilleur temps sur 1 km, 1 mile, 5 km, 10 km, semi… La tuile « Records » compare le meilleur de la période à celui de tout ton historique ; un clic ouvre la séance.</p>` },
+    ],
+  },
+  {
+    id: "horaires", titre: "Horaires de travail", icone: "briefcase",
+    questions: [
+      { id: "pourquoi", q: "À quoi servent les horaires de travail ?", r: () => `<p>À comparer ta récupération d'un poste à l'autre (tuile « Comparaison par poste »), à colorer le fond des courbes selon le poste et à afficher ton poste du jour sur l'accueil.</p>` },
+      { id: "pas-poste", q: "Je ne travaille pas en postes.", r: () => `<p>Choisis « Bureau » (mêmes horaires du lundi au vendredi), ou décoche « Tenir compte de mes horaires de travail » dans ${reglages("horaires", "Réglages → Horaires de travail")}.</p>` },
+      { id: "cycle", q: "Comment saisir un 3x8, un 5x8 ou un cycle particulier ?", r: () => `<p>${reglages("horaires", "Réglages → Horaires de travail")} : choisis le modèle, ajuste les heures de chaque poste, puis la grille du cycle (une ligne par semaine, ou une suite de jours pour un cycle continu). Indique où tu en es aujourd'hui dans le cycle : l'aperçu montre les quatre semaines à venir.</p>` },
+      { id: "conges", q: "Comment mettre de côté mes congés ?", r: () => `<p>Dans la rubrique Horaires de travail → Congés, ajoute chaque période (du… au…). Ces jours sont exclus des comparaisons entre postes.</p>` },
+      { id: "repos", q: "Les jours de repos comptent-ils dans les comparaisons ?", r: () => `<p>Non par défaut : seuls les jours travaillés comptent. Décoche « Ne comparer que les jours travaillés » pour les rattacher au poste de leur semaine (dans un cycle en jours, ils forment un groupe à part).</p>` },
+    ],
+  },
+  {
+    id: "claude", titre: "Claude Desktop", icone: "chat",
+    questions: [
+      { id: "relier", q: "Comment relier Foulée à Claude Desktop ?", r: (b) => (b.machine === "pc" ? `<p>${reglages("claude", "Réglages → Claude Desktop")} → « Relier Foulée à Claude Desktop ». Claude doit être fermé : Foulée propose de le fermer pour toi. Rouvre-le ; dans une conversation, bouton + → Connecteurs : « foulee » y figure.</p>` : `<p>Depuis le PC où Claude Desktop est installé, avec Foulée installé sur ce PC : Réglages → Claude Desktop → « Relier Foulée à Claude Desktop ».</p>`) },
+      { id: "quoi-faire", q: "Que peut faire Claude avec mes données ?", r: () => `<p>Analyser une séance, comparer des périodes ou tes postes, suivre ta charge, te donner tes allures, créer une vue, changer tes réglages… Par exemple : « Comment est ma forme ce matin ? », « Quelles allures pour 6 × 800 m à 100 % de VMA ? », « Compare mon sommeil d'un poste à l'autre depuis septembre ».</p>` },
+      { id: "voit-cle", q: "Claude voit-il ma clé Garmin ?", r: () => `<p>Non. Claude interroge ta base par les outils de Foulée ; seuls leurs résultats passent dans la conversation.</p>` },
+      { id: "introuvable", q: "Claude ne trouve pas Foulée.", r: () => `<p>Vérifie ${reglages("claude", "Réglages → Claude Desktop")} (relié, et à quelle installation), puis relance Claude Desktop. Au tout premier démarrage, compte une vingtaine de secondes : l'antivirus analyse les fichiers de Foulée. Claude n'a pas besoin que l'application Foulée soit ouverte.</p>` },
+    ],
+  },
+  {
+    id: "mobile", titre: "Téléphone et serveur", icone: "laptop",
+    questions: [
+      { id: "telephone", q: "Puis-je utiliser Foulée sur mon téléphone ?", r: () => `<p>Oui, en installant Foulée sur un serveur à la maison (mini-PC, machine virtuelle…) : tu l'ouvres ensuite de partout par Tailscale, ou depuis la maison par le réseau local avec un mot de passe. Le guide est dans le ${ext("https://github.com/willyl02/foulee#readme", "mode d'emploi du projet")}.</p>` },
+      { id: "appli", q: "Comment l'installer comme une appli sur le téléphone ?", r: () => `<p>Ouvre Foulée dans le navigateur du téléphone (adresse Tailscale en https), puis : sur iPhone, Partager → « Sur l'écran d'accueil » ; sur Android, menu ⋮ → « Installer l'application ».</p>` },
+      { id: "reglages-differents", q: "Pourquoi le PC et le serveur n'ont-ils pas les mêmes réglages ?", r: () => `<p>Chaque installation a sa propre base : ses réglages, ses vues, sa photo. Pour les aligner : ${reglages("sauvegarde", "Réglages → Sauvegarde des réglages")}, « Exporter » d'un côté, « Importer » de l'autre. Certaines rubriques n'existent que sur le PC (Claude Desktop, application) ou que sur le serveur (accès par le réseau local).</p>` },
+      { id: "injoignable", q: "Le téléphone affiche « Foulée est injoignable ».", r: () => `<p>L'appli Tailscale est déconnectée sur le téléphone, ou le serveur est arrêté. Reconnecte Tailscale, puis « Réessayer ».</p>` },
+    ],
+  },
+  {
+    id: "installation", titre: "Installation et mises à jour", icone: "download",
+    questions: [
+      { id: "maj", q: "Comment mettre Foulée à jour ?", r: () => `<p>${reglages("maj", "Réglages → Mises à jour")} → « Vérifier les mises à jour », puis « Mettre à jour maintenant ». Foulée télécharge l'installateur, vérifie son empreinte, s'installe et se relance (une minute environ). Tes données, ta clé et tes vues ne bougent pas.</p>` },
+      { id: "beta", q: "Stable ou bêta : que choisir ?", r: () => `<p>Le canal stable reçoit les versions éprouvées. Les bêtas (case « Recevoir les versions bêta ») arrivent avant, pour essayer les nouveautés : elles peuvent contenir des défauts, signale-les ! Décocher ramène au stable à la prochaine version stable (Foulée ne redescend jamais de version).</p>` },
+      { id: "windows-protege", q: "« Windows a protégé votre ordinateur » à l'installation.", r: () => `<p>L'installateur n'est pas signé par un éditeur payant. Clique sur « Informations complémentaires », puis « Exécuter quand même ». Son empreinte SHA-256 est publiée avec chaque version pour qui veut vérifier le fichier.</p>` },
+      { id: "demarrage", q: "Foulée se lance-t-il au démarrage de Windows ?", r: () => `<p>Si tu l'as choisi : ${reglages("app", "Réglages → Application")} → « Lancer Foulée à l'ouverture de session Windows ». C'est ce qui permet la synchro automatique.</p>` },
+      { id: "quitter", q: "Comment quitter Foulée ?", r: () => `<p>Clic droit sur son icône près de l'horloge (dans la flèche « ^ » si Windows la range) → « Quitter Foulée ». Fermer l'onglet du navigateur ne l'arrête pas : il continue de synchroniser.</p>` },
+      { id: "rien", q: "Rien ne se passe quand je lance Foulée.", r: () => `<p>Il tourne sans doute déjà : cherche son icône près de l'horloge (dans la flèche « ^ »), puis clique dessus pour ouvrir l'interface. Si rien n'y fait, le journal de l'application (<code>app.log</code>, dans le sous-dossier <code>logs</code> du dossier des données) aide à comprendre : signale-le avec <a href="#/retours?type=bug">un bug ? Parles-en !</a></p>` },
+      { id: "adresse", q: "L'adresse 127.0.0.1:8770 ne répond pas.", r: () => `<p>Foulée n'est peut-être pas lancé : menu Démarrer → Foulée. Si le port 8770 est pris par un autre programme, Foulée en prend un autre et ouvre la bonne adresse tout seul.</p>` },
+      { id: "desinstaller", q: "Comment désinstaller Foulée ?", r: () => `<p>Paramètres de Windows → Applications → Foulée → Désinstaller. Foulée te demande s'il faut aussi effacer tes données : réponds « Non » pour les garder, par exemple pour réinstaller plus tard.</p>` },
+    ],
+  },
+  {
+    id: "vie-privee", titre: "Vie privée et sécurité", icone: "eye",
+    questions: [
+      { id: "internet", q: "Mes données partent-elles sur Internet ?", r: () => `<p>Elles restent sur ta machine. Foulée ne contacte que Garmin (pour les récupérer), GitHub (pour les mises à jour) et le fond de carte choisi (OpenStreetMap ou IGN, à couper dans ${reglages("synchro", "Réglages → Synchro et calculs")}). Un signalement de bug ne part que si tu cliques pour l'envoyer.</p>` },
+      { id: "acces", q: "Qui peut ouvrir mon Foulée ?", r: () => `<p>Sur le PC, toi seul : l'interface n'écoute que la machine elle-même. Sur un serveur, tes appareils reliés par Tailscale, et ceux de la maison s'ils connaissent le mot de passe du réseau local.</p>` },
+      { id: "export", q: "Que contient un export de réglages ?", r: () => `<p>Tes réglages (VMA, FC, objectif, horaires, zones…), tes vues et ta photo si tu la joins. Jamais ta clé Garmin, ni ton mot de passe, ni ton jeton GitHub.</p>` },
+      { id: "signalement", q: "Que contient un signalement de bug ?", r: () => `<p>Ce que tu écris, tes captures, et si tu le laisses coché, quelques informations techniques (version de Foulée, système, navigateur, page affichée). Tu vois le texte exact avant de l'envoyer.</p>` },
+    ],
+  },
+  {
+    id: "retours", titre: "Aide, bugs et idées", icone: "help",
+    questions: [
+      { id: "signaler", q: "Comment signaler un bug ou proposer une idée ?", r: () => `<p>Le bouton <a href="#/retours">« Un bug, une idée ? Parles-en ! »</a>, en bas de la colonne de gauche (menu ☰ sur téléphone), ouvre un formulaire : un titre, ton message, tes captures d'écran. Foulée met le tout en forme, puis ouvre GitHub pour l'envoyer.</p>` },
+      { id: "github", q: "GitHub et ses « issues », c'est quoi ?", r: (b) => `<p>GitHub est le site où vit le code de Foulée. Son onglet ${ext(`https://github.com/${b.retours?.depot || "willyl02/foulee"}/issues`, "Issues")} (« sujets ») rassemble les bugs signalés et les idées proposées, chacun avec sa discussion. Avant d'écrire, cherche si ton sujet y est déjà : un 👍 ou un commentaire sur un sujet existant aide plus qu'un doublon.</p>` },
+      { id: "compte", q: "Faut-il un compte GitHub ?", r: (b) => `<p>Pour écrire un sujet, oui : il est gratuit (github.com → « Sign up »). Pour lire, non, dès que le dépôt est public.${b.retours?.email ? " Sans compte, tu peux aussi envoyer ton message par e-mail depuis le formulaire." : ""}</p>` },
+    ],
+  },
+];
+
+const fold = (text) => String(text || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+const plain = (html) => html.replace(/<[^>]+>/g, " ").replace(/&[a-z]+;/g, " ");
+// Mots trop courants pour départager deux questions
+const STOP = new Set(("avec dans pour plus moins sans sous elle elles nous vous leur leurs mais donc comme comment pourquoi "
+  + "quand quel quelle quels quelles quoi faut fait faire peut peux veux suis sont etre avoir cette celle celui ceux tout "
+  + "tous toute toutes alors aussi encore deja bien tres trop foulee marche marcher fonctionne probleme souci rien jamais "
+  + "toujours plus").split(" "));
+// Recherche tolérante : sans accents, et sur le début des mots longs (« refusée » trouve « refuse »,
+// « synchronisation » trouve « synchro », « zones » trouve « zone »)
+const stem = (w) => (w.length > 6 ? w.slice(0, 6) : w.length > 4 ? w.replace(/(e?s|x|e)$/, "") : w);
+const terms = (text) => fold(text).split(/[^a-z0-9]+/).filter((w) => w.length >= 2).map(stem);
+const words = (text) => fold(text).split(/[^a-z0-9]+/).filter((w) => w.length >= 3 && !STOP.has(w)).map(stem);
+
+/** Toutes les questions à plat : { cat, item, id, html, texte }. */
+function entries(boot) {
+  return FAQ.flatMap((cat) => cat.questions.map((item) => {
+    const html = item.r(boot);
+    return { cat, item, id: `${cat.id}-${item.id}`, html, question: fold(item.q), texte: fold(`${item.q} ${plain(html)} ${cat.titre}`) };
+  }));
+}
+
+/** Questions de l'aide proches d'un texte (titre d'un signalement) : les plus pertinentes d'abord. */
+export function suggest(text, boot, limit = 3) {
+  const wanted = [...new Set(words(text))];
+  if (!wanted.length) return [];
+  return entries(boot).map((e) => {
+    let score = 0;
+    wanted.forEach((w) => { if (e.question.includes(w)) score += 2; else if (e.texte.includes(w)) score += 1; });
+    return { ...e, score };
+  }).filter((e) => e.score >= (wanted.length > 2 ? 2 : 1))
+    .sort((a, b) => b.score - a.score).slice(0, limit);
+}
+
+/** Page d'aide : thèmes, questions dépliables, recherche ; #/aide?q=…, ?theme=…, ?question=… */
+export function renderHelp(page, boot, { query = "", theme = "", question = "" } = {}) {
+  const all = entries(boot);
+  page.innerHTML = `
+    <header class="head"><div><h1>Aide et questions fréquentes</h1>
+      <div class="head-sub">${all.length} questions rangées par thème : clique sur une question pour lire la réponse, ou cherche un mot.</div></div></header>
+    <div class="faq">
+      <div class="faq-tools">
+        <label class="search-field">${icon("search")}<input type="search" data-search placeholder="Chercher : clé, synchro, zones, VMA, téléphone…" aria-label="Chercher dans l'aide" value="${F.escape(query)}"></label>
+        <button class="btn btn-ghost" type="button" data-all aria-pressed="false">${icon("list")}<span>Tout déplier</span></button>
+      </div>
+      <nav class="faq-cats" aria-label="Thèmes">${FAQ.map((c) => `<a href="#/aide?theme=${c.id}" data-cat="${c.id}">${icon(c.icone)}<span>${F.escape(c.titre)}</span></a>`).join("")}</nav>
+      <p class="faq-count" data-count aria-live="polite"></p>
+      ${FAQ.map((c) => `<section class="faq-cat" id="faq-${c.id}" data-cat-section="${c.id}">
+        <h2>${icon(c.icone)}${F.escape(c.titre)}</h2>
+        ${all.filter((e) => e.cat === c).map((e) => `<details class="faq-item" id="faq-${e.id}" data-text="${F.escape(e.texte)}">
+            <summary><span>${F.escape(e.item.q)}</span>${icon("chevron")}</summary><div class="faq-answer">${e.html}</div></details>`).join("")}
+      </section>`).join("")}
+      <p class="faq-empty" data-empty hidden>Aucune question ne correspond à ta recherche. Pose-la : <a href="#/retours?type=question">une question ? Parles-en !</a></p>
+      <div class="callout faq-foot"><b>Pas trouvé ta réponse ?</b>
+        <p>Raconte ce qui coince ou ce qui te manque : <a href="#/retours">un bug, une idée ? Parles-en !</a></p></div>
+    </div>`;
+
+  const search = page.querySelector("[data-search]");
+  const toggle = page.querySelector("[data-all]");
+  const count = page.querySelector("[data-count]");
+  const items = [...page.querySelectorAll(".faq-item")];
+  const setToggle = (open) => {
+    toggle.setAttribute("aria-pressed", String(open));
+    toggle.querySelector("span").textContent = open ? "Tout replier" : "Tout déplier";
+  };
+  const filter = () => {
+    const wanted = terms(search.value);
+    let shown = 0;
+    page.querySelectorAll("[data-cat-section]").forEach((section) => {
+      let inSection = 0;
+      section.querySelectorAll(".faq-item").forEach((item) => {
+        const ok = wanted.every((w) => item.dataset.text.includes(w));
+        item.hidden = !ok;
+        item.open = ok && wanted.length > 0;
+        if (ok) inSection += 1;
+      });
+      section.hidden = !inSection;
+      shown += inSection;
+    });
+    page.querySelector("[data-empty]").hidden = shown > 0;
+    page.querySelector(".faq-cats").hidden = wanted.length > 0;
+    count.textContent = wanted.length ? (shown ? `${shown} question${shown > 1 ? "s" : ""} trouvée${shown > 1 ? "s" : ""}` : "") : "";
+    setToggle(wanted.length > 0 && shown > 0);
+  };
+  search.addEventListener("input", filter);
+  toggle.addEventListener("click", () => {
+    const open = toggle.getAttribute("aria-pressed") !== "true";
+    items.filter((item) => !item.hidden).forEach((item) => { item.open = open; });
+    setToggle(open);
+  });
+  page.querySelector(".faq-cats").addEventListener("click", (e) => {
+    const link = e.target.closest("[data-cat]");
+    if (!link) return;
+    e.preventDefault();
+    page.querySelector(`#faq-${link.dataset.cat}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+  if (query) filter();
+  const target = question ? page.querySelector(`#faq-${CSS.escape(question)}`) : theme ? page.querySelector(`#faq-${CSS.escape(theme)}`) : null;
+  if (target) {
+    if (target.tagName === "DETAILS") target.open = true;
+    requestAnimationFrame(() => target.scrollIntoView({ block: "start" }));
+  }
+}

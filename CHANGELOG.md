@@ -4,6 +4,12 @@ Les versions « bêta » (par exemple 0.4.0b1) sont des avant-premières : elles
 sur le canal bêta (Réglages → Mises à jour → « Recevoir les versions bêta »), puis sortent en
 version stable une fois éprouvées.
 
+## 0.5.0b2 — 11 novembre 2026 (bêta)
+
+- **Aide et FAQ**, en bas de la colonne de gauche : 68 questions rangées en 11 thèmes (premiers pas, clé Garmin, synchro et données, tableaux de bord, entraînement et calculs, horaires de travail, Claude Desktop, téléphone et serveur, installation et mises à jour, vie privée, aide et retours). Un chevron déplie chaque réponse ; recherche sans accents (« cle refusee » trouve « clé refusée ») ; liens directs vers la bonne rubrique des réglages.
+- **« Un bug, une idée ? Parles-en ! »** : un formulaire pour signaler un bug, proposer une idée ou poser une question, avec un titre, un message et des captures d'écran (glissées, collées avec Ctrl+V ou choisies, cinq au plus). Il propose d'abord les réponses de l'aide qui ressemblent au titre, explique ce qu'on trouve sur la page des sujets GitHub (ouverts, fermés, étiquettes, recherche, 👍 plutôt qu'un doublon), joint si tu le veux quelques informations techniques lisibles avant l'envoi (version, système, navigateur, page d'origine, état de la clé et de la synchro ; jamais la clé ni le chemin du dossier), puis ouvre GitHub avec le sujet déjà rempli. Chaque capture se copie ou se télécharge pour la coller sur GitHub. Le brouillon est gardé si tu vas voir l'aide entre-temps.
+- Sur GitHub, l'étiquette (bug, enhancement, question) se pose toute seule d'après le début du titre des sujets préparés par Foulée.
+
 ## 0.5.0b1 — 10 novembre 2026 (bêta)
 
 - **Page d'accueil** en tête des vues : bonjour (ta photo, ton poste du jour, ton objectif), forme du jour (FC de repos, VFC, sommeil, Body Battery, fraîcheur, SpO2, chacun face à tes habitudes, avec une phrase de synthèse), ta semaine (postes, séances, volume et charge face aux 4 semaines d'avant), records, Body Battery de la journée.

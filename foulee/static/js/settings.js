@@ -117,6 +117,10 @@ export function renderSettings(page, boot, { onSaved, onProfile, refreshBoot, to
           <dt>Contenu</dt><dd>${F.int(boot.volumes.activities)} séances, ${F.int(boot.volumes.daily)} valeurs quotidiennes, ${F.int(boot.volumes.streams)} séances avec courbes</dd>
           <dt>Depuis le</dt><dd>${boot.premiere_date ? F.dateLong(boot.premiere_date, { year: true }) : "–"}</dd>
         </dl>
+        <div class="inline-actions">
+          <a class="btn" href="#/aide">${icon("help")}Aide et questions fréquentes</a>
+          <a class="btn" href="#/retours">${icon("feedback")}Un bug, une idée ? Parles-en !</a>
+        </div>
         ${boot.acces === "local" && !boot.demo ? `<p class="hint"><a href="#/bienvenue">Revoir la page d'accueil</a> (clé, premier import, Claude Desktop).</p>` : ""}
       </section>
     </div>`;

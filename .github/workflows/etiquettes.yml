@@ -1,0 +1,39 @@
+# Étiquette chaque nouveau sujet d'après le début de son titre, tel que le prépare le formulaire
+# « Un bug, une idée ? » de Foulée : « Bug : … », « Idée : … », « Question : … ».
+# Foulée ne peut pas mettre l'étiquette dans l'adresse du sujet : pour qui n'est pas membre du dépôt,
+# GitHub répondrait « 404 ». Pas de modèles de sujets non plus : GitHub montrerait une page de choix
+# au lieu du formulaire déjà rempli.
+# (Les événements « issues » utilisent ce fichier tel qu'il est sur la branche par défaut, main.)
+name: Étiquettes des sujets
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  issues: write
+
+jobs:
+  etiqueter:
+    name: Étiquette d'après le titre
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Étiquette
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TITRE: ${{ github.event.issue.title }}
+          NUMERO: ${{ github.event.issue.number }}
+        run: |
+          shopt -s nocasematch
+          label=""
+          if [[ "$TITRE" =~ ^[[:space:]]*bug[[:space:]]*: ]]; then label="bug"
+          elif [[ "$TITRE" =~ ^[[:space:]]*id(e|é|É)e[[:space:]]*: ]]; then label="enhancement"
+          elif [[ "$TITRE" =~ ^[[:space:]]*question[[:space:]]*: ]]; then label="question"
+          fi
+          if [ -n "$label" ]; then
+            gh issue edit "$NUMERO" --repo "$GITHUB_REPOSITORY" --add-label "$label"
+            echo "Étiquette « $label » posée sur le sujet n° $NUMERO."
+          else
+            echo "Titre sans préfixe connu : pas d'étiquette."
+          fi

@@ -130,6 +130,20 @@ Les **Réglages** contiennent :
   l'installation : clé Garmin, dossier des données, Claude Desktop, démarrage avec
   Windows et mises à jour.
 
+**Aide et retours**, en bas de la colonne de gauche (menu ☰ sur téléphone) :
+
+- **Aide et FAQ** : les questions les plus courantes, rangées par thème (premiers
+  pas, clé Garmin, synchro, tableaux de bord, calculs, horaires, Claude Desktop,
+  téléphone, installation, vie privée), avec une recherche et des liens directs vers
+  la bonne rubrique des réglages ;
+- **Un bug, une idée ? Parles-en !** : un formulaire (titre, message, captures
+  d'écran glissées, collées ou choisies). Il propose d'abord les réponses de l'aide
+  qui ressemblent à ton titre, explique ce qu'on trouve sur la page des sujets GitHub
+  du projet, joint si tu le veux quelques informations techniques (version, système,
+  navigateur, état de la clé et de la synchro : jamais ta clé, tes mesures ni le
+  chemin de ton dossier), puis ouvre GitHub avec le sujet déjà rempli : il reste à
+  y coller tes captures et à valider. Rien ne part sans ton clic.
+
 **Sauvegarde des réglages** : chaque installation (le PC, le serveur) garde ses
 propres réglages. « Exporter mes réglages » les met dans un fichier (avec tes vues et
 ta photo) ; « Importer des réglages… » les reprend sur l'autre installation. La clé
@@ -370,6 +384,10 @@ Pour développer : `uv sync`, puis `uv run pytest` (tests) et `uv run foulee web
 
 ## 12. Dépannage
 
+Commence par **Aide et FAQ**, dans la colonne de gauche de l'interface ; pour
+signaler un problème, **Un bug, une idée ? Parles-en !** prépare le sujet GitHub
+avec les informations utiles.
+
 - **Rien ne se passe quand je lance Foulée** : il tourne peut-être déjà ; regarde près
   de l'horloge (flèche « ^ »). Journal : `%LOCALAPPDATA%\Foulee\donnees\logs\app.log`.
 - **Claude ne voit pas Foulée** : **Réglages → Claude Desktop** indique si Foulée est
@@ -420,6 +438,7 @@ foulee/
   desktop.py       application Windows : icône près de l'horloge, synchro auto, une seule copie
   web.py           API locale + pages, accès réseau, clé, dossier, Claude, mises à jour
   updates.py       mises à jour (versions GitHub du PC, canaux stable et bêta)
+  retours.py       aide et retours : adresses des sujets GitHub, dépôt public ou privé
   datadir.py       dossier des données : déplacer, utiliser, importer
   claude_desktop.py  configuration de Claude Desktop (toutes ses variantes)
   vault.py         secrets : clé Garmin, jeton GitHub (Gestionnaire d'identification Windows)

@@ -43,6 +43,7 @@ from . import (
     metrics,
     profile,
     reglages,
+    retours,
     schedule,
     updates,
     vault,
@@ -232,6 +233,7 @@ def create_app() -> FastAPI:
                 "maj": update_dir() is not None,
                 "volumes": db.table_counts(conn),
                 "premiere_date": conn.execute("SELECT MIN(date) AS d FROM daily").fetchone()["d"],
+                "retours": retours.info(),
             }
 
     # ------------------------------------------------------------ séries & co
@@ -331,6 +333,11 @@ def create_app() -> FastAPI:
             raise HTTPException(400, f"Donnée inconnue : {donnee}")
         with db.session() as conn:  # écriture : la réponse de Garmin est gardée pour la prochaine fois
             return intraday.day_detail(conn, donnee, _day(day) or date.today())
+
+    @app.get("/api/retours")
+    def get_feedback_info() -> dict:
+        """Où envoyer un retour, et si la page des sujets GitHub s'ouvre pour tout le monde."""
+        return {**retours.info(), "visibilite": retours.visibility()}
 
     @app.get("/api/garmin/champs")
     def get_raw_fields() -> dict:

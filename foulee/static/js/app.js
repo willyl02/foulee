@@ -3,6 +3,8 @@ import * as api from "./api.js";
 import * as C from "./charts.js";
 import * as E from "./editor.js";
 import * as F from "./format.js";
+import { renderHelp } from "./faq.js";
+import { renderFeedback } from "./feedback.js";
 import { icon } from "./icons.js";
 import { brandMark, setFavicon } from "./logos.js";
 import { renderSettings } from "./settings.js";
@@ -27,6 +29,7 @@ const THEME_LABELS = { auto: "Thème : automatique", light: "Thème : clair", da
 const state = {
   boot: null, catalog: {}, types: {}, views: [], viewId: null, days: 90, editing: false,
   activityId: null, pass: { token: 0, disposers: [] }, syncTimer: null, dragIndex: null,
+  fromHash: "",  // dernière page visitée avant le formulaire de retours (jointe au signalement)
 };
 
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -98,6 +101,9 @@ function setupChrome() {
   $("#sync-btn").addEventListener("click", startSync);
   $("#settings-btn").innerHTML = `${icon("settings")}Réglages`;
   $("#settings-btn").addEventListener("click", () => { location.hash = "#/reglages"; closeMenu(); });
+  $("#help-link").innerHTML = `${icon("help")}<span>Aide et FAQ</span>`;
+  $("#feedback-link").innerHTML = `${icon("feedback")}<span><b>Un bug, une idée ?</b><small>Parles-en !</small></span>`;
+  document.querySelectorAll("#help-link, #feedback-link").forEach((link) => link.addEventListener("click", closeMenu));
   $("#menu-btn").innerHTML = icon("menu");
   $("#menu-btn").addEventListener("click", () => $("#rail").classList.toggle("open"));
   $("#theme-btn").addEventListener("click", cycleTheme);
@@ -182,7 +188,7 @@ function cycleTheme() {
 function renderNav() {
   const nav = $("#nav");
   nav.innerHTML = state.views.map((v, i) => `<button class="nav-item" type="button" data-id="${F.escape(v.id)}" data-index="${i}"
-      ${v.id === state.viewId && !isSettings() ? 'aria-current="page"' : ""} ${state.editing ? 'draggable="true"' : ""}>
+      ${v.id === state.viewId && !isOtherPage() ? 'aria-current="page"' : ""} ${state.editing ? 'draggable="true"' : ""}>
       ${icon(v.icon)}<span>${F.escape(v.name)}</span><span class="blaze" aria-hidden="true"></span></button>`).join("")
     + `<button class="nav-item nav-add" type="button" data-new>${icon("plus")}<span>Nouvelle vue</span></button>`;
   nav.querySelectorAll("[data-id]").forEach((b) => {
@@ -208,13 +214,27 @@ function wireNavDrag(item) {
   });
 }
 
-function isSettings() { return location.hash.startsWith("#/reglages") || location.hash.startsWith("#/bienvenue"); }
+function isSettings() { return location.hash.startsWith("#/reglages"); }
+/** Une page qui n'est pas une vue : réglages, bienvenue, aide, retours. */
+function isOtherPage() { return /^#\/(reglages|bienvenue|aide|retours)/.test(location.hash); }
+
+function markRailLinks(path) {
+  [["#help-link", "/aide"], ["#feedback-link", "/retours"]].forEach(([selector, page]) => {
+    if (path === page) $(selector).setAttribute("aria-current", "page");
+    else $(selector).removeAttribute("aria-current");
+  });
+}
 
 function route() {
   const [path, query] = location.hash.slice(1).split("?");
+  const params = new URLSearchParams(query || "");
   $("#demo-strip").hidden = path === "/bienvenue";  // l'accueil dit déjà tout
-  if (path === "/reglages") { showSettings(new URLSearchParams(query || "").get("section")); return; }
+  markRailLinks(path);
+  if (path !== "/retours") state.fromHash = location.hash;
+  if (path === "/reglages") { showSettings(params.get("section")); return; }
   if (path === "/bienvenue") { showWelcome(); return; }
+  if (path === "/aide") { showHelp(params); return; }
+  if (path === "/retours") { showFeedback(params); return; }
   const match = path.match(/^\/vue\/([^/]+)/);
   const wanted = match ? decodeURIComponent(match[1]) : null;
   const view = state.views.find((v) => v.id === wanted) || state.views[0];
@@ -228,7 +248,8 @@ function route() {
 function currentView() { return state.views.find((v) => v.id === state.viewId); }
 
 function rerender() {
-  if (location.hash.startsWith("#/bienvenue")) return;  // formulaires en cours : on ne redessine pas
+  // Formulaires en cours (bienvenue, retours) ou texte sans graphique (aide) : on ne redessine pas
+  if (/^#\/(bienvenue|aide|retours)/.test(location.hash)) return;
   if (isSettings()) showSettings(); else renderView();
 }
 
@@ -580,6 +601,30 @@ async function renderPicker(box) {
     const next = list[index + Number(b.dataset.step)];
     if (next) go(next.id);
   }));
+}
+
+// ============================================================== aide et retours
+function showHelp(params) {
+  disposePass();
+  state.editing = false;
+  closeMenu();
+  renderNav();
+  window.scrollTo(0, 0);
+  renderHelp($("#page"), state.boot, { query: params.get("q") || "", theme: params.get("theme") || "", question: params.get("question") || "" });
+}
+
+function showFeedback(params) {
+  disposePass();
+  state.editing = false;
+  closeMenu();
+  renderNav();
+  window.scrollTo(0, 0);
+  renderFeedback($("#page"), state.boot, {
+    toast,
+    from: state.fromHash,
+    kind: params.get("type") || "",
+    keep: (disposable) => state.pass.disposers.push(disposable),
+  });
 }
 
 // =================================================================== réglages
