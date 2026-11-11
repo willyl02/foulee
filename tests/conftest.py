@@ -31,4 +31,9 @@ def isolated(tmp_path, monkeypatch):
 
     monkeypatch.setattr(config, "_process_profile", None)
     monkeypatch.setattr(config, "_access_check", None)
+    # Alerte « nouvelle version » : aucun résultat ne passe d'un test à l'autre
+    from foulee import updates
+
+    updates.WATCH.forget()
     yield tmp_path
+    updates.WATCH.forget()

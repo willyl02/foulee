@@ -7,6 +7,7 @@ import { renderHelp } from "./faq.js";
 import { renderFeedback } from "./feedback.js";
 import { icon } from "./icons.js";
 import { brandMark, setFavicon } from "./logos.js";
+import { startUpdateAlert } from "./maj.js";
 import { renderSettings } from "./settings.js";
 import { renderChooser, whoButton, wireWho } from "./users.js";
 import { renderWelcome } from "./welcome.js";
@@ -73,6 +74,8 @@ async function start() {
   }
   state.days = Number(store("foulee-period")) || 90;
   setupChrome();
+  // « Une nouvelle version est disponible ! » en haut à droite (GitHub revérifié toutes les 3 heures)
+  startUpdateAlert($("#update-alert"), () => state.boot);
   // Premier lancement (ni clé, ni données) : la page d'accueil guide pas à pas
   if (needsWelcome() && (!location.hash || location.hash === "#/")) history.replaceState(null, "", "#/bienvenue");
   window.addEventListener("hashchange", route);

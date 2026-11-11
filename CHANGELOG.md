@@ -4,6 +4,13 @@ Les versions « bêta » (par exemple 0.4.0b1) sont des avant-premières : elles
 sur le canal bêta (Réglages → Mises à jour → « Recevoir les versions bêta »), puis sortent en
 version stable une fois éprouvées.
 
+## 0.5.1b2 — 11 novembre 2026 (bêta)
+
+- **« Une nouvelle version est disponible ! »** en haut à droite de l'interface, dès qu'une version plus récente sort sur ton canal (stable ou bêta). Foulée regarde sur GitHub toutes les 3 heures, comme pour la synchro, et une vérification lancée depuis les Réglages met l'alerte à jour aussitôt.
+- Un clic sur l'alerte montre la version, sa date et ses nouveautés, avec **Installer maintenant** (Foulée se ferme, s'installe et se relance tout seul, puis la page se recharge) ou **Voir dans les Réglages**. Rien ne s'installe sans ta confirmation ; depuis un autre profil que le principal, l'alerte renvoie vers lui.
+- GitHub injoignable (pas d'Internet) : nouvel essai une demi-heure plus tard, sans message d'erreur dans l'interface.
+- Aide : nouvelle question « Comment savoir qu'une nouvelle version est sortie ? ».
+
 ## 0.5.1b1 — 11 novembre 2026 (bêta)
 
 - **Mon club** : dans Réglages → Mon club, coche « Je fais partie d'un club » et saisis le numéro de club de ta licence (« N° Club », 6 chiffres). Une vue « Mon club » s'ajoute juste après l'Accueil :

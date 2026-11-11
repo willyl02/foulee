@@ -3,8 +3,8 @@
 import * as api from "./api.js";
 import * as F from "./format.js";
 import { icon } from "./icons.js";
+import { installUpdate, noAnswer as noUpdateAnswer, refreshUpdateAlert, waitFor } from "./maj.js";
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const CLAUDE_DOWNLOAD = "https://claude.ai/download";
 const GITHUB_TOKEN_PAGE = "https://github.com/settings/personal-access-tokens/new";
 
@@ -487,6 +487,7 @@ async function updatesPanel(box, boot, { toast }) {
       info.canal = canal;
       body.innerHTML = "";
       toast(canal === "beta" ? "Canal bêta activé : vérifie les mises à jour pour installer la dernière bêta." : "Retour au canal stable.");
+      refreshUpdateAlert();  // l'alerte du haut suit le nouveau canal
     } catch (err) {
       event.target.checked = !event.target.checked;
       toast(err.message, { error: true });
@@ -494,49 +495,18 @@ async function updatesPanel(box, boot, { toast }) {
   });
   if (info.mode === "exe") wireToken(box, info, { toast, refresh: () => updatesPanel(box, boot, { toast }) });
 
-  // Attend un état postérieur à la demande (écrit par le service du serveur, ou par l'application)
-  async function waitFor(since, finals, onProgress, timeoutMs) {
-    const end = Date.now() + timeoutMs;
-    while (Date.now() < end) {
-      await sleep(1200);
-      let res;
-      try { res = await api.get("/api/maj", null, { fresh: true }); } catch (err) { continue; }
-      const st = res.etat;
-      if (!st || st.horodatage < since) continue;
-      onProgress?.(st);
-      if (finals.includes(st.statut)) return st;
-    }
-    return null;
-  }
-  const noAnswer = info.mode === "serveur"
-    ? "Le service de mise à jour ne répond pas. Lance une fois la mise à jour en SSH (voir le README), puis réessaie."
-    : "Pas de réponse : réessaie dans un instant.";
+  const noAnswer = noUpdateAnswer(info.mode);
 
   async function install() {
     button.disabled = true;
     body.innerHTML = `<p class="computed" data-maj-progress>Demande envoyée…</p>`;
     const progress = body.querySelector("[data-maj-progress]");
     try {
-      const req = await api.post("/api/maj", { action: "installer" });
-      const st = await waitFor(req.horodatage, ["termine", "erreur"], (s) => { progress.textContent = s.message; }, 20 * 60 * 1000);
-      if (!st || st.statut === "erreur") {
-        progress.textContent = st ? `✗ ${st.message}` : noAnswer;
+      const failed = await installUpdate({ mode: info.mode, boot, onProgress: (s) => { progress.textContent = s.message; } });
+      if (failed) {
+        progress.textContent = `✗ ${failed.message}`;
         button.disabled = false;
-        return;
       }
-      progress.textContent = info.mode === "exe"
-        ? "Foulée se ferme, s'installe et se relance tout seul : cette page se rechargera d'elle-même (une minute environ)."
-        : st.message;
-      // Redémarrage : on recharge la page dès que Foulée répond de nouveau
-      const end = Date.now() + 5 * 60 * 1000;
-      while (Date.now() < end) {
-        await sleep(2000);
-        try {
-          const fresh = await api.get("/api/bootstrap", null, { fresh: true });
-          if (fresh.demarre_le !== boot.demarre_le) break;
-        } catch (err) { /* redémarrage en cours */ }
-      }
-      setTimeout(() => location.reload(), 600);
     } catch (err) {
       progress.textContent = `✗ ${err.message}`;
       button.disabled = false;
@@ -549,6 +519,7 @@ async function updatesPanel(box, boot, { toast }) {
     try {
       const req = await api.post("/api/maj", { action: "verifier" });
       const st = await waitFor(req.horodatage, ["verifie", "erreur"], null, 90 * 1000);
+      refreshUpdateAlert();
       if (!st) {
         body.innerHTML = `<p class="computed">${F.escape(noAnswer)}</p>`;
       } else if (st.statut === "erreur") {

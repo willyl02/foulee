@@ -202,3 +202,81 @@ def test_release_notes_come_from_the_changelog():
     assert f"Foulee-Setup-{__version__}.exe" in text
     shown = updates._notes(text)  # ce que Foulée affiche dans « Au programme »
     assert shown and not any("Exécuter quand même" in line or "SHA256SUMS" in line for line in shown)
+
+
+# ------------------------------------------------- alerte « nouvelle version »
+def test_update_watch_asks_github_every_three_hours_at_most():
+    calls = []
+
+    def check():
+        calls.append(1)
+        return {"disponible": "0.6.0", "retard": 1, "nouveautes": ["Nouveauté"], "_meilleure": {"privé": True}}
+
+    watch = updates.UpdateWatch()
+    first = watch.state("stable", check, wait=5)
+    assert first["ok"] and first["disponible"] == "0.6.0" and "_meilleure" not in first and len(calls) == 1
+    assert watch.state("stable", check, wait=5)["disponible"] == "0.6.0" and len(calls) == 1  # moins de 3 h : rien
+    watch._stamp -= updates.CHECK_EVERY + 1  # 3 heures plus tard
+    watch.state("stable", check, wait=5)
+    assert len(calls) == 2
+    assert watch.state("beta", check, wait=5)["ok"] and len(calls) == 3  # changement de canal : on revérifie
+    assert updates.CHECK_EVERY == 3 * 3600
+
+
+def test_update_watch_retries_sooner_after_a_failure():
+    calls = []
+
+    def offline():
+        calls.append(1)
+        raise updates.UpdateError("GitHub injoignable")
+
+    watch = updates.UpdateWatch()
+    failed = watch.state("stable", offline, wait=5)
+    assert failed["ok"] is False and "injoignable" in failed["message"]
+    watch.state("stable", offline, wait=5)
+    assert len(calls) == 1
+    watch._stamp -= updates.RETRY_AFTER + 1  # 30 minutes plus tard, pas 3 heures
+    watch.state("stable", offline, wait=5)
+    assert len(calls) == 2
+
+
+def releases_asked(github):
+    return sum(1 for url, _ in github["calls"] if url.endswith("/releases"))
+
+
+def test_alert_api(github, monkeypatch):
+    monkeypatch.setattr(updates, "mode", lambda: "exe")
+    monkeypatch.setattr(updates, "__version__", "0.3.0")
+    monkeypatch.setattr(web, "__version__", "0.3.0")
+    client = TestClient(web.create_app())
+    calm = client.get("/api/maj/alerte").json()  # canal stable : 0.3.0 est la dernière
+    assert calm["nouvelle"] is False and calm["canal"] == "stable" and calm["installee"] == "0.3.0"
+
+    client.put("/api/settings", json={"canal_maj": "beta"}, headers=WRITE)
+    alert = client.get("/api/maj/alerte").json()
+    assert alert["nouvelle"] is True and alert["version"] == "0.4.0b2" and alert["beta"] is True
+    assert alert["nouveautes"] == ["Bouton bêta", "Plus rapide"] and alert["peut_installer"] is True
+    asked = releases_asked(github)
+    for _ in range(3):  # l'interface redemande souvent : GitHub, lui, n'est revu qu'au bout de 3 heures
+        client.get("/api/maj/alerte")
+    assert releases_asked(github) == asked
+
+    monkeypatch.setattr(updates, "mode", lambda: "dev")
+    assert client.get("/api/maj/alerte").json()["peut_installer"] is False  # installé à la main : pas d'installation d'un clic
+
+
+def test_a_check_from_the_settings_updates_the_alert(github, monkeypatch):
+    monkeypatch.setattr(updates, "mode", lambda: "exe")
+    monkeypatch.setattr(updates, "__version__", "0.3.0")
+    monkeypatch.setattr(web, "__version__", "0.3.0")
+    client = TestClient(web.create_app())
+    client.put("/api/settings", json={"canal_maj": "beta"}, headers=WRITE)
+    sent = client.post("/api/maj", json={"action": "verifier"}, headers=WRITE).json()
+    for _ in range(100):
+        state = client.get("/api/maj").json()["etat"]
+        if state and state["statut"] != "en_cours" and state["horodatage"] >= sent["horodatage"]:
+            break
+        time.sleep(0.02)
+    asked = releases_asked(github)
+    alert = client.get("/api/maj/alerte").json()
+    assert alert["nouvelle"] and alert["version"] == "0.4.0b2" and releases_asked(github) == asked  # déjà connu

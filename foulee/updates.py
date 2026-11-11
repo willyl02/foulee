@@ -36,6 +36,8 @@ LOG = logging.getLogger("foulee.maj")
 REPO_DEFAULT = "willyl02/foulee"
 API = "https://api.github.com"
 CHANNELS = ("stable", "beta")
+CHECK_EVERY = 3 * 3600      # l'alerte de l'interface revérifie toutes les 3 heures, comme la synchro Garmin
+RETRY_AFTER = 30 * 60       # GitHub injoignable (pas d'Internet…) : nouvel essai plus tôt
 ASSET_PATTERN = re.compile(r"^Foulee-Setup-[\w.\-]+\.exe$")
 SUMS_NAME = "SHA256SUMS.txt"
 _VERSION = re.compile(r"^v?(\d+)\.(\d+)(?:\.(\d+))?(?:[-.]?(a|alpha|b|beta|rc)[-.]?(\d+)?)?$", re.IGNORECASE)
@@ -228,6 +230,70 @@ def launch_installer(path: Path) -> None:
                      creationflags=flags, close_fds=True)
 
 
+# ------------------------------------------- alerte « nouvelle version »
+class UpdateWatch:
+    """Dernière vérification d'une nouvelle version, pour l'alerte en haut de l'interface.
+
+    L'interface la redemande régulièrement ; GitHub n'est interrogé que si elle date de plus de
+    3 heures (30 min après un échec), ou si le canal a changé. Une vérification faite depuis les
+    Réglages la remplace aussitôt.
+    """
+
+    def __init__(self, every: float = CHECK_EVERY, retry: float = RETRY_AFTER) -> None:
+        self.every, self.retry = every, retry
+        self._lock = threading.Lock()
+        self._result: dict | None = None
+        self._channel: str | None = None
+        self._stamp = 0.0
+        self._thread: threading.Thread | None = None
+
+    def remember(self, channel: str, info: dict | None, error: str | None = None) -> None:
+        with self._lock:
+            self._channel, self._stamp = channel, time.time()
+            if info is None:
+                self._result = {"ok": False, "message": error or "Vérification impossible."}
+            else:
+                self._result = {"ok": True, **{k: v for k, v in info.items() if not k.startswith("_")}}
+            self._result["verifie_le"] = self._stamp
+
+    def forget(self) -> None:
+        with self._lock:
+            self._result, self._channel, self._stamp = None, None, 0.0
+
+    def _stale(self, channel: str) -> bool:
+        if self._result is None or self._channel != channel:
+            return True
+        return time.time() - self._stamp >= (self.every if self._result.get("ok") else self.retry)
+
+    def state(self, channel: str, check: Callable[[], dict], wait: float = 0) -> dict | None:
+        """Le dernier résultat pour ce canal ; relance une vérification en arrière-plan s'il est périmé.
+
+        wait : attend jusqu'à ce nombre de secondes une vérification en cours (première ouverture).
+        """
+        with self._lock:
+            stale = self._stale(channel)
+            if stale and not (self._thread and self._thread.is_alive()):
+                self._thread = threading.Thread(target=self._run, args=(channel, check), daemon=True)
+                self._thread.start()
+            thread = self._thread
+        if stale and wait and thread:
+            thread.join(wait)
+        with self._lock:
+            return dict(self._result) if self._result and self._channel == channel else None
+
+    def _run(self, channel: str, check: Callable[[], dict]) -> None:
+        try:
+            self.remember(channel, check())
+        except UpdateError as exc:
+            self.remember(channel, None, str(exc))
+        except Exception as exc:  # l'alerte ne doit jamais faire tomber l'interface
+            LOG.warning("Vérification des mises à jour impossible : %s", exc)
+            self.remember(channel, None, f"Erreur inattendue : {exc}")
+
+
+WATCH = UpdateWatch()
+
+
 # ------------------------------------------------- sortie de l'application
 _exit_hook: Callable[[], None] | None = None
 
@@ -279,6 +345,7 @@ class LocalJob:
             token = vault.get_secret("github")
             self._set("en_cours", "Recherche d'une nouvelle version sur GitHub…", canal=channel)
             info = check(channel, token)
+            WATCH.remember(channel, info)  # l'alerte de l'interface suit aussitôt
             best = info.pop("_meilleure", None)
             message = info.pop("message")
             if action == "verifier" or not info["retard"] or best is None:

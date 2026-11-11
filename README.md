@@ -243,6 +243,12 @@ maintenant** télécharge l'installateur, vérifie son empreinte SHA-256, puis F
 ferme, s'installe et se relance tout seul (une minute environ) ; la page se recharge
 d'elle-même. Tes données, ta clé et tes vues ne bougent pas.
 
+Inutile d'y penser : Foulée regarde sur GitHub toutes les 3 heures (comme la synchro)
+et, dès qu'une version plus récente sort sur ton canal, **« Une nouvelle version est
+disponible ! »** s'affiche en haut à droite de l'interface. Un clic montre les
+nouveautés ; **Installer maintenant** lance la mise à jour après confirmation (depuis le
+profil principal), ou **Voir dans les Réglages** mène à cette section.
+
 - **Recevoir les versions bêta** (case à cocher) : les avant-premières arrivent sur
   ton PC avant tout le monde, pour les essayer. Décoche pour revenir au canal stable ;
   Foulée ne redescend jamais de version : tu repasses en stable à la prochaine version

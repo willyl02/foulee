@@ -842,6 +842,25 @@ def create_app() -> FastAPI:
             "jeton_github": bool(vault.get_secret("github")) if how == "exe" else None,
         }
 
+    @app.get("/api/maj/alerte")
+    def update_alert(request: Request) -> dict:
+        """« Une nouvelle version est disponible ! » : GitHub revérifié toutes les 3 heures au plus."""
+        how = updates.mode()
+        channel = update_channel()
+        info = updates.WATCH.state(channel, lambda: updates.check(channel, vault.get_secret("github")), wait=8)
+        principal = utilisateurs.is_principal(request.state.profil)
+        out = {"mode": how, "canal": channel, "installee": __version__, "nouvelle": False, "principal": principal,
+               "peut_installer": how in ("exe", "serveur") and principal, "verifie_le": (info or {}).get("verifie_le")}
+        if info and info.get("ok") and info.get("retard") and info.get("disponible"):
+            version = str(info["disponible"])
+            try:
+                beta = updates.is_prerelease(version)
+            except ValueError:
+                beta = False
+            out.update(nouvelle=True, version=version, beta=beta, nouveautes=list(info.get("nouveautes") or [])[:8],
+                       publiee_le=info.get("publiee_le") or None)
+        return out
+
     @app.post("/api/maj")
     def update_request(request: Request, payload: dict = Body(...)) -> dict:
         require_principal(request)

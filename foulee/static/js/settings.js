@@ -183,7 +183,7 @@ export function renderSettings(page, boot, { onSaved, onProfile, refreshBoot, to
   buildJumps(page);
   if (section) {
     const target = page.querySelector(`[data-section="${CSS.escape(section)}"]`);
-    if (target) requestAnimationFrame(() => target.scrollIntoView({ block: "start" }));
+    if (target) keepInView(page, target);
   }
 
   form.addEventListener("submit", async (e) => {
@@ -222,6 +222,23 @@ export function renderSettings(page, boot, { onSaved, onProfile, refreshBoot, to
       status.classList.add("error");
     }
   });
+}
+
+/**
+ * Amène une rubrique à l'écran (lien « …?section=maj ») et l'y garde pendant que les panneaux du dessus
+ * finissent de se charger (clé, dossier, Claude…), tant que l'utilisateur ne fait pas défiler lui-même.
+ */
+function keepInView(page, target) {
+  const events = ["wheel", "touchmove", "keydown", "mousedown"];
+  const stop = () => {
+    observer.disconnect();
+    events.forEach((name) => removeEventListener(name, stop));
+  };
+  const jump = () => (target.isConnected ? target.scrollIntoView({ block: "start" }) : stop());
+  const observer = new ResizeObserver(() => requestAnimationFrame(jump));
+  observer.observe(page);
+  events.forEach((name) => addEventListener(name, stop, { passive: true }));
+  setTimeout(stop, 4000);
 }
 
 // =============================================================== sommaire
