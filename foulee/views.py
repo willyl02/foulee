@@ -46,6 +46,11 @@ TILE_TYPES: list[dict[str, Any]] = [
         ],
     },
     {
+        "type": "club", "label": "Mon club", "icone": "club", "categorie": "Accueil",
+        "description": "Ton club FFA : coordonnées, site, ta licence, et son classement sur athle.fr en un clic.",
+        "taille": {"w": 12, "h": 3}, "params": [],
+    },
+    {
         "type": "semaine", "label": "Ta semaine", "icone": "calendar", "categorie": "Accueil",
         "description": "Les 7 jours de la semaine : postes, séances, volume et charge face aux 4 semaines d'avant.",
         "taille": {"w": 12, "h": 2}, "params": [],
@@ -228,7 +233,8 @@ TILE_TYPES: list[dict[str, Any]] = [
 TILE_INDEX = {t["type"]: t for t in TILE_TYPES}
 WIDTHS = (3, 4, 6, 8, 12)
 ICONS = ["home", "sun", "activity", "map", "moon", "flag", "heart", "chart", "calendar", "star", "bolt", "layers",
-         "run", "trophy", "clock", "user"]
+         "run", "trophy", "clock", "user", "club"]
+CLUB_VIEW = "club"
 
 
 def _tile(kind: str, w: int | None = None, h: int | None = None, titre: str | None = None, **params: Any) -> dict:
@@ -456,6 +462,26 @@ def delete_view(conn: sqlite3.Connection, view_id: str) -> bool:
     deleted = conn.execute("DELETE FROM views WHERE id = ?", (view_id,)).rowcount
     conn.commit()
     return bool(deleted)
+
+
+def club_view() -> dict:
+    return {"id": CLUB_VIEW, "name": "Mon club", "icon": "club", "spec": {"tuiles": [_tile("club")]}}
+
+
+def sync_club_view(conn: sqlite3.Connection, enabled: bool) -> None:
+    """La vue « Mon club » apparaît juste après l'Accueil quand on coche son club, et s'en va quand on décoche."""
+    exists = conn.execute("SELECT 1 FROM views WHERE id = ?", (CLUB_VIEW,)).fetchone()
+    if enabled and not exists:
+        home = conn.execute("SELECT position FROM views WHERE id = 'accueil'").fetchone()
+        position = (home["position"] + 1) if home else 0
+        conn.execute("UPDATE views SET position = position + 1 WHERE position >= ?", (position,))
+        view = club_view()
+        conn.execute(
+            "INSERT INTO views(id, name, icon, position, spec, builtin, updated_at) VALUES (?, ?, ?, ?, ?, 0, ?)",
+            (view["id"], view["name"], view["icon"], position, json.dumps(view["spec"], ensure_ascii=False), db.now_iso()),
+        )
+    elif not enabled and exists:
+        conn.execute("DELETE FROM views WHERE id = ?", (CLUB_VIEW,))
 
 
 def reorder_views(conn: sqlite3.Connection, ids: list[str]) -> None:

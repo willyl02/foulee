@@ -22,7 +22,7 @@ from typing import Any
 from mcp.server.mcpserver import MCPServer
 from mcp_types import ToolAnnotations
 
-from . import __version__, analysis, config, db, metrics, reglages, schedule, utilisateurs, vault, views
+from . import __version__, analysis, club, config, db, metrics, reglages, schedule, utilisateurs, vault, views
 from . import sync as sync_module
 from .garmin import intraday
 
@@ -486,9 +486,18 @@ def enregistrer_vue(nom: str, tuiles: list[dict[str, Any]], vue_id: str | None =
 # ----------------------------------------------------------------- réglages
 @mcp.tool(name="reglages", annotations=READ)
 def lire_reglages() -> dict[str, Any]:
-    """Réglages actuels (VMA, FC, objectif, horaires de travail, zones FC et d'allure…)."""
+    """Réglages actuels (VMA, FC, objectif, horaires de travail, zones FC et d'allure, club FFA…).
+
+    club_resume (si le club est coché) : saison FFA en cours, liens vers le classement du club sur athle.fr
+    (saison en cours et précédente), sa page, son site, et l'état de la licence (jours restants, à renouveler).
+    Foulée ne lit pas athle.fr : ces liens s'ouvrent dans le navigateur.
+    """
     with db.session(readonly=True) as conn:
-        return db.get_settings(conn)
+        settings = db.get_settings(conn)
+    summary = club.summary(settings.get("club"))
+    if summary:
+        settings["club_resume"] = {k: summary[k] for k in ("saison_label", "liens", "licence")}
+    return settings
 
 
 @mcp.tool(annotations=WRITE)
@@ -498,6 +507,8 @@ def modifier_reglages(changements: dict[str, Any]) -> dict[str, Any]:
     Un réglage composé est complété, pas remplacé : {"horaires": {"conges": [...]}} ne touche qu'aux congés.
     Zones : {"zones_fc": {"methode": "pct_reserve", "pct": [50, 60, 70, 80, 90]}} (méthodes garmin, pct_max,
     pct_reserve, pct_seuil, bornes) ; {"zones_allure": {"methode": "pct_vma", "pct": [70, 80, 88, 95]}}.
+    Club FFA : {"club": {"actif": true, "numero": "012345", "nom": "…"}} ajoute la vue « Mon club » (numéro de
+    club de la licence, 6 chiffres) ; {"club": {"actif": false}} la retire en gardant les informations.
     Les calculs dépendants (zones, TRIMP, charge) sont refaits aussitôt.
     """
     with db.session() as conn:

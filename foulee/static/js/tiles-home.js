@@ -1,5 +1,5 @@
 // Tuiles de la page d'accueil : bonjour, forme du jour, allures selon la VMA (tableau du club),
-// semaine, records, journée en détail.
+// semaine, records, journée en détail, mon club.
 import * as api from "./api.js";
 import * as C from "./charts.js";
 import * as F from "./format.js";
@@ -38,6 +38,13 @@ export const profil = {
     }
     if (goal.date && goal.jours_restants >= 0) {
       chips.push(`<span class="chip">${icon("flag")}${F.escape(goal.nom || "Objectif")} : ${goal.jours_restants === 0 ? "c'est le jour J" : `J−${goal.jours_restants}`}</span>`);
+    }
+    if (b.club) {
+      const lic = b.club.licence || {};
+      chips.push(`<a class="chip" href="#/vue/club" title="Mon club">${icon("club")}${F.escape(b.club.nom || `Club ${b.club.numero}`)}</a>`);
+      if (lic.a_renouveler) {
+        chips.push(`<a class="chip chip-warn" href="#/vue/club">${icon("warning")}${lic.expiree ? "Licence expirée" : `Licence à renouveler : J−${lic.jours_restants}`}</a>`);
+      }
     }
     const last = b.synchro?.derniere_reussie;
     chips.push(`<span class="chip chip-muted">${icon("sync")}${last ? `Synchro ${F.escape(F.relative(last))}` : "Jamais synchronisé"}</span>`);
@@ -383,5 +390,77 @@ export const journee = {
       keep(chart);
     };
     await draw();
+  },
+};
+
+// ------------------------------------------------------------------ mon club
+const ext = (href, label, cls = "btn", title = "") => `<a class="${cls}" href="${F.escape(href)}" target="_blank" rel="noopener"${title ? ` title="${F.escape(title)}"` : ""}>${label}${icon("external")}</a>`;
+
+function licenceBlock(lic) {
+  if (!lic?.renseignee) {
+    return `<div class="club-licence">
+        <h3>${icon("star")}Ma licence</h3>
+        <p class="club-muted">Ajoute ta licence dans <a href="#/reglages?section=club">Réglages → Mon club</a> : Foulée te rappellera de la renouveler.</p>
+      </div>`;
+  }
+  const until = F.dateLong(lic.expire, { year: true, weekday: false });
+  const state = lic.expiree ? "bad" : lic.a_renouveler ? "warn" : "";
+  const when = lic.expiree ? `Expirée depuis le ${until}` : `Valable jusqu'au ${until}`;
+  return `<div class="club-licence ${state}">
+      <h3>${icon("star")}Ma licence</h3>
+      ${lic.type ? `<p class="club-licence-type">${F.escape(lic.type)}</p>` : ""}
+      ${lic.numero ? `<p>N° <b>${F.escape(lic.numero)}</b></p>` : ""}
+      <p>${when}${lic.expiree ? "" : ` <span class="club-muted">(${lic.jours_restants === 0 ? "aujourd'hui" : `dans ${F.int(lic.jours_restants)} jour${lic.jours_restants > 1 ? "s" : ""}`})</span>`}</p>
+      ${state ? `<p class="club-licence-alert">${icon("warning")}${lic.expiree ? "Pense à la renouveler auprès de ton club." : "À renouveler bientôt, auprès de ton club."}</p>` : ""}
+    </div>`;
+}
+
+export const club = {
+  ownHead: true,
+  title: () => "Mon club",
+  async render(body, p, ctx) {
+    const c = ctx.boot.club;
+    if (!c) {
+      body.innerHTML = `<div class="club club-empty">
+          <span class="club-badge">${icon("club")}</span>
+          <div><h2>Mon club</h2>
+          <p>Indique ton club FFA dans <a href="#/reglages?section=club">Réglages → Mon club</a> : il te faut seulement le numéro de club inscrit sur ta licence.</p></div>
+        </div>`;
+      return;
+    }
+    const l = c.liens;
+    const rows = [
+      ["Président(e)", c.president && F.escape(c.president)],
+      ["Siège", c.adresse_complete && `${F.escape(c.adresse_complete)}${l.carte ? ` · ${ext(l.carte, "Carte", "club-link")}` : ""}`],
+      ["Téléphone", c.telephone && (l.telephone ? `<a class="club-link" href="${F.escape(l.telephone)}">${F.escape(c.telephone)}</a>` : F.escape(c.telephone))],
+      ["E-mail", c.email && `<a class="club-link" href="${F.escape(l.email)}">${F.escape(c.email)}</a>`],
+      ["Site", l.site && ext(l.site, F.escape(l.site.replace(/^https?:\/\/(www\.)?/i, "").replace(/\/$/, "")), "club-link")],
+    ].filter(([, value]) => value);
+    body.classList.add("scroll");
+    body.innerHTML = `<div class="club">
+        <header class="club-head">
+          <span class="club-badge">${icon("club")}</span>
+          <div class="club-title">
+            <h2>${F.escape(c.nom || "Mon club")}</h2>
+            <p><span class="nw">N° de club <b>${F.escape(c.numero)}</b></span> · <span class="nw">Saison ${F.escape(c.saison_label)}</span>${c.ville ? ` · <span class="nw">${F.escape(c.ville)}</span>` : ""}</p>
+          </div>
+          <a class="btn btn-ghost icon-btn club-edit" href="#/reglages?section=club" title="Modifier mon club" aria-label="Modifier mon club">${icon("edit")}</a>
+        </header>
+        <div class="club-actions">
+          ${ext(l.classement, `${icon("trophy")}Classement ${F.escape(c.saison_label)}`, "btn btn-primary", "Classement du club sur athle.fr, saison en cours")}
+          ${ext(l.classement_precedent, `Saison ${F.escape(l.saison_precedente)}`, "btn", `Classement du club sur athle.fr, saison ${l.saison_precedente}`)}
+          ${l.page ? ext(l.page, "Page du club sur athle.fr") : ext(l.trouver, "Trouver le club sur athle.fr")}
+          ${l.site ? ext(l.site, "Site du club") : ""}
+        </div>
+        <div class="club-cols">
+          <div class="club-contact">
+            <h3>${icon("info")}Coordonnées</h3>
+            ${rows.length ? `<dl>${rows.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join("")}</dl>`
+              : `<p class="club-muted">Colle la fiche du club dans <a href="#/reglages?section=club">Réglages → Mon club</a> : Foulée en tire le président, l'adresse, le téléphone et le site.</p>`}
+          </div>
+          ${licenceBlock(c.licence)}
+        </div>
+        <p class="club-note">${icon("info")}<span>Le classement et la page du club s'ouvrent sur athle.fr, le site de la FFA : toujours à jour.</span></p>
+      </div>`;
   },
 };

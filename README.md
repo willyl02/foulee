@@ -98,6 +98,7 @@ la clé**. Pour l'effacer de ce PC : **Supprimer la clé sur ce PC**.
 | Séance | Résumé, carte, courbes synchronisées (FC, allure, altitude, cadence…), autres mesures (dynamique de course, puissance, respiration…), tours ou découpage au km |
 | Récup & postes | Comparaison d'un poste de travail à l'autre, sommeil, VFC, FC de repos, nuage sommeil → VFC, calendrier |
 | Cap semi de Paris | Compte à rebours, allure cible, fractions rapides face à l'allure cible, volume, charge, zones, VO2max |
+| Mon club | Si tu l'as coché dans les Réglages : ton club FFA (coordonnées, site, carte), ta licence, et son classement sur athle.fr en un clic |
 
 **Tout se modifie** : bouton « Modifier la vue », puis glisse les tuiles, change
 leur taille, règle-les (roue dentée) ou ajoute-en. Les tuiles sont rangées par
@@ -116,6 +117,11 @@ Les **Réglages** contiennent :
 - **Profil et logo** : ton prénom, ta photo (JPEG, PNG ou WebP, recadrée en carré
   dans le navigateur et réduite à 256 × 256 pixels, sans métadonnées) ou celle de
   Garmin Connect, et le logo de l'application (sept dessins, ou ta photo) ;
+- **Mon club** : coche « Je fais partie d'un club » et saisis le numéro de club de
+  ta licence (« N° Club », 6 chiffres) ; colle la fiche « Coordonnées et contacts »
+  de la page du club sur athle.fr pour que Foulée en tire le président, l'adresse, le
+  téléphone, l'e-mail et le site ; ajoute ta licence si tu veux un rappel un mois avant
+  sa fin ;
 - **Profil de coureur** et **Objectif course** ;
 - **Horaires de travail** : bureau, 2x8 matin / soir (selon la parité des
   semaines), 3x8, 5x8 (cycle en jours) ou cycle personnalisé, avec les heures de
@@ -132,8 +138,8 @@ Les **Réglages** contiennent :
 **Aide et retours**, en bas de la colonne de gauche (menu ☰ sur téléphone) :
 
 - **Aide et FAQ** : les questions les plus courantes, rangées par thème (premiers
-  pas, clé Garmin, synchro, tableaux de bord, calculs, horaires, Claude Desktop,
-  téléphone, installation, vie privée), avec une recherche et des liens directs vers
+  pas, profils, clé Garmin, synchro, tableaux de bord, calculs, mon club, horaires,
+  Claude Desktop, téléphone, installation, vie privée), avec une recherche et des liens directs vers
   la bonne rubrique des réglages ;
 - **Un bug, une idée ? Parles-en !** : un formulaire (titre, message, captures
   d'écran glissées, collées ou choisies). Il propose d'abord les réponses de l'aide
@@ -165,6 +171,15 @@ clé API), ses vues, ses réglages, sa photo et sa synchro.
 Rangement : le profil principal garde sa base à la racine du dossier des données,
 comme avant ; les autres ont chacun leur sous-dossier `profils/<id>`, et la liste des
 profils est dans `utilisateurs.json`. Déplacer le dossier des données les emmène tous.
+
+**Mon club** : la vue s'ajoute juste après l'Accueil quand tu coches « Je fais
+partie d'un club » (Réglages → Mon club), et s'en va quand tu décoches (ce que tu as
+saisi est gardé). Elle montre les coordonnées du club, ta licence (avec un rappel sur
+l'Accueil à l'approche de sa fin) et des boutons vers le classement du club sur
+athle.fr, pour la saison en cours et la précédente. La FFA ne propose pas d'accès pour
+les applications et son site n'autorise pas la lecture automatique : Foulée ne lit
+donc rien sur athle.fr, il prépare les liens que ton navigateur ouvre. Les saisons
+suivent celles de la FFA (du 1er septembre au 31 août). Chaque profil a son club.
 
 **Sauvegarde des réglages** : chaque installation (le PC, le serveur) garde ses
 propres réglages. « Exporter mes réglages » les met dans un fichier (avec tes vues et
@@ -470,6 +485,7 @@ foulee/
   zones.py         méthodes des zones FC et d'allure
   reglages.py      contrôle des réglages, export et import
   profile.py       prénom, logo, photo de profil
+  club.py          mon club FFA : numéro, saisons, fiche collée depuis athle.fr, licence, liens
   views.py         types de tuiles et vues par défaut
   access.py        mot de passe du réseau local (empreinte, cookie signé, anti-acharnement)
   mcp_server.py    outils pour Claude Desktop

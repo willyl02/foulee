@@ -180,6 +180,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "charge_source": "garmin",  # garmin (charge Garmin si dispo) | trimp
     "profil": {"prenom": "", "logo": "foulee"},  # en-tête de l'interface (logo au choix ou photo)
     "vameval": None,           # dernier test VAMEVAL saisi (« 12:40 »), pour la page d'accueil
+    "club": None,              # club FFA du profil : numéro, coordonnées, licence (voir club.py)
 }
 
 ZONE_NAMES_PACE = ["Récup / EF", "Endurance active", "Seuil / semi", "Allure 10 km", "VMA"]

@@ -21,8 +21,11 @@ const RENDERERS = {
   seance_carte: A.seance_carte, seance_courbes: A.seance_courbes, seance_tours: A.seance_tours,
   seance_mesures: A.seance_mesures,
   profil: H.profil, forme: H.forme, allures: H.allures, semaine: H.semaine, records: H.records, journee: H.journee,
+  club: H.club,
 };
 const PERIODS = [[7, "7 j"], [30, "30 j"], [90, "90 j"], [180, "6 mois"], [365, "1 an"], [730, "2 ans"]];
+// Tuiles qui ne dépendent pas de la période : une vue faite seulement de celles-ci se passe du sélecteur
+const TIMELESS = new Set(["profil", "club"]);
 const WIDTHS = [3, 4, 6, 8, 12];
 const THEMES = ["auto", "light", "dark"];
 const THEME_LABELS = { auto: "Thème : automatique", light: "Thème : clair", dark: "Thème : sombre" };
@@ -295,14 +298,15 @@ async function renderView() {
     return;
   }
   const needsActivity = view.spec.tuiles.some((t) => t.type.startsWith("seance_"));
+  const usesPeriod = state.editing || !view.spec.tuiles.length || view.spec.tuiles.some((t) => !TIMELESS.has(t.type));
   const todayIso = F.isoDate(new Date());
   page.innerHTML = `
     <header class="head">
       <div><h1>${F.escape(view.name)}</h1>
         <div class="head-sub"><span>${F.escape(F.dateLong(todayIso))}</span>${shiftChip()}</div></div>
       <div class="head-tools">
-        <div class="segmented" role="group" aria-label="Période affichée">${PERIODS.map(([d, l]) =>
-          `<button type="button" data-days="${d}" aria-pressed="${d === state.days}">${l}</button>`).join("")}</div>
+        ${usesPeriod ? `<div class="segmented" role="group" aria-label="Période affichée">${PERIODS.map(([d, l]) =>
+          `<button type="button" data-days="${d}" aria-pressed="${d === state.days}">${l}</button>`).join("")}</div>` : ""}
         <button class="btn${state.editing ? " btn-primary" : ""}" type="button" data-edit>${icon(state.editing ? "check" : "edit")}${state.editing ? "Terminer" : "Modifier la vue"}</button>
       </div>
       ${view.id === "accueil" ? whoButton(state.boot) : ""}

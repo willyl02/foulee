@@ -938,3 +938,88 @@ body.choosing .main { border-left: 0; }
   .user-add .btn { grid-column: 1 / -1; }
   .dlg-code-edit .form-grid { grid-template-columns: 1fr; }
 }
+
+/* ---------------------------------------------------------------- mon club */
+a.chip { text-decoration: none; }
+a.chip:hover { box-shadow: inset 0 0 0 1px var(--base); }
+.chip-warn { color: var(--warn); background: color-mix(in srgb, var(--warn) 10%, var(--surface)); }
+.chip-warn svg { color: var(--warn); }
+.club { display: flex; flex-direction: column; gap: 14px; min-height: 100%; }
+.club-head { display: flex; align-items: center; gap: 14px; }
+.club-badge { width: 50px; height: 50px; flex: none; border-radius: 50%; display: grid; place-items: center;
+  color: var(--s1); background: color-mix(in srgb, var(--s1) 11%, var(--surface)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--s1) 25%, var(--surface)); }
+.club-badge svg { width: 26px; height: 26px; }
+.club-title { min-width: 0; flex: 1; }
+.club-title h2, .club-empty h2 { margin: 0; font: 600 27px/1.1 var(--font-figures); overflow-wrap: anywhere; }
+.club-title p { margin: 4px 0 0; color: var(--ink-2); font-size: 14.5px; }
+.club-title b { font-variant-numeric: tabular-nums; letter-spacing: 0.02em; }
+.club-title .nw { white-space: nowrap; }
+.club-edit { flex: none; align-self: flex-start; text-decoration: none; }
+.club-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.club-actions .btn svg:last-child { width: 14px; height: 14px; opacity: 0.75; }
+.club-cols { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+.club-contact, .club-licence { padding: 12px 14px; border-radius: 10px; background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--hair); }
+.club-contact h3, .club-licence h3 { display: flex; align-items: center; gap: 7px; margin: 0 0 8px; font-size: 15px; font-weight: 600; }
+.club-contact h3 svg, .club-licence h3 svg { width: 16px; height: 16px; color: var(--ink-2); }
+.club-contact dl { display: grid; gap: 6px; margin: 0; font-size: 14.5px; }
+.club-contact dl > div { display: grid; grid-template-columns: 104px minmax(0, 1fr); gap: 10px; }
+.club-contact dt { color: var(--muted); }
+.club-contact dd { margin: 0; overflow-wrap: anywhere; }
+.club-link { color: inherit; text-decoration: underline; text-decoration-color: var(--base); text-underline-offset: 2px; }
+.club-link:hover { text-decoration-color: currentColor; }
+.club-link svg { width: 13px; height: 13px; margin-left: 3px; vertical-align: -1px; color: var(--muted); }
+.club-licence p { margin: 3px 0; font-size: 14.5px; }
+.club-licence-type { font-weight: 600; }
+.club-licence.warn { box-shadow: inset 3px 0 0 var(--warn), inset 0 0 0 1px var(--hair); }
+.club-licence.bad { box-shadow: inset 3px 0 0 var(--bad), inset 0 0 0 1px var(--hair); }
+.club-licence-alert { display: flex; align-items: flex-start; gap: 6px; font-weight: 500; color: var(--warn); }
+.club-licence.bad .club-licence-alert { color: var(--bad); }
+.club-licence-alert svg { width: 16px; height: 16px; flex: none; margin-top: 2px; }
+.club-muted { color: var(--muted); }
+.club-muted a, .club-empty a { color: inherit; }
+.club-note { display: flex; align-items: flex-start; gap: 7px; margin: auto 0 0; font-size: 13px; color: var(--muted); }
+.club-note svg { width: 15px; height: 15px; flex: none; margin-top: 1px; }
+.club-empty { flex-direction: row; align-items: center; height: 100%; }
+.club-empty p { margin: 6px 0 0; color: var(--ink-2); max-width: 60ch; }
+
+/* Réglages → Mon club */
+.club-panel .hint { font-size: 13.5px; color: var(--muted); }
+.club-toggle { align-items: flex-start; font-size: 15px; }
+.club-toggle input { margin-top: 3px; }
+.club-toggle > span { display: grid; gap: 2px; }
+.club-form { display: grid; gap: 12px; margin: 2px 0 6px; }
+.club-form[hidden] { display: none; }
+.club-step { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 12px; padding: 14px 16px 4px; border-radius: 12px;
+  background: var(--surface); box-shadow: 0 0 0 1px var(--hair); }
+.club-step-num { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font: 600 15px var(--font-figures);
+  background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--hair); color: var(--ink-2); }
+.club-step-body { min-width: 0; }
+.club-step-body > b { display: block; margin: 3px 0 10px; font-size: 15.5px; font-weight: 600; }
+.club-step-body > b small { font-weight: 400; color: var(--muted); font-size: 13.5px; }
+.club-step-body > .hint { margin: -6px 0 12px; }
+.club-number { max-width: 240px; }
+.club-number input { font-size: 17px; font-variant-numeric: tabular-nums; letter-spacing: 0.08em; }
+.club-howto { margin: -2px 0 10px; padding-left: 20px; font-size: 14px; color: var(--ink-2); }
+.club-howto li { margin: 2px 0; }
+.club-paste { min-height: 74px; }
+.club-paste-status { margin: 4px 0 10px; min-height: 1.2em; }
+.club-paste-status.ok { color: var(--ink-2); }
+.club-fields .wide { grid-column: 1 / -1; }
+@keyframes club-filled { from { background: color-mix(in srgb, var(--good) 16%, var(--surface)); border-color: var(--good); } }
+.club-panel input.filled { animation: club-filled 1.8s ease-out; }
+.club-save { margin: 4px 0 8px; }
+
+@media (max-width: 900px) {
+  .grid > .tile--club { height: auto; min-height: 120px; }
+  .grid > .tile--club .tile-body.scroll { overflow: visible; }
+  .club-cols { grid-template-columns: 1fr; }
+  .club-head { align-items: flex-start; }
+  .club-badge { width: 42px; height: 42px; }
+  .club-badge svg { width: 22px; height: 22px; }
+  .club-title h2, .club-empty h2 { font-size: 23px; }
+  .club-actions .btn { flex: 1 1 auto; }
+  .club-contact dl > div { grid-template-columns: 1fr; gap: 0; }
+  .club-step { grid-template-columns: 24px minmax(0, 1fr); gap: 10px; padding: 12px 12px 2px; }
+  .club-step-num { width: 24px; height: 24px; font-size: 13px; }
+  .club-number { max-width: none; }
+}

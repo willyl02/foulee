@@ -40,6 +40,7 @@ from . import (
     __version__,
     access,
     analysis,
+    club,
     claude_desktop,
     config,
     datadir,
@@ -263,6 +264,7 @@ def create_app() -> FastAPI:
                 "vues": views.list_views(conn), "reglages": settings,
                 "categories_tuiles": views.TILE_CATEGORIES, "categories_metriques": metrics.CATEGORIES,
                 "objectif": analysis.objective(settings), "profil_fc": analysis.hr_profile(conn, settings),
+                "club": club.summary(settings.get("club")), "club_licences": club.LICENCE_TYPES,
                 "garmin_profil": analysis.garmin_profile(conn),
                 "planning": schedule.describe(settings["horaires"]),
                 "modeles_horaires": schedule.MODELES,
@@ -494,6 +496,15 @@ def create_app() -> FastAPI:
         except utilisateurs.ProfileError as exc:
             raise HTTPException(400, str(exc)) from exc
         return {**users_state(request), "supprime": report}
+
+    @app.post("/api/club/fiche")
+    def club_sheet(payload: dict = Body(...)) -> dict:
+        """Lit la fiche « Coordonnées et contacts » copiée depuis la page du club sur athle.fr."""
+        text = str(payload.get("texte") or "")
+        if len(text) > 20000:
+            raise HTTPException(400, "Texte trop long : copie seulement le cadre « Coordonnées et contacts ».")
+        found = club.parse_sheet(text)
+        return {"champs": found, "trouves": len(found)}
 
     @app.get("/api/retours")
     def get_feedback_info() -> dict:

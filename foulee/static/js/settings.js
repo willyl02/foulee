@@ -1,9 +1,10 @@
-// Page « Réglages » : profil et logo, coureur, objectif, horaires de travail, zones FC et d'allure,
+// Page « Réglages » : profil et logo, utilisateurs, mon club, coureur, objectif, horaires, zones FC et d'allure,
 // synchro, vues, sauvegarde ; puis l'installation (clé Garmin, dossier, Claude Desktop, mises à jour :
 // voir system.js).
 import * as api from "./api.js";
 import * as F from "./format.js";
 import { icon } from "./icons.js";
+import { clubPanel } from "./settings-club.js";
 import { profilePanel, transferPanel } from "./settings-profile.js";
 import { scheduleEditor } from "./settings-schedule.js";
 import { hrZonesEditor, paceZonesEditor } from "./settings-zones.js";
@@ -44,6 +45,11 @@ export function renderSettings(page, boot, { onSaved, onProfile, refreshBoot, to
         <p class="intro">Un profil par personne : chacun a ses données Garmin (avec sa propre clé), ses vues, ses réglages et sa synchro. Tu es l'utilisateur principal : toi seul ajoutes ou retires des profils et règles l'installation (mises à jour, dossier des données${boot.machine === "serveur" ? ", accès par le réseau local" : ""}…). On passe d'un profil à l'autre avec son prénom, en haut à droite de l'Accueil.</p>
         <div data-users></div>
       </section>` : ""}
+      <section data-section="club">
+        <h2>Mon club</h2>
+        <p class="intro">Licencié dans un club d'athlétisme ? Coche la case : Foulée t'ajoute une vue « Mon club » avec ses coordonnées, ta licence et, en un clic, le classement du club sur le site de la FFA.</p>
+        <div data-club></div>
+      </section>
     </div>
     <form class="settings" id="settings-form" novalidate>
       <section data-section="coureur">
@@ -144,6 +150,7 @@ export function renderSettings(page, boot, { onSaved, onProfile, refreshBoot, to
   profilePanel(page.querySelector("[data-profile]"), boot, { toast, onProfile });
   accessPanel(page.querySelector("[data-access]"), boot, { toast, onChange: () => refreshBoot() });
   if (principal) usersPanel(page.querySelector("[data-users]"), boot, { toast, onChange: () => refreshBoot() });
+  clubPanel(page.querySelector("[data-club]"), boot, { toast, onChange: () => refreshBoot() });
   const schedule = scheduleEditor(page.querySelector("[data-schedule]"), s.horaires);
   const hrZones = hrZonesEditor(page.querySelector("[data-hr-zones]"), boot, profile);
   const paceZones = paceZonesEditor(page.querySelector("[data-pace-zones]"), boot, vma);
@@ -218,7 +225,7 @@ export function renderSettings(page, boot, { onSaved, onProfile, refreshBoot, to
 }
 
 // =============================================================== sommaire
-const JUMPS = [["profil", "Profil"], ["utilisateurs", "Utilisateurs"], ["coureur", "Coureur"], ["objectif", "Objectif"], ["horaires", "Horaires"],
+const JUMPS = [["profil", "Profil"], ["utilisateurs", "Utilisateurs"], ["club", "Club"], ["coureur", "Coureur"], ["objectif", "Objectif"], ["horaires", "Horaires"],
   ["zones-fc", "Zones FC"], ["zones", "Allures"], ["synchro", "Synchro"], ["sauvegarde", "Sauvegarde"], ["cle", "Clé Garmin"],
   ["dossier", "Données"], ["claude", "Claude"], ["app", "Application"], ["lan", "Réseau local"], ["maj", "Mises à jour"],
   ["installation", "Installation"], ["apropos", "À propos"]];

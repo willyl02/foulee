@@ -4,6 +4,18 @@ Les versions « bêta » (par exemple 0.4.0b1) sont des avant-premières : elles
 sur le canal bêta (Réglages → Mises à jour → « Recevoir les versions bêta »), puis sortent en
 version stable une fois éprouvées.
 
+## 0.5.1b1 — 11 novembre 2026 (bêta)
+
+- **Mon club** : dans Réglages → Mon club, coche « Je fais partie d'un club » et saisis le numéro de club de ta licence (« N° Club », 6 chiffres). Une vue « Mon club » s'ajoute juste après l'Accueil :
+  - les coordonnées du club : président, siège (avec un lien vers la carte), téléphone et e-mail cliquables, site ;
+  - des boutons vers le **classement du club sur athle.fr**, pour la saison en cours et la précédente, vers la page du club et vers son site ;
+  - ta licence (numéro, type, date de fin), avec un rappel « Licence à renouveler » sur l'Accueil un mois avant la fin.
+- Les coordonnées se remplissent **en un copier-coller** : la fiche « Coordonnées et contacts » de la page du club sur athle.fr, collée dans les réglages, suffit à Foulée pour reconnaître le président, l'adresse, le code postal, la ville, le téléphone, l'e-mail et le site.
+- Foulée ne lit rien sur athle.fr : la FFA ne propose pas d'accès pour les applications. Le classement s'ouvre dans ton navigateur, directement chez la FFA, toujours à jour. Les saisons suivent celles de la FFA (du 1er septembre au 31 août).
+- Décocher la case retire la vue et garde ce que tu as saisi. Chaque profil a son club.
+- Une vue faite seulement de tuiles sans période (comme « Mon club ») n'affiche plus le sélecteur 7 j / 30 j / 90 j….
+- Aide : nouveau thème « Mon club (FFA) ». Claude Desktop voit ton club et les liens vers son classement (outil `reglages`), et peut le régler.
+
 ## 0.5.0 — 11 novembre 2026
 
 - **Plusieurs utilisateurs** : un profil par personne, avec ses données Garmin (sa propre clé API), ses vues, ses réglages, sa photo et sa synchro. Le prénom en haut à droite de l'Accueil, avec son chevron, pour passer d'un profil à l'autre ; code facultatif à 4 chiffres ; Réglages → Gestion des utilisateurs pour l'utilisateur principal, qui règle seul l'installation. Claude Desktop ne lit que les profils qui l'autorisent. Rien ne bouge pour une installation existante.

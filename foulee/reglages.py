@@ -13,7 +13,7 @@ import copy
 import sqlite3
 from typing import Any
 
-from . import __version__, analysis, db, profile, schedule, views, zones
+from . import __version__, analysis, club, db, profile, schedule, views, zones
 
 # Réglages dont dépendent TRIMP, zones et charge : les changer relance le recalcul des séances
 DERIVED = {"vma_kmh", "fc_max", "fc_repos", "sexe", "zones_allure_pct_vma", "charge_source", "zones_fc",
@@ -51,6 +51,11 @@ def clean(key: str, value: Any) -> Any:
         raise SettingsError(str(exc)) from None
     if key == "profil":
         return profile.clean_profile(value)
+    if key == "club":
+        try:
+            return club.clean(value)
+        except club.ClubError as exc:
+            raise SettingsError(str(exc)) from None
     if key == "vma_kmh":
         return _number(value, 6, 30, "VMA")
     if key == "fc_max":
@@ -102,6 +107,8 @@ def apply(conn: sqlite3.Connection, changes: dict, *, merge: bool = False) -> tu
         cleaned[key] = clean(key, value)
     for key, value in cleaned.items():
         db.set_setting(conn, key, value)
+    if "club" in cleaned:  # la vue « Mon club » suit la case « Je fais partie d'un club »
+        views.sync_club_view(conn, bool((cleaned["club"] or {}).get("actif")))
     conn.commit()
     return db.get_settings(conn), bool(DERIVED & set(cleaned))
 
