@@ -25,6 +25,7 @@ import ipaddress
 import json
 import mimetypes
 import os
+import secrets
 import sys
 import threading
 import time
@@ -59,6 +60,9 @@ from . import (
 from . import sync as sync_module
 from .garmin import intraday
 from .garmin.client import KEY_PAGE, GarminError, check_key
+from .withings import client as withings_client
+from .withings import vue as withings_vue
+from .withings.client import WithingsError
 
 DERIVED_KEYS = reglages.DERIVED
 
@@ -71,15 +75,16 @@ class SyncJob:
         self.state: dict[str, Any] = {"en_cours": False, "message": "", "progression": None, "resultat": None,
                                       "erreur": None}
 
-    def start(self, since: date | None = None) -> bool:
+    def start(self, since: date | None = None, sources: list[str] | None = None) -> bool:
         with self.lock:
             if self.state["en_cours"] or sync_module.is_running():
                 return False
             self.state = {"en_cours": True, "message": "Démarrage…", "progression": 0.0, "resultat": None,
-                          "erreur": None, "debut": time.time()}
+                          "erreur": None, "debut": time.time(), "sources": sources}
         # La synchro vise le profil de celui qui la lance (requête, synchro automatique…)
         context = contextvars.copy_context()
-        threading.Thread(target=context.run, args=(self._run, since), name="foulee-synchro", daemon=True).start()
+        threading.Thread(target=context.run, args=(self._run, since, sources), name="foulee-synchro",
+                         daemon=True).start()
         return True
 
     def _progress(self, message: str, fraction: float | None = None) -> None:
@@ -88,9 +93,10 @@ class SyncJob:
             if fraction is not None:
                 self.state["progression"] = round(fraction, 3)
 
-    def _run(self, since: date | None) -> None:
+    def _run(self, since: date | None, sources: list[str] | None = None) -> None:
         try:
-            result = sync_module.run(since=since, progress=self._progress)
+            extra = {"sources": sources} if sources else {}  # par défaut : toutes les sources actives
+            result = sync_module.run(since=since, progress=self._progress, **extra)
             with self.lock:
                 self.state.update({"en_cours": False, "resultat": result, "message": "Synchro terminée",
                                    "progression": 1.0})
@@ -277,6 +283,7 @@ def create_app() -> FastAPI:
                 "installation": updates.mode(),
                 "application": app.state.quit is not None,
                 "cle_refusee": sync_module.key_refused(conn),
+                "withings": {"connecte": withings_client.connected(), "refus": withings_vue.refused(conn)},
                 "demarre_le": STARTED_AT,
                 "maj": update_dir() is not None,
                 "volumes": db.table_counts(conn),
@@ -947,6 +954,132 @@ def create_app() -> FastAPI:
         require_local(request)
         vault.delete_key()
         return key_info()
+
+    # ---------------------------------------------------------------- Withings
+    # Connexion en trois temps : appli Withings (ClientID, Secret), autorisation chez Withings, retour par la
+    # page relais. Les demandes d'autorisation en cours (nonce → profil) vivent le temps d'un quart d'heure.
+    withings_pending: dict[str, dict] = {}
+    withings_notes: dict[str, dict] = {}  # profil → résultat de la dernière connexion, affiché une fois
+    withings_lock = threading.Lock()
+    pending_lifetime = 900
+
+    def withings_note(profile_id: str, statut: str, message: str) -> None:
+        with withings_lock:
+            withings_notes[profile_id] = {"statut": statut, "message": message, "le": time.time()}
+
+    def withings_info(request: Request) -> dict:
+        with db.session(readonly=True) as conn:
+            info = withings_vue.status(conn)
+        with withings_lock:
+            note = withings_notes.pop((request.state.profil or {}).get("id"), None)
+        if note and time.time() - note["le"] < pending_lifetime:
+            info["note"] = note
+        info["local"] = bool(request.state.local)
+        info["synchro"] = jobs.get().snapshot()
+        return info
+
+    @app.get("/api/withings")
+    def withings_status(request: Request) -> dict:
+        return withings_info(request)
+
+    @app.get("/api/withings/resume")
+    def withings_summary() -> dict:
+        with db.session(readonly=True) as conn:
+            return withings_vue.summary(conn)
+
+    @app.put("/api/withings/appli")
+    def withings_app(request: Request, payload: dict = Body(...)) -> dict:
+        # Le Secret ne transite que par la machine elle-même ou par Tailscale (chiffré)
+        require_local(request)
+        if config.is_demo():
+            raise HTTPException(400, "Inutile en mode démo : les données sont fictives.")
+        try:
+            client_id = withings_client.clean_credential(payload.get("client_id"), "ClientID")
+            secret = withings_client.clean_credential(payload.get("client_secret"), "Secret")
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        if client_id == secret:
+            raise HTTPException(400, "Le ClientID et le Secret sont identiques : recopie chacun depuis son propre "
+                                     "champ du tableau de bord de Withings.")
+        where = withings_client.set_app(client_id, secret)
+        with db.session() as conn:
+            db.set_meta(conn, "withings_appli_le", db.now_iso())
+            conn.commit()
+        return {**withings_info(request), "emplacement": where}
+
+    @app.post("/api/withings/connexion")
+    def withings_connect(request: Request, payload: dict = Body(default={})) -> dict:
+        """Prépare l'autorisation chez Withings : renvoie l'adresse de sa page « Autoriser »."""
+        require_local(request)
+        if config.is_demo():
+            raise HTTPException(400, "Inutile en mode démo : les données sont fictives.")
+        app_data = withings_client.load()
+        if not (app_data.get("client_id") and app_data.get("client_secret")):
+            raise HTTPException(400, "Enregistre d'abord le ClientID et le Secret de ton appli Withings (étape 2).")
+        origin = str(payload.get("origine") or "").rstrip("/")
+        problem = withings_client.origin_problem(origin, request.headers.get("host"))
+        if problem:
+            raise HTTPException(400, f"Connexion impossible depuis cette adresse : {problem}.")
+        nonce = secrets.token_urlsafe(18)
+        now = time.time()
+        with withings_lock:
+            for key in [k for k, v in withings_pending.items() if now - v["le"] > pending_lifetime]:
+                del withings_pending[key]
+            withings_pending[nonce] = {"profil": request.state.profil["id"], "le": now}
+        state = withings_client.make_state(nonce, origin)
+        return {"url": withings_client.authorize_url(app_data["client_id"], state), "relais": withings_client.relay_url()}
+
+    @app.get("/withings/retour")
+    def withings_return(request: Request, code: str = "", state: str = "", error: str = "") -> RedirectResponse:
+        """Retour de Withings (par la page relais) : échange du code, puis retour aux Réglages."""
+        me = (request.state.profil or {}).get("id", "")
+
+        def back(statut: str, message: str) -> RedirectResponse:
+            withings_note(me, statut, message)  # pour celui qui verra la page des Réglages
+            return RedirectResponse(f"/#/reglages?section=withings&withings={statut}", status_code=303)
+
+        try:
+            nonce = withings_client.read_state(state)["n"]
+        except ValueError:
+            return back("erreur", "Withings n'a pas renvoyé les informations attendues : relance la connexion "
+                                  "depuis cette page.")
+        with withings_lock:
+            pending = withings_pending.pop(nonce, None)
+        if not pending or time.time() - pending["le"] > pending_lifetime:
+            return back("erreur", "Cette demande de connexion a expiré ou a déjà servi : relance la connexion.")
+        if pending["profil"] != me:
+            return back("erreur", "La connexion a été lancée depuis un autre profil : choisis-le, puis relance la "
+                                  "connexion.")
+        if error:
+            return back("refus", "Withings n'a pas donné l'accès (bouton « Allow » non cliqué, ou demande annulée) : "
+                                 "rien n'a changé. Tu peux relancer la connexion quand tu veux.")
+        if not code:
+            return back("erreur", "Withings n'a pas renvoyé de code d'autorisation : relance la connexion.")
+        try:
+            withings_client.exchange_code(code)
+        except WithingsError as exc:
+            return back("erreur", str(exc))
+        with db.session() as conn:
+            db.set_meta(conn, "withings_connecte_le", db.now_iso())
+            db.delete_meta(conn, withings_vue.REFUSED)
+            views.sync_withings_view(conn, True, withings_vue.families(conn))
+            conn.commit()
+        started = jobs.get().start(sources=["withings"])
+        return back("connecte", "Compte Withings connecté. " + (
+            "Premier import en cours : la vue « Withings » se remplit dans un instant." if started else
+            "Une synchro est déjà en cours : tes mesures Withings arriveront avec la suivante."))
+
+    @app.delete("/api/withings")
+    def withings_disconnect(request: Request, tout: int = 0) -> dict:
+        """Déconnecte Withings (et oublie l'appli si « tout ») : la vue s'en va, les mesures importées restent."""
+        require_local(request)
+        withings_client.disconnect(forget_app=bool(tout))
+        with db.session() as conn:
+            views.sync_withings_view(conn, False)
+            for key in ("withings_connecte_le", withings_vue.REFUSED, *(("withings_appli_le",) if tout else ())):
+                db.delete_meta(conn, key)
+            conn.commit()
+        return withings_info(request)
 
     # -------------------------------------------------- dossier des données
     @app.get("/api/dossier")

@@ -1050,3 +1050,94 @@ a.chip:hover { box-shadow: inset 0 0 0 1px var(--base); }
   .update-alert { padding-top: 10px; margin-bottom: 0; }
   .update-pill { font-size: 13px; padding: 6px 12px 6px 10px; }
 }
+
+/* ------------------------------------------------------------- Withings : réglages */
+.wi-panel .hint { font-size: 13.5px; color: var(--muted); }
+.wi-panel .hint.error { color: var(--gr-red); }
+.wi-note { margin-bottom: 14px; }
+.wi-before b { display: block; font-size: 15px; }
+.wi-before p { margin: 4px 0 8px; }
+.wi-before .hint { margin: 0 0 2px; }
+.wi-steps { list-style: none; margin: 0 0 14px; padding: 0; display: grid; gap: 10px; }
+.wi-step { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 12px; padding: 14px 16px 4px; border-radius: 12px;
+  background: var(--surface); box-shadow: 0 0 0 1px var(--hair); }
+.wi-step-num { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font: 600 15px var(--font-figures);
+  background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--hair); color: var(--ink-2); }
+.wi-step.done .wi-step-num { background: var(--good); color: #fff; box-shadow: none; font-size: 0; }
+.wi-step.done .wi-step-num::after { content: "✓"; font-size: 16px; }
+.wi-step-body { min-width: 0; }
+.wi-step-body h3 { margin: 3px 0 8px; font-size: 16px; font-weight: 600; }
+.wi-step-body h3 small { margin-left: 6px; font-weight: 400; color: var(--muted); font-size: 13.5px; }
+.wi-step-body > p { margin: 0 0 10px; font-size: 14.5px; color: var(--ink-2); }
+.wi-step-body .field { max-width: 560px; }
+.wi-step-body .field input { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 14px; }
+.wi-howto { margin: 0 0 12px; padding-left: 20px; display: grid; gap: 6px; font-size: 14.5px; color: var(--ink-2); }
+.wi-howto b, .wi-form-help b { color: var(--ink); font-weight: 600; }
+.wi-howto a { color: var(--ink); font-weight: 500; }
+.wi-form-help { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 7px 14px; margin: 8px 0; padding: 10px 12px;
+  border-radius: 10px; background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--hair); }
+.wi-form-help dt { font: 500 13.5px ui-monospace, "Cascadia Mono", Consolas, monospace; color: var(--ink); padding-top: 1px; }
+.wi-form-help dd { margin: 0; }
+.wi-copy { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-top: 6px; }
+.wi-copy code { padding: 4px 8px; border-radius: 6px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--hair);
+  font-size: 13.5px; color: var(--ink); overflow-wrap: anywhere; user-select: all; }
+.wi-help { margin: 4px 0 14px; border-radius: 10px; background: var(--surface); box-shadow: 0 0 0 1px var(--hair); }
+.wi-help summary { display: flex; gap: 8px; align-items: center; padding: 11px 14px; cursor: pointer; font-weight: 600; font-size: 14.5px; }
+.wi-help summary svg { width: 17px; height: 17px; color: var(--ink-2); }
+.wi-help dl { margin: 0; padding: 0 16px 12px; }
+.wi-help dt { margin-top: 10px; font-weight: 600; font-size: 14.5px; }
+.wi-help dd { margin: 3px 0 0; font-size: 14px; color: var(--ink-2); }
+.wi-about dd .badge-soft { margin: 0 6px 4px 0; }
+.wi-running { display: inline-flex; gap: 6px; align-items: center; }
+.wi-running svg { width: 15px; height: 15px; animation: wi-spin 1.2s linear infinite; }
+@keyframes wi-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .wi-running svg { animation: none; } }
+
+/* ------------------------------------------------------------- Withings : tuile */
+.wi { display: grid; gap: 14px; }
+.wi-head { display: flex; align-items: center; gap: 14px; }
+.wi-head .club-title p a { color: inherit; }
+.wi-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
+.wi-card { min-width: 0; padding: 12px 14px; border-radius: 12px; background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--hair); }
+.wi-card h3 { display: flex; align-items: center; gap: 7px; margin: 0 0 6px; font-size: 14px; font-weight: 600; color: var(--ink-2); }
+.wi-card h3 svg { width: 17px; height: 17px; flex: none; }
+.wi-card h3 small { margin-left: auto; font-weight: 400; color: var(--muted); font-size: 12.5px; white-space: nowrap; }
+.wi-card p { margin: 0; }
+.wi-big { margin: 0 0 4px; font: 600 30px/1.15 var(--font-figures); font-variant-numeric: tabular-nums; }
+.wi-big small { font: 500 14px var(--font); color: var(--ink-2); }
+.wi-slash { margin: 0 1px; color: var(--muted); }
+.wi-delta { margin-left: 8px; font: 500 13px var(--font); color: var(--ink-2); white-space: nowrap; }
+.wi-delta.good { color: var(--good); }
+.wi-delta.bad { color: var(--gr-red); }
+.wi-sub { margin-top: 4px !important; font-size: 13px; color: var(--ink-2); }
+.wi-sub b { color: var(--ink); }
+.wi-rows { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 12px; margin: 10px 0 0; }
+.wi-rows dt { font-size: 12px; color: var(--muted); }
+.wi-rows dd { margin: 0; font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.wi-rows .wi-delta { margin-left: 6px; font-size: 12px; font-weight: 500; }
+.wi-level { display: inline-block; padding: 1px 9px; border-radius: 999px; font-size: 12.5px; font-weight: 600; }
+.wi-level.optimale, .wi-level.normale { color: var(--good); background: color-mix(in srgb, var(--good) 15%, transparent); }
+.wi-level.haute { color: var(--warn); background: color-mix(in srgb, var(--warn) 18%, transparent); }
+.wi-level.hta1, .wi-level.hta2, .wi-level.hta3 { color: var(--gr-red); background: color-mix(in srgb, var(--gr-red) 14%, transparent); }
+.wi-foot { margin-top: 8px !important; font-size: 11.5px; color: var(--muted); }
+.wi-phases { display: flex; gap: 2px; height: 10px; margin: 8px 0 6px; border-radius: 5px; overflow: hidden; }
+.wi-phases .deep, .wi-legend .deep { background: var(--sl-deep); }
+.wi-phases .light, .wi-legend .light { background: var(--sl-light); }
+.wi-phases .rem, .wi-legend .rem { background: var(--sl-rem); }
+.wi-phases .awake, .wi-legend .awake { background: var(--sl-awake); }
+.wi-legend { display: flex; flex-wrap: wrap; gap: 3px 10px; font-size: 12px; color: var(--ink-2); }
+.wi-legend i { display: inline-block; width: 9px; height: 9px; margin-right: 4px; border-radius: 2px; vertical-align: -1px; }
+.wi-empty { display: flex; gap: 8px; margin: 0; font-size: 14.5px; color: var(--ink-2); }
+.wi-empty svg { width: 18px; height: 18px; flex: none; margin-top: 2px; }
+.wi-warn { display: inline-flex; align-items: center; gap: 6px; color: var(--gr-red); }
+.wi-warn svg { width: 15px; height: 15px; }
+@media (max-width: 900px) {
+  /* Sur téléphone, la tuile prend la hauteur de ses cartes, empilées */
+  .grid > .tile--withings { height: auto; min-height: 120px; }
+  .grid > .tile--withings .tile-body.scroll { overflow: visible; }
+  .wi-step { grid-template-columns: 24px minmax(0, 1fr); gap: 10px; padding: 12px 12px 2px; }
+  .wi-step-num { width: 24px; height: 24px; font-size: 13px; }
+  .wi-form-help { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .wi-form-help dd { margin-bottom: 8px; }
+  .wi-big { font-size: 26px; }
+}

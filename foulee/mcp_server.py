@@ -56,6 +56,11 @@ Repères :
   autorisent ; tous les outils visent le profil en cours (statut donne son prénom). Si la
   question porte sur quelqu'un d'autre, appelle utilisateurs puis changer_utilisateur, et
   dis toujours de qui tu parles.
+- Withings (si l'utilisateur a connecté son compte : statut → withings) : balance, tensiomètre,
+  Sleep Analyzer, montre. Métriques « wi_… » de la catégorie Withings (wi_weight_kg, wi_fat_pct,
+  wi_muscle_kg, wi_bp_sys, wi_bp_dia, wi_pulse, wi_sleep_s…), source « withings » dans la table
+  daily. Pour le corps, la dernière pesée du jour ; pour la tension, la moyenne du jour. Ces
+  chiffres sont des repères : tu ne poses pas de diagnostic médical.
 """
 
 READ = ToolAnnotations(readOnlyHint=True, openWorldHint=False)
@@ -108,6 +113,15 @@ def changer_utilisateur(prenom: str) -> dict[str, Any]:
 
 
 # ------------------------------------------------------------------- état
+def _withings_state(conn) -> dict[str, Any]:
+    from .withings import vue
+
+    info = vue.status(conn)
+    first = conn.execute("SELECT MIN(date) AS a, MAX(date) AS b FROM daily WHERE source = 'withings'").fetchone()
+    return {"connecte": info["connecte"], "mesures": info["familles"], "derniere_synchro": info["derniere_synchro"],
+            "acces_refuse_depuis": (info["refus"] or {}).get("depuis"), "du": first["a"], "au": first["b"]}
+
+
 @mcp.tool(annotations=READ)
 def statut() -> dict[str, Any]:
     """État du hub : dernière synchro, période couverte, volumes, réglages utiles (VMA, objectif, FC)."""
@@ -120,6 +134,7 @@ def statut() -> dict[str, Any]:
             "utilisateur": _who(),
             "mode_demo": config.is_demo(),
             "cle_api_garmin": "présente" if vault.has_key() else "absente",
+            "withings": _withings_state(conn),
             "synchro": sync_module.last_sync_info(conn),
             "donnees_quotidiennes": {"du": first["a"], "au": first["b"]},
             "seances": {"nombre": acts["n"], "du": acts["a"], "au": acts["b"]},

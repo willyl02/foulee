@@ -302,24 +302,35 @@ class AutoSync:
         return result
 
     def _tick_current(self, entry: dict | None) -> dict | None:
-        if not self.due() or not self.start():
+        if not self.due():
             return None
         from . import db, sync, utilisateurs
+        from .withings import vue as withings_vue
 
+        with db.session(readonly=True) as conn:
+            withings_refused = withings_vue.refused(conn) is not None
+        if not self.start():
+            return None
         key = self._profile_key()
         self.last_attempt[key] = self.clock()
         state = self.wait_result()
+        name = utilisateurs.card(entry)["prenom"] if entry else None
         if (state.get("resultat") or {}).get("statut") in ("ok", "partiel"):
             self.last_attempt.pop(key, None)
         else:
             with db.session(readonly=True) as conn:
                 refused = sync.key_refused(conn)
             if refused:
-                if entry:
-                    name = utilisateurs.card(entry)["prenom"]
+                if name:
                     self.notify(f"Garmin refuse la clé API de {name} : remplace-la dans les Réglages de son profil.")
                 else:
                     self.notify("Garmin refuse ta clé API : remplace-la dans les Réglages de Foulée.")
+        # Withings vient de retirer l'accès (accès supprimé dans le compte Withings, connexion expirée) : un seul
+        # avertissement, la synchro Garmin continue
+        with db.session(readonly=True) as conn:
+            if not withings_refused and withings_vue.refused(conn) is not None:
+                whose = f"de {name}" if name else "de ton compte"
+                self.notify(f"Withings n'accepte plus l'accès {whose} : reconnecte-le dans Réglages → Withings.")
         return state
 
     def _loop(self) -> None:
@@ -528,14 +539,19 @@ class DesktopApp:
 
 
 def sync_summary(state: dict) -> str:
-    """Résultat d'une synchro en une phrase."""
+    """Résultat d'une synchro en une phrase (Garmin, et Withings s'il est relié)."""
     if state.get("erreur"):
         return f"Synchro impossible : {state['erreur']}"
-    result = state.get("resultat") or {}
-    garmin = (result.get("sources") or {}).get("garmin") or {}
-    if "erreur" in garmin:
-        return f"Synchro impossible : {garmin['erreur']}"
-    new = garmin.get("seances_nouvelles", 0)
+    sources = (state.get("resultat") or {}).get("sources") or {}
+    parts = {label: sources[name] for name, label in (("garmin", "Garmin"), ("withings", "Withings"))
+             if isinstance(sources.get(name), dict)}
+    failed = [f"{label} : {part['erreur']}" if len(parts) > 1 else str(part["erreur"])
+              for label, part in parts.items() if "erreur" in part]
+    if failed and len(failed) == len(parts):
+        return f"Synchro impossible : {' ; '.join(failed)}"
+    if failed:
+        return f"Synchro partielle. {' ; '.join(failed)}"
+    new = (parts.get("Garmin") or {}).get("seances_nouvelles", 0)
     if new:
         return f"Synchro terminée : {new} nouvelle{'s' if new > 1 else ''} séance{'s' if new > 1 else ''}."
     return "Synchro terminée : tout est à jour."

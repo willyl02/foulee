@@ -3,8 +3,9 @@
 Une seule synchro à la fois (verrou), quelle que soit son origine : bouton de
 l'interface, tâche planifiée Windows ou demande à Claude.
 
-Les sources sont déclarées dans ``SOURCES`` : ajouter Withings ou Strava plus
-tard, ce sera ajouter une entrée ici et un module à côté de ``garmin/``.
+Les sources sont déclarées dans ``SOURCES`` (Garmin, Withings ; Strava plus tard : une
+entrée ici et un module à côté de ``garmin/``). Garmin est toujours de la partie ; Withings
+seulement quand le compte est connecté (Réglages → Withings).
 """
 
 from __future__ import annotations
@@ -19,13 +20,24 @@ from typing import Callable
 
 from . import config, db
 from .garmin import sync as garmin_sync
+from .withings import client as withings_client
+from .withings import sync as withings_sync
 
 LOG = logging.getLogger("foulee.sync")
 Progress = Callable[[str, float | None], None]
 
 SOURCES = {
     "garmin": garmin_sync.run,
+    "withings": withings_sync.run,
 }
+
+
+def active_sources() -> list[str]:
+    """Les sources de la synchro du profil courant : Garmin, plus Withings si son compte est connecté."""
+    names = ["garmin"]
+    if withings_client.connected():
+        names.append("withings")
+    return names
 
 
 class SyncBusy(Exception):
@@ -125,26 +137,30 @@ def run(*, since: date | None = None, fit_days: int | None = None, with_fit: boo
     with _Lock():
         with db.session() as conn:
             started = db.now_iso()
-            status = "ok"
-            for name in sources or list(SOURCES):
+            names = [name for name in (sources or active_sources()) if name in SOURCES]
+            failed, partial = 0, False
+            for name in names:
                 try:
                     results[name] = SOURCES[name](conn, since=since, fit_days=fit_days, with_fit=with_fit,
                                                   progress=progress)
                     if results[name].get("erreurs"):
-                        status = "partiel"
+                        partial = True
                     if name == "garmin":
                         db.delete_meta(conn, KEY_REFUSED)
+                    if name == "withings":
+                        db.delete_meta(conn, withings_sync.REFUSED)
                 except Exception as exc:  # on note l'échec d'une source sans bloquer les autres
                     LOG.exception("Synchro %s en échec", name)
                     results[name] = {"erreur": str(exc)}
-                    status = "echec"
+                    failed += 1
                     if name == "garmin" and getattr(exc, "key_rejected", False):
                         # L'interface affichera « Garmin refuse ta clé : remplace-la »
-                        previous = key_refused(conn) or {}
-                        db.set_meta(conn, KEY_REFUSED, json.dumps({
-                            "depuis": previous.get("depuis") or db.now_iso(),
-                            "statut": getattr(exc, "status", None), "detail": getattr(exc, "detail", ""),
-                        }, ensure_ascii=False))
+                        _note_refusal(conn, KEY_REFUSED, exc)
+                    if name == "withings" and getattr(exc, "access_refused", False):
+                        # « Withings n'accepte plus l'accès de Foulée : reconnecte ton compte »
+                        _note_refusal(conn, withings_sync.REFUSED, exc)
+            # Échec si rien n'a marché ; partiel si une source (ou un de ses flux) a échoué
+            status = "echec" if names and failed == len(names) else "partiel" if failed or partial else "ok"
             finished = db.now_iso()
             conn.execute(
                 "INSERT INTO sync_log(started_at, finished_at, source, status, summary) VALUES (?, ?, ?, ?, ?)",
@@ -155,6 +171,18 @@ def run(*, since: date | None = None, fit_days: int | None = None, with_fit: boo
             conn.commit()
     progress("Synchro terminée", 1.0)
     return {"statut": status, "debut": started, "fin": finished, "sources": results}
+
+
+def _note_refusal(conn, key: str, exc: Exception) -> None:
+    raw = db.get_meta(conn, key)
+    try:
+        previous = json.loads(raw) if raw else {}
+    except ValueError:
+        previous = {}
+    db.set_meta(conn, key, json.dumps({
+        "depuis": previous.get("depuis") or db.now_iso(),
+        "statut": getattr(exc, "status", None), "detail": getattr(exc, "detail", ""),
+    }, ensure_ascii=False))
 
 
 def key_refused(conn) -> dict | None:

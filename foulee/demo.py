@@ -16,7 +16,7 @@ import math
 import random
 from datetime import date, datetime, timedelta
 
-from . import analysis, config, db, utilisateurs
+from . import analysis, config, db, utilisateurs, views
 from .garmin.sync import upsert_activity
 
 SECOND_PROFILE = "Léo"
@@ -208,6 +208,7 @@ def build(days: int = 430, seed: int = 7, *, second_profile: bool = True) -> dic
     config.set_demo(True)
     with config.using_profile(utilisateurs.principal()):
         counts = _build_profile(days, seed)
+        _build_withings(days, seed)
     if second_profile:
         for entry in utilisateurs.profiles():  # on repart d'un second profil neuf
             if not entry.get("principal") and entry.get("prenom") == SECOND_PROFILE:
@@ -397,6 +398,62 @@ def _build_profile(days: int, seed: int) -> dict:
         counts = db.table_counts(conn)
     counts["seances_generees"] = n_activities
     return counts
+
+
+def _build_withings(days: int, seed: int) -> None:
+    """Balance, tensiomètre et Sleep Analyzer fictifs : de quoi montrer la vue « Withings » de la démo."""
+    from .withings import vue as withings_vue
+
+    rng = random.Random(seed + 11)
+    today = date.today()
+    start = today - timedelta(days=days)
+    height = 1.78
+    with db.session() as conn:
+        for day in analysis.days_between(start, today):
+            key = day.isoformat()
+            t = (day - start).days / max(days, 1)
+            values: dict[str, float] = {}
+            if rng.random() < 0.72:  # une pesée cinq jours sur sept environ
+                weight = 74.6 - 2.2 * t + rng.gauss(0, 0.25)
+                fat = 17.6 - 2.6 * t + rng.gauss(0, 0.35)
+                water = weight * (0.565 + 0.012 * t) + rng.gauss(0, 0.15)
+                values.update({
+                    "wi_weight_kg": round(weight, 2), "wi_fat_pct": round(fat, 1),
+                    "wi_fat_kg": round(weight * fat / 100, 2), "wi_lean_kg": round(weight * (1 - fat / 100), 2),
+                    "wi_muscle_kg": round(58.6 + 0.8 * t + rng.gauss(0, 0.25), 2), "wi_water_kg": round(water, 2),
+                    "wi_water_pct": round(100 * water / weight, 1), "wi_bone_kg": round(3.1 + rng.gauss(0, 0.03), 2),
+                    "wi_visceral": round(6.2 - 1.1 * t + rng.gauss(0, 0.2), 1), "wi_bmr": round(1690 + rng.gauss(0, 12)),
+                    "wi_pwv": round(7.3 - 0.4 * t + rng.gauss(0, 0.12), 2), "wi_bmi": round(weight / height ** 2, 1),
+                    "wi_pulse": round(61 + rng.gauss(0, 4)),
+                })
+            if day.weekday() in (0, 3, 5) or rng.random() < 0.08:  # tension trois fois par semaine
+                values.update({"wi_bp_sys": round(125 - 6 * t + rng.gauss(0, 5)),
+                               "wi_bp_dia": round(80 - 4 * t + rng.gauss(0, 3.5)),
+                               "wi_pulse": round(56 + rng.gauss(0, 4))})
+            if (today - day).days < 150:  # Sleep Analyzer depuis cinq mois
+                week, weekday = day.isocalendar()[1], day.weekday()
+                morning = week % 2 == 1 and weekday < 5
+                evening = week % 2 == 0 and weekday < 5
+                bed = 21.7 if morning else 23.6 if evening else 23.4
+                rise = 4.05 if morning else 7.3 if evening else 8.1
+                bed += rng.gauss(0, 0.3)
+                rise += rng.gauss(0, 0.2)
+                inbed = (rise + 24 - bed) * 3600
+                awake = max(300, rng.gauss(1500, 500))
+                sleep = inbed - awake - max(240, rng.gauss(900, 300))
+                deep, rem = sleep * rng.uniform(0.16, 0.22), sleep * rng.uniform(0.19, 0.25)
+                values.update({
+                    "wi_sleep_s": round(sleep), "wi_inbed_s": round(inbed), "wi_deep_s": round(deep),
+                    "wi_rem_s": round(rem), "wi_light_s": round(sleep - deep - rem), "wi_awake_s": round(awake),
+                    "wi_wake_count": max(0, round(rng.gauss(1.8, 1))), "wi_sleep_score": round(min(98, rng.gauss(79, 8) - (6 if morning else 0))),
+                    "wi_sleep_hr": round(52 + rng.gauss(0, 2.5)), "wi_sleep_resp": round(14.4 + rng.gauss(0, 0.6), 1),
+                    "wi_snoring_s": round(max(0, rng.gauss(600, 420))), "wi_bed_h": round(bed, 3),
+                    "wi_rise_h": round(rise, 3), "wi_sleep_eff_pct": round(100 * sleep / inbed),
+                })
+            db.put_daily(conn, key, values, source="withings")
+        db.set_meta(conn, "withings_connecte_le", f"{start.isoformat()} 08:00:00")
+        views.sync_withings_view(conn, True, withings_vue.families(conn))
+        conn.commit()
 
 
 # ------------------------------------------------- valeurs « à la Garmin »

@@ -51,6 +51,12 @@ TILE_TYPES: list[dict[str, Any]] = [
         "taille": {"w": 12, "h": 3}, "params": [],
     },
     {
+        "type": "withings", "label": "Withings : dernières mesures", "icone": "scale", "categorie": "Accueil",
+        "description": "Ta dernière pesée et ta composition corporelle, ta dernière tension, ta dernière nuit et ta "
+                       "journée, d'après tes appareils Withings, face à tes habitudes.",
+        "taille": {"w": 12, "h": 3}, "params": [],
+    },
+    {
         "type": "semaine", "label": "Ta semaine", "icone": "calendar", "categorie": "Accueil",
         "description": "Les 7 jours de la semaine : postes, séances, volume et charge face aux 4 semaines d'avant.",
         "taille": {"w": 12, "h": 2}, "params": [],
@@ -233,8 +239,9 @@ TILE_TYPES: list[dict[str, Any]] = [
 TILE_INDEX = {t["type"]: t for t in TILE_TYPES}
 WIDTHS = (3, 4, 6, 8, 12)
 ICONS = ["home", "sun", "activity", "map", "moon", "flag", "heart", "chart", "calendar", "star", "bolt", "layers",
-         "run", "trophy", "clock", "user", "club"]
+         "run", "trophy", "clock", "user", "club", "scale"]
 CLUB_VIEW = "club"
+WITHINGS_VIEW = "withings"
 
 
 def _tile(kind: str, w: int | None = None, h: int | None = None, titre: str | None = None, **params: Any) -> dict:
@@ -482,6 +489,74 @@ def sync_club_view(conn: sqlite3.Connection, enabled: bool) -> None:
         )
     elif not enabled and exists:
         conn.execute("DELETE FROM views WHERE id = ?", (CLUB_VIEW,))
+
+
+def withings_view(families: list[str] | None = None) -> dict:
+    """La vue « Withings » : le résumé, puis une courbe par famille de mesures présente
+    (corps, tension, sommeil, activité). Sans mesure encore : le corps, le cas le plus courant."""
+    present = [f for f in ("corps", "tension", "sommeil", "activite") if f in (families or [])] or ["corps"]
+    tiles = [_tile("withings", 12, 3)]
+    for family in present:
+        if family == "corps":
+            tiles += [
+                _tile("serie", 6, 2, titre="Poids", metriques=["wi_weight_kg"], lissage=0, periode="365"),
+                _tile("serie", 6, 2, titre="Composition corporelle", metriques=["wi_fat_pct", "wi_muscle_kg"],
+                      disposition="empiler", periode="365"),
+            ]
+        elif family == "tension":
+            tiles += [
+                _tile("serie", 6, 2, titre="Tension artérielle", metriques=["wi_bp_sys", "wi_bp_dia"],
+                      disposition="superposer", periode="180"),
+                _tile("serie", 6, 2, titre="Pouls au repos (tensiomètre, balance)", metriques=["wi_pulse"],
+                      periode="180"),
+            ]
+        elif family == "sommeil":
+            tiles += [
+                _tile("serie", 6, 2, titre="Sommeil (Withings)", metriques=["wi_sleep_s"], style="barres",
+                      bandes_postes=True, periode="60"),
+                _tile("serie", 6, 2, titre="Nuits : FC et respiration", metriques=["wi_sleep_hr", "wi_sleep_resp"],
+                      disposition="empiler", periode="60"),
+            ]
+        elif family == "activite":
+            tiles += [
+                _tile("serie", 6, 2, titre="Pas par jour (Withings)", metriques=["wi_steps"], style="barres",
+                      periode="60"),
+                _tile("serie", 6, 2, titre="Temps actif par semaine (Withings)", metriques=["wi_active_s"],
+                      style="barres", agregation="semaine", periode="180"),
+            ]
+    return {"id": WITHINGS_VIEW, "name": "Withings", "icon": "scale", "spec": {"tuiles": tiles}}
+
+
+def sync_withings_view(conn: sqlite3.Connection, enabled: bool, families: list[str] | None = None) -> None:
+    """La vue « Withings » arrive quand on connecte son compte (après « Mon club » s'il existe, sinon après
+    l'Accueil) et repart quand on le déconnecte. Ses tuiles suivent les mesures présentes tant qu'on ne l'a
+    pas modifiée : la dernière version créée d'office est gardée dans « withings_vue_auto »."""
+    row = conn.execute("SELECT spec FROM views WHERE id = ?", (WITHINGS_VIEW,)).fetchone()
+    if not enabled:
+        if row:
+            conn.execute("DELETE FROM views WHERE id = ?", (WITHINGS_VIEW,))
+        db.delete_meta(conn, "withings_vue_auto")
+        return
+    view = withings_view(families)
+    shape = [(t["type"], t.get("titre")) for t in view["spec"]["tuiles"]]
+    spec = json.dumps(view["spec"], ensure_ascii=False)
+    if row:
+        auto = db.get_meta(conn, "withings_vue_auto")
+        if auto != row["spec"]:
+            return  # modifiée par l'utilisateur : on n'y touche plus
+        if [(t["type"], t.get("titre")) for t in json.loads(row["spec"]).get("tuiles", [])] == shape:
+            return  # rien de nouveau
+        conn.execute("UPDATE views SET spec = ?, updated_at = ? WHERE id = ?", (spec, db.now_iso(), WITHINGS_VIEW))
+    else:
+        anchor = conn.execute("SELECT position FROM views WHERE id IN (?, 'accueil') ORDER BY id = 'accueil' LIMIT 1",
+                              (CLUB_VIEW,)).fetchone()
+        position = (anchor["position"] + 1) if anchor else 0
+        conn.execute("UPDATE views SET position = position + 1 WHERE position >= ?", (position,))
+        conn.execute(
+            "INSERT INTO views(id, name, icon, position, spec, builtin, updated_at) VALUES (?, ?, ?, ?, ?, 0, ?)",
+            (view["id"], view["name"], view["icon"], position, spec, db.now_iso()),
+        )
+    db.set_meta(conn, "withings_vue_auto", spec)
 
 
 def reorder_views(conn: sqlite3.Connection, ids: list[str]) -> None:

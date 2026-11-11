@@ -1,5 +1,6 @@
-"""Rangement de tes secrets : la clé API Garmin, et le jeton GitHub éventuel (pour
-chercher les mises à jour tant que le dépôt de Foulée est privé).
+"""Rangement de tes secrets : la clé API Garmin, l'accès à Withings (ClientID, Secret et jetons
+de ton appli Withings), et le jeton GitHub éventuel (pour chercher les mises à jour tant que le
+dépôt de Foulée est privé).
 
 - Windows : Gestionnaire d'identification Windows (entrée « Foulee »), chiffré
   avec ta session. Si la clé était trop longue pour lui, repli automatique sur
@@ -34,8 +35,9 @@ ENV_VAR = "GARMIN_PERSONAL_API_KEY"
 SECRETS = {
     "garmin": (USERNAME, "garmin-cle", ENV_VAR),
     "github": ("github-jeton", "github-jeton", "FOULEE_GITHUB_TOKEN"),  # dépôt privé : vérifier les mises à jour
+    "withings": ("withings-acces", "withings-acces", None),  # ClientID, Secret et jetons de l'appli Withings
 }
-PER_PROFILE = {"garmin"}  # un exemplaire par profil
+PER_PROFILE = {"garmin", "withings"}  # un exemplaire par profil
 
 
 def _entry(name: str) -> tuple[str, str, str | None]:

@@ -21,7 +21,7 @@ function hms(text) {
   return parts[0] * 3600 + parts[1] * 60 + parts[2];
 }
 
-export function renderSettings(page, boot, { onSaved, onProfile, refreshBoot, toast, resetViews, section = null }) {
+export function renderSettings(page, boot, { onSaved, onProfile, refreshBoot, toast, resetViews, startSync, section = null }) {
   const s = structuredClone(boot.reglages);
   const goal = s.objectif || {};
   const preset = DISTANCES.find(([v]) => Number(v) === Number(goal.distance_km));
@@ -179,7 +179,8 @@ export function renderSettings(page, boot, { onSaved, onProfile, refreshBoot, to
   refresh();
 
   form.querySelector("[data-reset-views]").addEventListener("click", resetViews);
-  wireSystem(page.querySelector("#settings-system"), boot, { toast });
+  // Withings connecté ou déconnecté : la colonne (vue « Withings ») et le bandeau suivent, la page reste en place
+  wireSystem(page.querySelector("#settings-system"), boot, { toast, startSync, onWithings: () => refreshBoot() });
   buildJumps(page);
   if (section) {
     const target = page.querySelector(`[data-section="${CSS.escape(section)}"]`);
@@ -243,7 +244,7 @@ function keepInView(page, target) {
 
 // =============================================================== sommaire
 const JUMPS = [["profil", "Profil"], ["utilisateurs", "Utilisateurs"], ["club", "Club"], ["coureur", "Coureur"], ["objectif", "Objectif"], ["horaires", "Horaires"],
-  ["zones-fc", "Zones FC"], ["zones", "Allures"], ["synchro", "Synchro"], ["sauvegarde", "Sauvegarde"], ["cle", "Clé Garmin"],
+  ["zones-fc", "Zones FC"], ["zones", "Allures"], ["synchro", "Synchro"], ["sauvegarde", "Sauvegarde"], ["cle", "Clé Garmin"], ["withings", "Withings"],
   ["dossier", "Données"], ["claude", "Claude"], ["app", "Application"], ["lan", "Réseau local"], ["maj", "Mises à jour"],
   ["installation", "Installation"], ["apropos", "À propos"]];
 

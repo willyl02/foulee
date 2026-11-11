@@ -1,7 +1,8 @@
 # Foulée
 
 Ton hub local de données sport et santé. Foulée récupère tes données Garmin grâce
-à ta clé API personnelle, les range dans une base sur ton PC, et les met à
+à ta clé API personnelle (et, si tu veux, tes mesures **Withings** : balance,
+tensiomètre, Sleep Analyzer), les range dans une base sur ton PC, et les met à
 disposition de deux façons :
 
 - une **interface** dans ton navigateur (http://127.0.0.1:8770), faite de vues et de
@@ -18,11 +19,12 @@ ou [les mêmes pages en images JPG](docs/presentation/Foulee-presentation-pages-
 à partager.
 
 Aucun service intermédiaire : ta machine parle directement à Garmin (client Python
-officiel de Garmin), et tout est stocké chez toi.
+officiel de Garmin) et à Withings, et tout est stocké chez toi.
 
 ```
-Garmin (API personnelle)  ──►  connecteurs + synchro  ──►  base locale (SQLite + fichiers FIT)
-                                                              │
+Garmin (API personnelle) ─┐
+                          ├─►  connecteurs + synchro  ──►  base locale (SQLite + fichiers FIT)
+Withings (API publique) ──┘                                   │
                                                      moteur d'analyse
                                                      ┌────────┴────────┐
                                               serveur MCP         serveur web local
@@ -95,6 +97,47 @@ avant l'expiration. Si Garmin refuse ta clé, un bandeau rouge le signale et la 
 se met en pause : crée une nouvelle clé, puis **Réglages → Clé API Garmin → Remplacer
 la clé**. Pour l'effacer de ce PC : **Supprimer la clé sur ce PC**.
 
+### Relier ton compte Withings (facultatif)
+
+Balance, tensiomètre, Sleep Analyzer, montre Withings : Foulée récupère aussi tes
+pesées (avec la composition corporelle), ta tension, tes nuits et tes pas. Une vue
+**Withings** s'ajoute alors juste après l'Accueil, et les mesures Withings sont dans
+toutes les tuiles (catégorie « Withings ») et dans Claude Desktop.
+
+Withings ne donne pas une simple clé comme Garmin : chacun crée sa propre « appli »
+(gratuite) sur le site de Withings pour développeurs. **Réglages → Withings** guide
+pas à pas ; compte une dizaine de minutes, une seule fois, de préférence depuis le PC :
+
+1. **Crée ton appli Withings** sur le
+   [tableau de bord développeur de Withings](https://developer.withings.com/dashboard/),
+   connecté avec ton compte Withings habituel : *Withings public cloud* → **Create an
+   application** → **Public API integration**. Dans le formulaire : *Target
+   environment* **Development**, un nom (« Foulée »), une description, et dans
+   **Registered URLs** exactement cette adresse (bouton « Copier » dans Foulée) :
+   `https://willyl02.github.io/foulee/withings/`
+2. **Colle le ClientID et le Secret** affichés par Withings dans Foulée, puis
+   **Enregistrer**. Comme la clé Garmin, ils vont dans le Gestionnaire d'identification
+   Windows (sur un serveur : dans un fichier que seul Foulée lit) et ne se règlent que
+   depuis la machine elle-même ou par Tailscale.
+3. **Connecter mon compte Withings** : la page de Withings s'ouvre, clique sur **Allow
+   this app**. Tu reviens tout seul dans les Réglages, et le premier import démarre.
+   Ensuite, tes mesures arrivent avec la synchro, toutes les 3 heures.
+
+**Pourquoi une page relais ?** Après « Allow », Withings renvoie ton navigateur vers
+une adresse publique en https, enregistrée dans ton appli : il refuse l'adresse de ton
+PC. Cette adresse est une petite page de ce dépôt (dossier `docs/withings`, publiée par
+GitHub Pages), la même pour tout le monde : elle renvoie aussitôt ton navigateur vers
+ton Foulée, et seulement vers une adresse de la maison (le PC, le réseau local,
+Tailscale). Elle ne garde rien. Elle voit seulement passer un code à usage unique,
+valable 30 secondes et inutilisable sans ton Secret, qui ne quitte jamais Foulée.
+
+Bon à savoir : Withings demande un abonnement **Withings+** aux comptes créés après le
+12 octobre 2026 pour partager leurs données avec une appli comme Foulée. Chaque profil
+relie son propre compte Withings. Si Withings retire l'accès (supprimé dans ton compte
+Withings, ou connexion expirée), un bandeau te propose de reconnecter le compte.
+**Déconnecter Withings** arrête la synchro de tes mesures et retire la vue ; les
+mesures déjà importées restent.
+
 ## 3. Utiliser l'interface
 
 | Vue | Contenu |
@@ -106,6 +149,7 @@ la clé**. Pour l'effacer de ce PC : **Supprimer la clé sur ce PC**.
 | Récup & postes | Comparaison d'un poste de travail à l'autre, sommeil, VFC, FC de repos, nuage sommeil → VFC, calendrier |
 | Cap semi de Paris | Compte à rebours, allure cible, fractions rapides face à l'allure cible, volume, charge, zones, VO2max |
 | Mon club | Si tu l'as coché dans les Réglages : ton club FFA (coordonnées, site, carte), ta licence, et son classement sur athle.fr en un clic |
+| Withings | Si tu as relié ton compte : dernière pesée et composition corporelle, dernière tension (avec les repères de la Société européenne d'hypertension), dernière nuit, activité, puis les courbes de chaque appareil |
 
 **Tout se modifie** : bouton « Modifier la vue », puis glisse les tuiles, change
 leur taille, règle-les (roue dentée) ou ajoute-en. Les tuiles sont rangées par
@@ -139,8 +183,9 @@ Les **Réglages** contiennent :
 - **Zones d'allure** : en % de la VMA, en % de la vitesse au seuil, ou allures à la
   main ;
 - la synchro, le fond de carte (OpenStreetMap, Plan IGN ou aucun), puis
-  l'installation : clé Garmin, dossier des données, Claude Desktop, démarrage avec
-  Windows et mises à jour.
+  l'installation : clé Garmin, **Withings** (le pas-à-pas pour relier ton compte, puis
+  l'état de la connexion), dossier des données, Claude Desktop, démarrage avec Windows
+  et mises à jour.
 
 **Aide et retours**, en bas de la colonne de gauche (menu ☰ sur téléphone) :
 
@@ -224,6 +269,7 @@ lui-même le serveur MCP de Foulée.
 | Journaux | `%LOCALAPPDATA%\Foulee\donnees\logs\` (un par usage : app, mcp, sync…) |
 | Réglages de l'installation | `%LOCALAPPDATA%\Foulee\config.json` |
 | Clé API (et jeton GitHub éventuel) | Gestionnaire d'identification Windows, entrée « Foulee » |
+| Appli et accès Withings (ClientID, Secret, jetons) | Gestionnaire d'identification Windows, à côté de la clé API |
 | Jeton temporaire Garmin (24 h) | `%LOCALAPPDATA%\Foulee\garmin-jeton.json` |
 | Programme | `%LOCALAPPDATA%\Programs\Foulee` (remplacé à chaque mise à jour) |
 
@@ -481,6 +527,7 @@ avec les informations utiles.
 ```
 foulee/
   garmin/          connecteur Garmin : client (rythme, reprises), parseurs, synchro, diagnostic
+  withings/        connecteur Withings : appli et jetons (OAuth par la page relais), lecture des mesures, synchro, vue
   desktop.py       application Windows : icône près de l'horloge, synchro auto, une seule copie
   web.py           API locale + pages, accès réseau, clé, dossier, Claude, mises à jour
   updates.py       mises à jour (versions GitHub du PC, canaux stable et bêta)
@@ -488,9 +535,9 @@ foulee/
   utilisateurs.py  profils : liste, profil courant (cookie signé), codes, accès de Claude
   datadir.py       dossier des données : déplacer, utiliser, importer
   claude_desktop.py  configuration de Claude Desktop (toutes ses variantes)
-  vault.py         secrets : clé Garmin, jeton GitHub (Gestionnaire d'identification Windows)
+  vault.py         secrets : clé Garmin, accès Withings, jeton GitHub (Gestionnaire d'identification Windows)
   keyinput.py      lecture de la clé (presse-papiers, nettoyage) sans jamais l'afficher
-  sync.py          chef d'orchestre des sources (ajouter Withings ou Strava = une entrée ici)
+  sync.py          chef d'orchestre des sources : Garmin, Withings (ajouter Strava = une entrée ici)
   db.py            schéma SQLite (et sa mise à niveau), réglages
   metrics.py       catalogue des métriques (libellés, unités, formats) et données brutes de Garmin
   analysis.py      tous les calculs (séries, charge, zones, postes, objectif, allures VMA, forme du jour…)
@@ -506,8 +553,9 @@ foulee/
   demo.py          données fictives
   static/          interface (HTML/CSS/JS, ECharts et Leaflet embarqués), appli installable (manifest, sw.js)
 packaging/         installateur Windows (Inno Setup), construction et essai de bout en bout
+docs/              page relais de Withings (publiée par GitHub Pages), présentation illustrée
 scripts/           installation et mise à jour : archive Windows (.ps1), serveur Linux (.sh, maj_serveur.py)
-tests/             tests, dont un faux serveur Garmin pour tester toute la chaîne
+tests/             tests, dont un faux serveur Garmin et un faux Withings pour tester toute la chaîne
 ```
 
 Pour une nouvelle source : un dossier à côté de `garmin/` qui écrit dans les mêmes

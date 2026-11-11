@@ -14,6 +14,7 @@ import { renderWelcome } from "./welcome.js";
 import * as A from "./tiles-activity.js";
 import * as D from "./tiles-data.js";
 import * as H from "./tiles-home.js";
+import * as W from "./tiles-withings.js";
 
 const RENDERERS = {
   kpi: D.kpi, serie: D.serie, charge: D.charge, zones: D.zones, calendrier: D.calendrier, nuage: D.nuage,
@@ -22,11 +23,11 @@ const RENDERERS = {
   seance_carte: A.seance_carte, seance_courbes: A.seance_courbes, seance_tours: A.seance_tours,
   seance_mesures: A.seance_mesures,
   profil: H.profil, forme: H.forme, allures: H.allures, semaine: H.semaine, records: H.records, journee: H.journee,
-  club: H.club,
+  club: H.club, withings: W.withings,
 };
 const PERIODS = [[7, "7 j"], [30, "30 j"], [90, "90 j"], [180, "6 mois"], [365, "1 an"], [730, "2 ans"]];
 // Tuiles qui ne dépendent pas de la période : une vue faite seulement de celles-ci se passe du sélecteur
-const TIMELESS = new Set(["profil", "club"]);
+const TIMELESS = new Set(["profil", "club", "withings"]);
 const WIDTHS = [3, 4, 6, 8, 12];
 const THEMES = ["auto", "light", "dark"];
 const THEME_LABELS = { auto: "Thème : automatique", light: "Thème : clair", dark: "Thème : sombre" };
@@ -152,6 +153,9 @@ function renderStrip() {
     html = noData()
       ? strip("", "Pas encore de clé API Garmin : l'accueil te guide en trois étapes.", local ? `<a class="btn btn-ghost" href="#/bienvenue">Commencer</a>` : "")
       : strip("alert", "Aucune clé API Garmin enregistrée : la synchro est en pause.", local ? `<a class="btn btn-ghost" href="#/reglages?section=cle">Ajouter ma clé</a>` : "");
+  } else if (b.withings?.refus) {
+    html = strip("alert", "Withings n'accepte plus l'accès de Foulée : la synchro de tes mesures Withings est en pause.",
+      local ? `<a class="btn btn-ghost" href="#/reglages?section=withings">Reconnecter Withings</a>` : "");
   } else if (noData()) {
     html = strip("", "Pas encore de données : lance le premier import.", `<a class="btn btn-ghost" href="#/bienvenue">Premier import</a>`);
   }
@@ -682,6 +686,7 @@ function showSettings(section = null) {
     },
     onProfile: (profil) => { state.boot.profil = profil; renderBrand(); },
     refreshBoot: async (again) => { await refreshBoot(); if (again) showSettings(again); },
+    startSync,
     resetViews: async () => {
       const ok = await E.confirm("Restaurer les vues d'origine ?", "Les six vues fournies avec Foulée (dont l'accueil) reprennent leur contenu de départ. Tes vues personnelles ne bougent pas.", "Restaurer");
       if (!ok) return;
@@ -742,19 +747,31 @@ function pollSync() {
       return;
     }
     if (job.erreur) toast(`Synchro impossible : ${job.erreur}`, { error: true });
-    else if (job.resultat) {
-      const g = job.resultat.sources?.garmin || {};
-      if (g.erreur) toast(`Synchro impossible : ${g.erreur}`, { error: true });
-      else toast(`Synchro terminée : ${g.seances_nouvelles || 0} nouvelle(s) séance(s), ${g.fit || 0} fichier(s) FIT.${g.erreurs?.length ? ` ${g.erreurs.length} alerte(s) dans le journal.` : ""}`);
-    }
+    else if (job.resultat) syncToast(job.resultat.sources || {});
     api.clearCache();
     await loadBoot();
     renderStrip();
     renderSyncLine();
     renderNav();
-    rerender();
+    // Sur les Réglages, la page reste en place (saisie en cours, position) : le panneau Withings suit seul
+    if (!isSettings()) rerender();
   };
   tick();
+}
+
+/** Bilan d'une synchro, source par source (Garmin, Withings), dans un seul message. */
+function syncToast(sources) {
+  const { garmin: g, withings: w } = sources;
+  const both = Boolean(g && w);
+  const done = [];
+  const failed = [];
+  if (g?.erreur) failed.push(both ? `Garmin : ${g.erreur}` : g.erreur);
+  else if (g) done.push(`${g.seances_nouvelles || 0} nouvelle(s) séance(s), ${g.fit || 0} fichier(s) FIT${g.erreurs?.length ? `, ${g.erreurs.length} alerte(s) dans le journal` : ""}`);
+  if (w?.erreur) failed.push(both ? `Withings : ${w.erreur}` : w.erreur);
+  else if (w) done.push(`mesures Withings à jour${w.erreurs?.length ? ` (${w.erreurs.length} alerte(s) dans le journal)` : ""}`);
+  if (!failed.length) toast(`Synchro terminée : ${done.join(" ; ") || "rien de nouveau"}.`);
+  else if (!done.length) toast(`Synchro impossible : ${failed.join(" ; ")}`, { error: true });
+  else toast(`Synchro partielle : ${done.join(" ; ")}. ${failed.join(" ; ")}`, { error: true });
 }
 
 start();

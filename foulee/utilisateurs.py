@@ -320,7 +320,8 @@ def rename(profile_id: str, name: str) -> dict:
 
 
 def delete(profile_id: str) -> dict:
-    """Supprime un profil : sa base, ses fichiers FIT, sa photo, sa clé Garmin. Ses données restent chez Garmin."""
+    """Supprime un profil : sa base, ses fichiers FIT, sa photo, sa clé Garmin, son accès Withings.
+    Ses données restent chez Garmin et chez Withings."""
     from . import sync, vault
 
     entry = get(profile_id)
@@ -333,6 +334,7 @@ def delete(profile_id: str) -> dict:
             raise ProfileError("Une synchro de ce profil est en cours : réessaie quand elle sera terminée.")
         name = card(entry)["prenom"]
         vault.delete_key()  # sa clé Garmin et son jeton temporaire
+        vault.delete_secret("withings")  # son appli et ses jetons Withings
         folder = config.data_dir()
     with _lock:
         data = load()

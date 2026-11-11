@@ -4,6 +4,17 @@ Les versions « bêta » (par exemple 0.4.0b1) sont des avant-premières : elles
 sur le canal bêta (Réglages → Mises à jour → « Recevoir les versions bêta »), puis sortent en
 version stable une fois éprouvées.
 
+## 0.6.0b1 — 11 novembre 2026 (bêta)
+
+- **Withings** : relie ton compte Withings (balance, tensiomètre, Sleep Analyzer, montre) dans **Réglages → Withings**. Un pas-à-pas en quatre étapes guide tout : créer ton appli Withings (gratuite, une seule fois, avec les mots à repérer sur le site de Withings, en anglais), donner son ClientID et son Secret à Foulée, puis autoriser l'accès (« Allow this app »). Tu reviens tout seul dans Foulée en passant un instant par une petite page relais du dépôt : Withings exige une adresse publique en https pour ce retour. Le premier import récupère ton historique, puis tes mesures arrivent avec la synchro, toutes les 3 heures.
+- Une vue **Withings** s'ajoute juste après l'Accueil (ou après « Mon club ») : dernière pesée et composition corporelle face à celle d'il y a un mois, dernière tension avec les repères de la Société européenne d'hypertension, dernière nuit (phases, FC, respiration), activité, puis les courbes de chaque appareil présent. Elle s'en va si tu déconnectes Withings ; les mesures importées restent.
+- 51 métriques Withings dans toutes les tuiles (catégorie « Withings ») et dans Claude Desktop : poids, masse grasse, musculaire, osseuse, eau, IMC (avec la taille saisie dans ton compte Withings), graisse viscérale, vitesse de l'onde de pouls, tension, pouls, SpO2, température, sommeil (phases, score, ronflements…), pas, distance, temps actif, calories.
+- Le ClientID, le Secret et les jetons de Withings vont dans le Gestionnaire d'identification Windows (sur un serveur : un fichier que seul Foulée lit), ne se règlent que depuis la machine elle-même ou par Tailscale, et ne s'affichent jamais. Chaque profil relie son propre compte Withings.
+- Si Withings retire l'accès (accès supprimé dans ton compte Withings, connexion expirée), un bandeau te propose de reconnecter ton compte, avec une notification près de l'horloge ; la synchro Garmin continue.
+- Le message de fin de synchro parle de chaque source (« 2 nouvelle(s) séance(s)… ; mesures Withings à jour »).
+- Réglages : la fin d'une synchro ne redessine plus toute la page (elle pouvait remonter en haut, et une saisie en cours se perdait).
+- Aide : nouveau thème « Withings ». Mode démo : une balance, un tensiomètre et un Sleep Analyzer fictifs, avec leur vue.
+
 ## 0.5.1 — 11 novembre 2026
 
 - **Mon club** : dans Réglages → Mon club, coche « Je fais partie d'un club » et saisis le numéro de club de ta licence (« N° Club », 6 chiffres). Une vue « Mon club » s'ajoute juste après l'Accueil : les coordonnées du club (président, siège avec un lien vers la carte, téléphone et e-mail cliquables, site), des boutons vers le **classement du club sur athle.fr** (saison en cours et précédente), sa page et son site, et ta licence, avec un rappel « Licence à renouveler » sur l'Accueil un mois avant la fin.

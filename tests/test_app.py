@@ -140,11 +140,38 @@ def test_autosync_runs_when_due_only():
     assert auto.tick() is None
 
 
+def test_autosync_warns_once_when_withings_withdraws_access():
+    now = [time.time()]
+    notes = []
+    vault.set_key("GCDC_cle-de-test")
+    with db.session() as conn:
+        db.set_meta(conn, "last_sync", "2026-01-01 08:00:00")
+
+    def withdrawn():  # Garmin répond, Withings refuse le renouvellement de l'accès
+        with db.session() as conn:
+            db.set_meta(conn, "last_sync", db.now_iso())
+            db.set_meta(conn, "withings_refus", json.dumps({"depuis": db.now_iso(), "statut": 401}))
+        return True
+
+    auto = desktop.AutoSync(withdrawn, lambda: {"en_cours": False, "resultat": {"statut": "partiel"}}, notes.append,
+                            clock=lambda: now[0])
+    auto.tick()
+    assert len(notes) == 1 and "Withings n'accepte plus l'accès" in notes[0] and "Réglages → Withings" in notes[0]
+    now[0] += desktop.SYNC_EVERY
+    assert auto.tick() is not None and len(notes) == 1  # la synchro Garmin continue, sans nouvel avertissement
+
+
 def test_sync_summary():
     assert desktop.sync_summary({"erreur": "réseau"}) == "Synchro impossible : réseau"
     done = {"resultat": {"sources": {"garmin": {"seances_nouvelles": 2}}}}
     assert desktop.sync_summary(done) == "Synchro terminée : 2 nouvelles séances."
     assert "à jour" in desktop.sync_summary({"resultat": {"sources": {"garmin": {}}}})
+    assert desktop.sync_summary({"resultat": {"sources": {"garmin": {"erreur": "clé refusée"}}}}) == \
+        "Synchro impossible : clé refusée"
+    both = {"resultat": {"sources": {"garmin": {"seances_nouvelles": 1}, "withings": {"erreur": "accès refusé"}}}}
+    assert desktop.sync_summary(both) == "Synchro partielle. Withings : accès refusé"
+    withings = {"resultat": {"sources": {"garmin": {}, "withings": {"mesures": 3}}}}
+    assert desktop.sync_summary(withings) == "Synchro terminée : tout est à jour."
 
 
 def test_app_endpoints_outside_the_application():
