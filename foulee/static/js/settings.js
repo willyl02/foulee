@@ -8,6 +8,7 @@ import { profilePanel, transferPanel } from "./settings-profile.js";
 import { scheduleEditor } from "./settings-schedule.js";
 import { hrZonesEditor, paceZonesEditor } from "./settings-zones.js";
 import { systemSections, wireSystem } from "./system.js";
+import { accessPanel, usersPanel } from "./users.js";
 
 const SEMI = 21.0975;
 const DISTANCES = [["5", "5 km"], ["10", "10 km"], [String(SEMI), "Semi-marathon"], ["42.195", "Marathon"], ["autre", "Autre distance"]];
@@ -24,16 +25,25 @@ export function renderSettings(page, boot, { onSaved, onProfile, refreshBoot, to
   const goal = s.objectif || {};
   const preset = DISTANCES.find(([v]) => Number(v) === Number(goal.distance_km));
   const hr = boot.profil_fc || {};
+  const principal = boot.utilisateur?.principal !== false;
+  const users = boot.utilisateurs || [];
+  const me = users.find((u) => u.courant);
   page.innerHTML = `
     <header class="head"><div><h1>Réglages</h1>
-      <div class="head-sub">Ils servent aux calculs de l'interface et de Claude.</div></div></header>
+      <div class="head-sub"><span>${users.length > 1 && me ? `Profil de <b>${F.escape(me.prenom)}</b> : ces réglages ne concernent que ce profil. ` : ""}Ils servent aux calculs de l'interface et de Claude.</span></div></div></header>
     <nav class="settings-jump" aria-label="Rubriques des réglages"></nav>
     <div class="settings settings-system">
       <section data-section="profil">
         <h2>Profil et logo</h2>
         <p class="intro">Ton prénom et ta photo s'affichent sur l'accueil ; le logo choisi remplace celui de Foulée dans la colonne et l'onglet du navigateur. Chaque choix s'enregistre tout de suite.</p>
         <div data-profile></div>
+        <div class="access" data-access></div>
       </section>
+      ${principal ? `<section data-section="utilisateurs">
+        <h2>Gestion des utilisateurs</h2>
+        <p class="intro">Un profil par personne : chacun a ses données Garmin (avec sa propre clé), ses vues, ses réglages et sa synchro. Tu es l'utilisateur principal : toi seul ajoutes ou retires des profils et règles l'installation (mises à jour, dossier des données${boot.machine === "serveur" ? ", accès par le réseau local" : ""}…). On passe d'un profil à l'autre avec son prénom, en haut à droite de l'Accueil.</p>
+        <div data-users></div>
+      </section>` : ""}
     </div>
     <form class="settings" id="settings-form" novalidate>
       <section data-section="coureur">
@@ -132,6 +142,8 @@ export function renderSettings(page, boot, { onSaved, onProfile, refreshBoot, to
   const profile = () => ({ max: num("fc_max") || hr.max || 190, rest: num("fc_repos") || hr.rest || 50 });
 
   profilePanel(page.querySelector("[data-profile]"), boot, { toast, onProfile });
+  accessPanel(page.querySelector("[data-access]"), boot, { toast, onChange: () => refreshBoot() });
+  if (principal) usersPanel(page.querySelector("[data-users]"), boot, { toast, onChange: () => refreshBoot() });
   const schedule = scheduleEditor(page.querySelector("[data-schedule]"), s.horaires);
   const hrZones = hrZonesEditor(page.querySelector("[data-hr-zones]"), boot, profile);
   const paceZones = paceZonesEditor(page.querySelector("[data-pace-zones]"), boot, vma);
@@ -206,10 +218,10 @@ export function renderSettings(page, boot, { onSaved, onProfile, refreshBoot, to
 }
 
 // =============================================================== sommaire
-const JUMPS = [["profil", "Profil"], ["coureur", "Coureur"], ["objectif", "Objectif"], ["horaires", "Horaires"],
+const JUMPS = [["profil", "Profil"], ["utilisateurs", "Utilisateurs"], ["coureur", "Coureur"], ["objectif", "Objectif"], ["horaires", "Horaires"],
   ["zones-fc", "Zones FC"], ["zones", "Allures"], ["synchro", "Synchro"], ["sauvegarde", "Sauvegarde"], ["cle", "Clé Garmin"],
   ["dossier", "Données"], ["claude", "Claude"], ["app", "Application"], ["lan", "Réseau local"], ["maj", "Mises à jour"],
-  ["apropos", "À propos"]];
+  ["installation", "Installation"], ["apropos", "À propos"]];
 
 function buildJumps(page) {
   const nav = page.querySelector(".settings-jump");

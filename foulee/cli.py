@@ -205,7 +205,44 @@ def cmd_setup(args: argparse.Namespace) -> int:
     return cmd_sync(argparse.Namespace(depuis=since, sans_fit=False, fit_jours=None, quiet=False))
 
 
+def _profiles_for(name: str | None) -> list[dict]:
+    """Profils visés par une commande : tous, ou celui dont on donne le prénom ou l'identifiant."""
+    from . import utilisateurs
+
+    entries = utilisateurs.profiles()
+    if not name:
+        return entries
+    wanted = name.strip().casefold()
+    found = [e for e in entries if e["id"] == name or utilisateurs.card(e)["prenom"].casefold() == wanted]
+    if not found:
+        names = ", ".join(utilisateurs.card(e)["prenom"] for e in entries)
+        raise SystemExit(f"Profil inconnu : « {name} ». Profils : {names}.")
+    return found
+
+
 def cmd_sync(args: argparse.Namespace) -> int:
+    """Synchronise chaque profil qui a une clé (ou celui demandé avec --profil)."""
+    from . import utilisateurs, vault
+
+    targets = _profiles_for(getattr(args, "profil", None))
+    if len(targets) == 1:
+        with config.using_profile(targets[0]):
+            return _sync_profile(args)
+    worst = 0
+    for entry in targets:
+        with config.using_profile(entry):
+            name = utilisateurs.card(entry)["prenom"]
+            if not config.is_demo() and not vault.has_key():
+                if not args.quiet:
+                    _say(f"\n— {name} : pas de clé API Garmin, profil passé.")
+                continue
+            if not args.quiet:
+                _say(f"\n— {name}")
+            worst = max(worst, _sync_profile(args))
+    return worst
+
+
+def _sync_profile(args: argparse.Namespace) -> int:
     from . import sync
 
     since = date.fromisoformat(args.depuis) if getattr(args, "depuis", None) else None
@@ -329,7 +366,7 @@ def cmd_status(args: argparse.Namespace) -> int:
     from . import sync
 
     _say(f"Foulée {__version__}")
-    _say(f"  Dossier de données : {config.data_dir()}")
+    _say(f"  Dossier de données : {config.root_dir()}")
     _say(f"  Clé API Garmin     : {'enregistrée' if vault.has_key() else 'absente (foulee setup)'}")
     token = config.token_cache_file()
     if token.exists():
@@ -348,6 +385,12 @@ def cmd_status(args: argparse.Namespace) -> int:
     _say(f"  Base               : {counts['activities']} séances, {counts['daily']} valeurs, {counts['streams']} séances avec courbes")
     _say(f"  Données depuis     : {first or '–'}")
     _say(f"  Dernière synchro   : {info.get('derniere_reussie') or 'jamais'}")
+    from . import utilisateurs
+
+    cards = utilisateurs.cards()
+    if len(cards) > 1:
+        names = ", ".join(f"{c['prenom']}{' (principal)' if c['principal'] else ''}" for c in cards)
+        _say(f"  Profils            : {names}  (foulee sync --profil <prénom> pour un seul)")
     return 0
 
 
@@ -562,6 +605,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--sans-fit", action="store_true", help="ne pas télécharger les fichiers FIT")
     p.add_argument("--fit-jours", type=int, help="télécharger les FIT des N derniers jours")
     p.add_argument("--quiet", action="store_true", help="aucun affichage (tâche planifiée)")
+    p.add_argument("--profil", help="un seul profil (prénom ou identifiant) ; par défaut : tous ceux qui ont une clé")
     p.set_defaults(func=cmd_sync)
 
     p = sub.add_parser("web", help="ouvrir l'interface dans le navigateur")

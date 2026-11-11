@@ -6,7 +6,7 @@ fictif et généré de façon reproductible. La base démo est un fichier sépar
 
 Le profil simulé suit un rythme en postes alternés (semaines ISO impaires du
 matin, paires du soir) pour que la vue « Récup & postes » ait quelque chose
-à montrer.
+à montrer. Un second profil, plus court, montre le passage d'un profil à l'autre.
 """
 
 from __future__ import annotations
@@ -16,8 +16,10 @@ import math
 import random
 from datetime import date, datetime, timedelta
 
-from . import analysis, config, db
+from . import analysis, config, db, utilisateurs
 from .garmin.sync import upsert_activity
+
+SECOND_PROFILE = "Léo"
 
 HR_MAX = 186
 HR_REST = 47
@@ -201,9 +203,26 @@ class Athlete:
         return [lap for lap in laps if lap["duration"] > 0]
 
 
-def build(days: int = 430, seed: int = 7) -> dict:
-    """(Re)construit la base démo. Renvoie quelques compteurs."""
+def build(days: int = 430, seed: int = 7, *, second_profile: bool = True) -> dict:
+    """(Re)construit la démo : le profil principal et, en plus, un second profil. Renvoie quelques compteurs."""
     config.set_demo(True)
+    with config.using_profile(utilisateurs.principal()):
+        counts = _build_profile(days, seed)
+    if second_profile:
+        for entry in utilisateurs.profiles():  # on repart d'un second profil neuf
+            if not entry.get("principal") and entry.get("prenom") == SECOND_PROFILE:
+                utilisateurs.delete(entry["id"])
+        entry = utilisateurs.create(SECOND_PROFILE)
+        with config.using_profile(entry):
+            _build_profile(min(150, days), seed + 4)
+            with db.session() as conn:
+                db.set_setting(conn, "profil", {"prenom": SECOND_PROFILE, "logo": "eclair"})
+                db.set_setting(conn, "vma_kmh", 14.6)
+        counts["profils"] = 2
+    return counts
+
+
+def _build_profile(days: int, seed: int) -> dict:
     path = config.db_path()
     for suffix in ("", "-wal", "-shm"):
         candidate = path.with_name(path.name + suffix)

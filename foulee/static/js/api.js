@@ -3,6 +3,10 @@
 
 const cache = new Map();
 const CACHE_MS = 20000;
+let profileId = null;  // profil pour lequel la page est ouverte (vérifié par le serveur à chaque requête)
+
+/** Le serveur refuse ensuite toute requête si ce navigateur est passé sur un autre profil (autre onglet). */
+export function setProfile(id) { profileId = id || null; }
 
 function url(path, params) {
   const query = new URLSearchParams();
@@ -15,6 +19,7 @@ function url(path, params) {
 
 async function request(method, path, body) {
   const options = { method, headers: { Accept: "application/json" } };
+  if (profileId) options.headers["X-Foulee-Profil"] = profileId;
   if (method !== "GET") {
     options.headers["X-Foulee"] = "1";
     if (body !== undefined) {
@@ -24,8 +29,11 @@ async function request(method, path, body) {
   }
   const response = await fetch(path, options);
   if (!response.ok) {
-    let detail = `${response.status}`;
-    try { detail = (await response.json()).detail || detail; } catch (e) { /* réponse non JSON */ }
+    let data = null;
+    try { data = await response.json(); } catch (e) { /* réponse non JSON */ }
+    // Le profil de ce navigateur n'est plus valable (code changé ailleurs…) : retour à « Qui es-tu ? »
+    if (response.status === 409 && data?.profil_requis) setTimeout(() => location.reload(), 30);
+    const detail = data?.detail || `${response.status}`;
     throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
   }
   return response.status === 204 ? null : response.json();
@@ -48,11 +56,14 @@ export const del = (path) => { clearCache(); return request("DELETE", path); };
 /** Envoi d'un fichier tel quel (photo de profil). */
 export async function putBlob(path, blob) {
   clearCache();
-  const response = await fetch(path, { method: "PUT", headers: { "X-Foulee": "1", "Content-Type": blob.type || "application/octet-stream", Accept: "application/json" }, body: blob });
+  const headers = { "X-Foulee": "1", "Content-Type": blob.type || "application/octet-stream", Accept: "application/json" };
+  if (profileId) headers["X-Foulee-Profil"] = profileId;
+  const response = await fetch(path, { method: "PUT", headers, body: blob });
   if (!response.ok) {
-    let detail = `${response.status}`;
-    try { detail = (await response.json()).detail || detail; } catch (e) { /* réponse non JSON */ }
-    throw new Error(detail);
+    let data = null;
+    try { data = await response.json(); } catch (e) { /* réponse non JSON */ }
+    if (response.status === 409 && data?.profil_requis) setTimeout(() => location.reload(), 30);
+    throw new Error(data?.detail || `${response.status}`);
   }
   return response.json();
 }

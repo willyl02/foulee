@@ -143,6 +143,29 @@ Les **Réglages** contiennent :
   chemin de ton dossier), puis ouvre GitHub avec le sujet déjà rempli : il reste à
   y coller tes captures et à valider. Rien ne part sans ton clic.
 
+**Plusieurs utilisateurs** : un profil par personne qui a une montre Garmin,
+comme les profils d'un service de streaming. Chacun a ses données (avec sa propre
+clé API), ses vues, ses réglages, sa photo et sa synchro.
+
+- **Changer de profil** : le prénom, en haut à droite de l'Accueil ; le chevron
+  déplie la liste. Le choix est retenu sur chaque appareil ; sur un nouvel appareil,
+  Foulée demande d'abord « Qui utilise Foulée ? ».
+- **Code facultatif** : 4 chiffres pour protéger un profil (Réglages → Profil et
+  logo). Seule son empreinte est gardée ; un code oublié s'efface depuis le profil
+  principal.
+- **L'utilisateur principal** (celui qui a installé Foulée) gère les profils dans
+  **Réglages → Gestion des utilisateurs** (ajouter, renommer, effacer un code,
+  supprimer) et règle seul l'installation : mises à jour, dossier des données,
+  Claude Desktop, démarrage avec Windows, accès par le réseau local.
+- **Claude Desktop** ne lit que les profils qui l'autorisent (case « Claude Desktop
+  peut lire mes données », cochée d'office pour le principal seulement).
+- La synchro automatique passe sur chaque profil qui a une clé ; `foulee sync`
+  aussi (`--profil <prénom>` pour un seul).
+
+Rangement : le profil principal garde sa base à la racine du dossier des données,
+comme avant ; les autres ont chacun leur sous-dossier `profils/<id>`, et la liste des
+profils est dans `utilisateurs.json`. Déplacer le dossier des données les emmène tous.
+
 **Sauvegarde des réglages** : chaque installation (le PC, le serveur) garde ses
 propres réglages. « Exporter mes réglages » les met dans un fichier (avec tes vues et
 ta photo) ; « Importer des réglages… » les reprend sur l'autre installation. La clé
@@ -434,6 +457,7 @@ foulee/
   web.py           API locale + pages, accès réseau, clé, dossier, Claude, mises à jour
   updates.py       mises à jour (versions GitHub du PC, canaux stable et bêta)
   retours.py       aide et retours : adresses des sujets GitHub, dépôt public ou privé
+  utilisateurs.py  profils : liste, profil courant (cookie signé), codes, accès de Claude
   datadir.py       dossier des données : déplacer, utiliser, importer
   claude_desktop.py  configuration de Claude Desktop (toutes ses variantes)
   vault.py         secrets : clé Garmin, jeton GitHub (Gestionnaire d'identification Windows)

@@ -4,6 +4,11 @@ Claude Desktop lance ce programme lui-même (« foulee mcp ») et dialogue avec
 lui par l'entrée/sortie standard. Chaque outil ci-dessous lit la base locale
 via le moteur d'analyse : Claude voit exactement les mêmes chiffres que
 l'interface. La clé API n'est jamais exposée.
+
+Profils : Claude ne lit que ceux qui l'autorisent (case « Claude Desktop peut lire mes
+données » dans les Réglages de chacun). Il commence par le profil principal s'il l'autorise ;
+changer_utilisateur passe sur un autre profil autorisé. Chaque ouverture de base revérifie
+l'autorisation (voir utilisateurs.check_claude_access).
 """
 
 from __future__ import annotations
@@ -17,7 +22,7 @@ from typing import Any
 from mcp.server.mcpserver import MCPServer
 from mcp_types import ToolAnnotations
 
-from . import __version__, analysis, config, db, metrics, reglages, schedule, vault, views
+from . import __version__, analysis, config, db, metrics, reglages, schedule, utilisateurs, vault, views
 from . import sync as sync_module
 from .garmin import intraday
 
@@ -47,6 +52,10 @@ Repères :
   parfois des informations et ses ressentis.
 - Les données ne datent que de la dernière synchro : regarde statut, et propose
   synchroniser si elles sont anciennes.
+- Profils : plusieurs personnes peuvent utiliser Foulée. Tu ne lis que les profils qui t'y
+  autorisent ; tous les outils visent le profil en cours (statut donne son prénom). Si la
+  question porte sur quelqu'un d'autre, appelle utilisateurs puis changer_utilisateur, et
+  dis toujours de qui tu parles.
 """
 
 READ = ToolAnnotations(readOnlyHint=True, openWorldHint=False)
@@ -66,6 +75,38 @@ def _check_metrics(keys: list[str]) -> list[str]:
     return keys
 
 
+# ----------------------------------------------------------------- profils
+def _who() -> str:
+    return utilisateurs.card(utilisateurs.current())["prenom"]
+
+
+@mcp.tool(name="utilisateurs", annotations=READ)
+def lister_utilisateurs() -> dict[str, Any]:
+    """Profils que Claude peut lire, et celui sur lequel portent les outils en ce moment."""
+    current = utilisateurs.current()["id"]
+    allowed = utilisateurs.claude_profiles()
+    others = len(utilisateurs.profiles()) - len(allowed)
+    return {
+        "profils": [{"prenom": c["prenom"], "principal": c["principal"], "en_cours": c["id"] == current}
+                    for c in (utilisateurs.card(p) for p in allowed)],
+        "non_accessibles": others,
+        "note": ("Les autres profils n'autorisent pas Claude à lire leurs données." if others else
+                 "Tous les profils de Foulée sont accessibles."),
+    }
+
+
+@mcp.tool(annotations=WRITE)
+def changer_utilisateur(prenom: str) -> dict[str, Any]:
+    """Fait porter les outils sur un autre profil (prénom), s'il autorise Claude à lire ses données."""
+    wanted = " ".join(prenom.split()).casefold()
+    for entry in utilisateurs.claude_profiles():
+        if utilisateurs.card(entry)["prenom"].casefold() == wanted:
+            config.set_process_profile(entry)
+            return {"utilisateur": _who(), "message": f"Les outils portent maintenant sur le profil de {_who()}."}
+    names = ", ".join(utilisateurs.card(p)["prenom"] for p in utilisateurs.claude_profiles())
+    raise ValueError(f"Pas de profil accessible nommé « {prenom} ». Profils accessibles : {names or 'aucun'}.")
+
+
 # ------------------------------------------------------------------- état
 @mcp.tool(annotations=READ)
 def statut() -> dict[str, Any]:
@@ -76,6 +117,7 @@ def statut() -> dict[str, Any]:
         acts = conn.execute("SELECT COUNT(*) AS n, MIN(date) AS a, MAX(date) AS b FROM activities").fetchone()
         return {
             "version": __version__,
+            "utilisateur": _who(),
             "mode_demo": config.is_demo(),
             "cle_api_garmin": "présente" if vault.has_key() else "absente",
             "synchro": sync_module.last_sync_info(conn),
@@ -469,9 +511,20 @@ def modifier_reglages(changements: dict[str, Any]) -> dict[str, Any]:
     return {"reglages": settings, "recalcul_effectue": recalcul}
 
 
+def start_profile() -> dict | None:
+    """Profil de départ : le principal s'il autorise Claude, sinon le premier profil qui l'autorise."""
+    allowed = utilisateurs.claude_profiles()
+    principal = utilisateurs.principal()
+    return principal if principal in allowed else (allowed[0] if allowed else None)
+
+
 def serve() -> None:
-    with db.session():
-        pass  # crée la base si besoin
+    first = start_profile()
+    if first:
+        config.set_process_profile(first)
+        with db.session():
+            pass  # crée la base si besoin
+    config.set_access_check(utilisateurs.check_claude_access)
     mcp.run()
 
 

@@ -8,7 +8,11 @@ chercher les mises à jour tant que le dépôt de Foulée est privé).
 - Autres systèmes (le serveur, les tests) : fichier lisible par toi seul
   (FOULEE_COFFRE=fichier impose ce mode, y compris sous Windows : tests).
 - La variable d'environnement GARMIN_PERSONAL_API_KEY, si elle existe, passe
-  avant tout le reste.
+  avant tout le reste (pour le profil principal seulement).
+
+Profils : chaque profil a sa clé Garmin, rangée sous un nom suffixé par son identifiant
+(« garmin-personal-api-key-p1a2b3 », « garmin-cle-p1a2b3.txt ») ; le profil principal
+garde les noms d'avant les profils. Le jeton GitHub reste celui de l'installation.
 
 Ni l'interface web ni Claude ne lisent jamais la clé : seul le connecteur
 Garmin l'utilise, pour l'échanger contre un jeton temporaire.
@@ -31,6 +35,16 @@ SECRETS = {
     "garmin": (USERNAME, "garmin-cle", ENV_VAR),
     "github": ("github-jeton", "github-jeton", "FOULEE_GITHUB_TOKEN"),  # dépôt privé : vérifier les mises à jour
 }
+PER_PROFILE = {"garmin"}  # un exemplaire par profil
+
+
+def _entry(name: str) -> tuple[str, str, str | None]:
+    """(entrée du Gestionnaire d'identification, nom de fichier, variable d'environnement) du profil courant."""
+    username, stem, env_var = SECRETS[name]
+    suffix = config.profile_suffix() if name in PER_PROFILE else ""
+    if suffix:  # autre profil que le principal : ni la même entrée, ni la variable d'environnement
+        return f"{username}{suffix}", f"{stem}{suffix}", None
+    return username, stem, env_var
 
 
 def _windows_store() -> bool:
@@ -39,11 +53,11 @@ def _windows_store() -> bool:
 
 
 def _dpapi_file(name: str = "garmin") -> Path:
-    return config.secrets_dir() / f"{SECRETS[name][1]}.dpapi"
+    return config.secrets_dir() / f"{_entry(name)[1]}.dpapi"
 
 
 def _plain_file(name: str = "garmin") -> Path:
-    return config.secrets_dir() / f"{SECRETS[name][1]}.txt"
+    return config.secrets_dir() / f"{_entry(name)[1]}.txt"
 
 
 # ------------------------------------------------------------------ DPAPI
@@ -84,8 +98,8 @@ def _dpapi(data: bytes, *, protect: bool) -> bytes:  # pragma: no cover - Window
 
 # ----------------------------------------------------------------- public
 def get_secret(name: str) -> str | None:
-    username, _file, env_var = SECRETS[name]
-    env = os.environ.get(env_var, "").strip()
+    username, _file, env_var = _entry(name)
+    env = os.environ.get(env_var, "").strip() if env_var else ""
     if env:
         return env
     if _windows_store():  # pragma: no cover - Windows uniquement
@@ -113,7 +127,7 @@ def get_secret(name: str) -> str | None:
 
 def set_secret(name: str, value: str) -> str:
     """Range un secret et renvoie une phrase décrivant où il est."""
-    username = SECRETS[name][0]
+    username = _entry(name)[0]
     value = value.strip()
     if not value:
         raise ValueError("Valeur vide")
@@ -136,7 +150,7 @@ def set_secret(name: str, value: str) -> str:
 
 
 def delete_secret(name: str) -> bool:
-    username = SECRETS[name][0]
+    username = _entry(name)[0]
     removed = False
     if _windows_store():  # pragma: no cover - Windows uniquement
         try:

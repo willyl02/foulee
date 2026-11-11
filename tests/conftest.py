@@ -26,4 +26,9 @@ def isolated(tmp_path, monkeypatch):
     no_proxy = ",".join(filter(None, [os.environ.get("NO_PROXY", ""), "127.0.0.1", "localhost"]))
     monkeypatch.setenv("NO_PROXY", no_proxy)
     monkeypatch.setenv("no_proxy", no_proxy)
+    # Profils : rien ne passe d'un test à l'autre (profil de Claude Desktop, contrôle d'accès)
+    from foulee import config
+
+    monkeypatch.setattr(config, "_process_profile", None)
+    monkeypatch.setattr(config, "_access_check", None)
     yield tmp_path

@@ -10,12 +10,16 @@ const SINCE = [[182, "6 mois"], [365, "1 an"], [730, "2 ans (conseillé)"], [182
 export function renderWelcome(page, boot, { toast, onImport, onDone }) {
   const local = boot.acces === "local";
   const hasData = Boolean(boot.volumes.daily || boot.volumes.activities);
+  // Profil autre que le principal : sa clé et son import ; l'installation (démo, Claude, ancien dossier) ne le regarde pas
+  const principal = boot.utilisateur?.principal !== false;
+  const me = (boot.utilisateurs || []).find((u) => u.courant);
   page.innerHTML = `
     <div class="welcome">
       <header class="welcome-head">
         <span class="blaze" aria-hidden="true"></span>
-        <div><h1>Bienvenue dans Foulée</h1>
-          <p>Tes données Garmin rangées chez toi, des tableaux de bord que tu composes, et Claude pour les analyser avec toi. Trois étapes et c'est parti.</p></div>
+        <div><h1>${principal ? "Bienvenue dans Foulée" : `Bienvenue, ${F.escape(me?.prenom || "")}`}</h1>
+          <p>${principal ? "Tes données Garmin rangées chez toi, des tableaux de bord que tu composes, et Claude pour les analyser avec toi. Trois étapes et c'est parti."
+            : "Ce profil est à toi : tes données Garmin, tes vues et tes réglages, séparés de ceux des autres. Deux étapes et c'est parti."}</p></div>
       </header>
       <div data-previous></div>
       <ol class="welcome-steps">
@@ -27,14 +31,14 @@ export function renderWelcome(page, boot, { toast, onImport, onDone }) {
           <div class="step-num" aria-hidden="true">2</div>
           <div class="step-body"><h2>${icon("download")}Premier import</h2><div data-import></div></div>
         </li>
-        ${boot.machine === "pc" ? `<li class="step" data-step="claude">
+        ${boot.machine === "pc" && principal ? `<li class="step" data-step="claude">
           <div class="step-num" aria-hidden="true">3</div>
           <div class="step-body"><h2>${icon("chat")}Claude Desktop <span class="optional">facultatif</span></h2><div data-claude></div></div>
         </li>` : ""}
       </ol>
       <div class="welcome-foot">
         <button class="btn btn-primary" type="button" data-done>${icon("chart")}Ouvrir mon tableau de bord</button>
-        ${local && !boot.demo && !boot.cle ? `<button class="btn btn-ghost" type="button" data-demo>${icon("info")}Pas de clé sous la main ? Découvrir avec des données fictives</button>` : ""}
+        ${local && principal && !boot.demo && !boot.cle ? `<button class="btn btn-ghost" type="button" data-demo>${icon("info")}Pas de clé sous la main ? Découvrir avec des données fictives</button>` : ""}
       </div>
     </div>`;
 
@@ -145,7 +149,7 @@ export function renderWelcome(page, boot, { toast, onImport, onDone }) {
   }
 
   // --------------------------------- données d'une ancienne installation
-  if (local && !hasData && !boot.demo) {
+  if (local && principal && !hasData && !boot.demo) {
     api.get("/api/dossier", { anciennes: 1 }, { fresh: true }).then((info) => {
       const old = (info.anciennes || [])[0];
       if (!old) return;

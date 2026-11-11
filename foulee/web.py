@@ -12,10 +12,15 @@ Deux protections en plus contre les sites web malveillants :
   (le nom Tailscale du serveur) : c'est la parade au « DNS rebinding » ;
 - toute requête qui modifie quelque chose doit porter l'en-tête X-Foulee,
   ce qu'un autre site ne peut pas ajouter sans autorisation du navigateur.
+
+Profils : chaque requête vise le profil retenu par ce navigateur (cookie signé, voir
+utilisateurs.py). Tant qu'aucun profil n'est choisi sur un appareil alors qu'il en faut un,
+seules la liste des profils et la page de choix répondent.
 """
 
 from __future__ import annotations
 
+import contextvars
 import ipaddress
 import json
 import mimetypes
@@ -28,7 +33,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import Body, FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from . import (
@@ -46,6 +51,7 @@ from . import (
     retours,
     schedule,
     updates,
+    utilisateurs,
     vault,
     views,
 )
@@ -70,7 +76,9 @@ class SyncJob:
                 return False
             self.state = {"en_cours": True, "message": "Démarrage…", "progression": 0.0, "resultat": None,
                           "erreur": None, "debut": time.time()}
-        threading.Thread(target=self._run, args=(since,), name="foulee-synchro", daemon=True).start()
+        # La synchro vise le profil de celui qui la lance (requête, synchro automatique…)
+        context = contextvars.copy_context()
+        threading.Thread(target=context.run, args=(self._run, since), name="foulee-synchro", daemon=True).start()
         return True
 
     def _progress(self, message: str, fraction: float | None = None) -> None:
@@ -92,6 +100,19 @@ class SyncJob:
     def snapshot(self) -> dict:
         with self.lock:
             return dict(self.state)
+
+
+class SyncJobs:
+    """Une synchro suivie par profil : deux personnes peuvent synchroniser en même temps."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._jobs: dict[str, SyncJob] = {}
+
+    def get(self, profile_id: str | None = None) -> SyncJob:
+        key = profile_id or utilisateurs.current()["id"]
+        with self._lock:
+            return self._jobs.setdefault(key, SyncJob())
 
 
 def _period(start: str | None, end: str | None, days: int | None = None) -> tuple[date, date]:
@@ -122,12 +143,15 @@ def _refresh_in_background() -> None:
         with db.session() as conn:
             analysis.refresh_all_activities(conn, db.get_settings(conn))
             conn.commit()
-    threading.Thread(target=work, name="foulee-recalcul", daemon=True).start()
+    context = contextvars.copy_context()  # le profil qui a changé ses réglages
+    threading.Thread(target=context.run, args=(work,), name="foulee-recalcul", daemon=True).start()
 
 
 STARTED_AT = time.time()  # permet à l'interface de voir que le serveur a redémarré
 LOCAL_HOSTS = ("127.0.0.1", "localhost", "testserver")
 PUBLIC_PATHS = {"/connexion", "/api/connexion"}  # seules pages ouvertes avant le mot de passe
+# Ce qui répond tant que ce navigateur n'a pas choisi son profil (page « Qui es-tu ? »)
+BEFORE_PROFILE = ("/api/bootstrap", "/api/utilisateurs", "/api/connexion", "/api/deconnexion", "/api/retours")
 
 mimetypes.add_type("application/manifest+json", ".webmanifest")
 
@@ -166,8 +190,8 @@ def update_dir() -> Path | None:
 
 def create_app() -> FastAPI:
     app = FastAPI(title="Foulée", version=__version__, docs_url=None, redoc_url=None, openapi_url=None)
-    job = SyncJob()
-    app.state.sync_job = job  # l'application de bureau s'en sert pour la synchro automatique
+    jobs = SyncJobs()
+    app.state.sync_jobs = jobs  # l'application de bureau s'en sert pour la synchro automatique
     app.state.quit = None     # fourni par l'application de bureau : arrêt propre
     demo_build = {"en_cours": False, "erreur": None}
     with db.session():
@@ -175,6 +199,7 @@ def create_app() -> FastAPI:
 
     hosts = allowed_hosts()
     throttle = access.Throttle()
+    code_throttle = access.Throttle()  # codes de profil : 5 essais, puis une minute d'attente
 
     @app.middleware("http")
     async def guard(request: Request, call_next):
@@ -195,7 +220,22 @@ def create_app() -> FastAPI:
                 if path.startswith("/api/"):
                     return JSONResponse({"detail": "Connexion requise"}, status_code=401)
                 return RedirectResponse("/connexion", status_code=303)
-        response = await call_next(request)
+        # Profil de ce navigateur : tout ce que fait la requête vise ses données
+        profile, required = utilisateurs.resolve(request.cookies.get(utilisateurs.cookie_name()))
+        request.state.profil = profile
+        request.state.profil_requis = required
+        if required and path.startswith("/api/") and not path.startswith(BEFORE_PROFILE):
+            return JSONResponse({"detail": "Choisis d'abord ton profil.", "profil_requis": True}, status_code=409)
+        expected = request.headers.get("x-foulee-profil")
+        if expected and profile and expected != profile["id"] and path.startswith("/api/"):
+            # La page a été ouverte pour un autre profil (changé depuis un autre onglet) : elle se recharge
+            return JSONResponse({"detail": "Le profil a changé dans un autre onglet : la page se recharge.",
+                                 "profil_requis": True}, status_code=409)
+        token = config.set_profile(profile)
+        try:
+            response = await call_next(request)
+        finally:
+            config.reset_profile(token)
         if request.url.path.startswith("/api/"):
             response.headers["Cache-Control"] = "no-store"
         elif request.url.path.startswith("/static/"):
@@ -207,6 +247,12 @@ def create_app() -> FastAPI:
     # ------------------------------------------------------------- démarrage
     @app.get("/api/bootstrap")
     def bootstrap(request: Request) -> dict:
+        if request.state.profil_requis:  # « Qui es-tu ? » : rien des données de personne
+            return {"app": "Foulée", "version": __version__, "demo": config.is_demo(), "profil_requis": True,
+                    "utilisateurs": utilisateurs.cards(), "acces": "local" if request.state.local else "reseau",
+                    "machine": "pc" if sys.platform == "win32" else "serveur", "retours": retours.info(),
+                    "demarre_le": STARTED_AT}
+        me = request.state.profil
         with db.session() as conn:
             settings = db.get_settings(conn)
             return {
@@ -234,6 +280,10 @@ def create_app() -> FastAPI:
                 "volumes": db.table_counts(conn),
                 "premiere_date": conn.execute("SELECT MIN(date) AS d FROM daily").fetchone()["d"],
                 "retours": retours.info(),
+                "utilisateur": {"id": me["id"], "principal": bool(me.get("principal")), "code": bool(me.get("code")),
+                                "claude": utilisateurs.claude_allowed(me)},
+                "utilisateurs": utilisateurs.cards(me["id"]),
+                "claude_possible": sys.platform in ("win32", "darwin"),
             }
 
     # ------------------------------------------------------------ séries & co
@@ -333,6 +383,117 @@ def create_app() -> FastAPI:
             raise HTTPException(400, f"Donnée inconnue : {donnee}")
         with db.session() as conn:  # écriture : la réponse de Garmin est gardée pour la prochaine fois
             return intraday.day_detail(conn, donnee, _day(day) or date.today())
+
+    # ------------------------------------------------------------- profils
+    def remember(response: Response, entry: dict) -> Response:
+        """Ce navigateur reste sur ce profil (à redonner après chaque changement de son code)."""
+        response.set_cookie(utilisateurs.cookie_name(), utilisateurs.make_cookie(entry), path="/", httponly=True,
+                            samesite="strict", max_age=utilisateurs.COOKIE_DAYS * 86400)
+        return response
+
+    def myself(request: Request) -> dict:
+        if not request.state.profil:
+            raise HTTPException(409, "Choisis d'abord ton profil.")
+        return utilisateurs.get(request.state.profil["id"]) or request.state.profil
+
+    def check_profile_code(request: Request, entry: dict, code: object) -> None:
+        key = f"{request.client.host if request.client else '?'}|{entry['id']}"
+        if code_throttle.blocked(key):
+            raise HTTPException(429, "Trop d'essais : attends une minute avant de recommencer.")
+        if not utilisateurs.check_code(entry, str(code or "")):
+            code_throttle.failure(key)
+            raise HTTPException(401, "Code incorrect.")
+        code_throttle.success(key)
+
+    def users_state(request: Request) -> dict:
+        me = request.state.profil
+        manager = utilisateurs.is_principal(me) if me else False
+        return {"utilisateurs": utilisateurs.cards(me["id"] if me else None, details=manager),
+                "courant": me["id"] if me else None, "gestion": manager, "max": utilisateurs.MAX_PROFILES}
+
+    @app.get("/api/utilisateurs")
+    def users_list(request: Request) -> dict:
+        return users_state(request)
+
+    @app.get("/api/utilisateurs/{profile_id}/photo")
+    def user_photo(profile_id: str):
+        entry = utilisateurs.get(profile_id)
+        if not entry:
+            raise HTTPException(404, "Profil introuvable.")
+        with config.using_profile(entry):
+            path = profile.photo_path()
+        if not path.exists():
+            raise HTTPException(404, "Pas de photo de profil")
+        return FileResponse(path, media_type="image/jpeg",
+                            headers={"Cache-Control": "no-cache", "X-Content-Type-Options": "nosniff"})
+
+    @app.post("/api/utilisateurs/choisir")
+    def users_choose(request: Request, payload: dict = Body(...)) -> Response:
+        """Passer sur un profil (son code s'il en a un) ; ce navigateur le retient."""
+        entry = utilisateurs.get(str(payload.get("id") or ""))
+        if not entry:
+            raise HTTPException(404, "Profil introuvable.")
+        if not (request.state.profil and request.state.profil["id"] == entry["id"]):
+            check_profile_code(request, entry, payload.get("code"))
+        return remember(JSONResponse({"ok": True, "id": entry["id"]}), entry)
+
+    @app.put("/api/utilisateurs/moi")
+    def users_me(request: Request, payload: dict = Body(...)) -> Response:
+        """Son propre profil : code (le code actuel est demandé pour le changer) et accès de Claude Desktop."""
+        me = myself(request)
+        if "code" in payload:
+            if me.get("code"):
+                check_profile_code(request, me, payload.get("ancien"))
+            try:
+                me = utilisateurs.set_code(me["id"], payload.get("code") or None)
+            except utilisateurs.ProfileError as exc:
+                raise HTTPException(400, str(exc)) from exc
+        if "claude" in payload:
+            me = utilisateurs.set_claude(me["id"], bool(payload["claude"]))
+        state = {**users_state(request), "utilisateur": {"id": me["id"], "principal": bool(me.get("principal")),
+                                                         "code": bool(me.get("code")),
+                                                         "claude": utilisateurs.claude_allowed(me)}}
+        return remember(JSONResponse(state), me)
+
+    @app.post("/api/utilisateurs")
+    def users_create(request: Request, payload: dict = Body(...)) -> Response:
+        require_principal(request)
+        try:
+            entry = utilisateurs.create(payload.get("prenom"), payload.get("code") or None)
+        except utilisateurs.ProfileError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        # Il faut désormais choisir son profil : le principal reste sur le sien dans ce navigateur
+        me = utilisateurs.get(request.state.profil["id"])
+        return remember(JSONResponse({**users_state(request), "cree": utilisateurs.card(entry)}), me)
+
+    @app.put("/api/utilisateurs/{profile_id}")
+    def users_rename(profile_id: str, request: Request, payload: dict = Body(...)) -> dict:
+        require_principal(request)
+        try:
+            utilisateurs.rename(profile_id, payload.get("prenom"))
+        except utilisateurs.ProfileError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return users_state(request)
+
+    @app.delete("/api/utilisateurs/{profile_id}/code")
+    def users_clear_code(profile_id: str, request: Request) -> Response:
+        """Code oublié : le principal l'efface (sans le connaître)."""
+        require_principal(request)
+        try:
+            entry = utilisateurs.set_code(profile_id, None)
+        except utilisateurs.ProfileError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        response = JSONResponse(users_state(request))
+        return remember(response, entry) if entry["id"] == request.state.profil["id"] else response
+
+    @app.delete("/api/utilisateurs/{profile_id}")
+    def users_delete(profile_id: str, request: Request) -> dict:
+        require_principal(request)
+        try:
+            report = utilisateurs.delete(profile_id)
+        except utilisateurs.ProfileError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return {**users_state(request), "supprime": report}
 
     @app.get("/api/retours")
     def get_feedback_info() -> dict:
@@ -513,8 +674,10 @@ def create_app() -> FastAPI:
             return db.get_settings(conn)
 
     @app.put("/api/settings")
-    def put_settings(payload: dict = Body(...)) -> dict:
+    def put_settings(request: Request, payload: dict = Body(...)) -> dict:
         allowed = set(db.DEFAULT_SETTINGS)
+        if not utilisateurs.is_principal(request.state.profil):
+            allowed.discard("canal_maj")  # réglage de l'installation : seul le principal le change
         changes = {k: v for k, v in payload.items() if k in allowed}
         with db.session() as conn:
             try:
@@ -543,14 +706,14 @@ def create_app() -> FastAPI:
                 raise HTTPException(400, "Date de début illisible (AAAA-MM-JJ).") from exc
             if since > date.today():
                 raise HTTPException(400, "La date de début est dans le futur.")
-        started = job.start(since)
+        started = jobs.get().start(since)
         return {"lance": started, "message": "Synchro lancée" if started else "Une synchro est déjà en cours"}
 
     @app.get("/api/sync")
     def sync_status() -> dict:
         with db.session(readonly=True) as conn:
             info = sync_module.last_sync_info(conn)
-        return {"job": job.snapshot(), **info}
+        return {"job": jobs.get().snapshot(), **info}
 
     # ------------------------------------------------------------------ pages
     app.mount("/static", StaticFiles(directory=config.STATIC_DIR), name="static")
@@ -608,9 +771,14 @@ def create_app() -> FastAPI:
         if not request.state.local:
             raise HTTPException(403, "Ce réglage se change par Tailscale ou sur le serveur lui-même.")
 
+    def require_principal(request: Request) -> None:
+        if not utilisateurs.is_principal(request.state.profil):
+            raise HTTPException(403, "Réservé à l'utilisateur principal : ce réglage concerne toute l'installation.")
+
     @app.put("/api/acces-reseau")
     def lan_enable(request: Request, payload: dict = Body(...)) -> dict:
         require_local(request)
+        require_principal(request)
         try:
             access.set_password(str(payload.get("mot_de_passe") or ""))
         except ValueError as exc:
@@ -620,6 +788,7 @@ def create_app() -> FastAPI:
     @app.delete("/api/acces-reseau")
     def lan_disable(request: Request) -> dict:
         require_local(request)
+        require_principal(request)
         access.disable()
         return lan_status(request)
 
@@ -629,7 +798,7 @@ def create_app() -> FastAPI:
     local_job = updates.LocalJob()
 
     def update_channel() -> str:
-        with db.session(readonly=True) as conn:
+        with config.using_profile(utilisateurs.principal()), db.session(readonly=True) as conn:
             row = conn.execute("SELECT value FROM settings WHERE key = 'canal_maj'").fetchone()
         if row is None:
             # Jamais choisi : une bêta installée continue de suivre les bêtas, sinon canal stable
@@ -663,7 +832,8 @@ def create_app() -> FastAPI:
         }
 
     @app.post("/api/maj")
-    def update_request(payload: dict = Body(...)) -> dict:
+    def update_request(request: Request, payload: dict = Body(...)) -> dict:
+        require_principal(request)
         action = payload.get("action")
         if action not in ("verifier", "installer"):
             raise HTTPException(400, "Action inconnue : « verifier » ou « installer ».")
@@ -686,6 +856,7 @@ def create_app() -> FastAPI:
     @app.put("/api/github-jeton")
     def github_token_set(request: Request, payload: dict = Body(...)) -> dict:
         require_local(request)
+        require_principal(request)
         token = "".join(str(payload.get("jeton") or "").split())
         if not token:
             raise HTTPException(400, "Colle le jeton GitHub.")
@@ -699,6 +870,7 @@ def create_app() -> FastAPI:
     @app.delete("/api/github-jeton")
     def github_token_delete(request: Request) -> dict:
         require_local(request)
+        require_principal(request)
         vault.delete_secret("github")
         return update_status()
 
@@ -757,11 +929,13 @@ def create_app() -> FastAPI:
     @app.post("/api/dossier/examiner")
     def folder_inspect(request: Request, payload: dict = Body(...)) -> dict:
         require_local(request)
+        require_principal(request)
         return datadir.inspect(str(payload.get("chemin") or ""))
 
     @app.post("/api/dossier/parcourir")
     def folder_pick(request: Request, payload: dict = Body(default={})) -> dict:
         require_local(request)
+        require_principal(request)
         if sys.platform != "win32":
             raise HTTPException(404, "La fenêtre de choix n'existe que sur le PC.")
         return {"chemin": datadir.pick_folder(payload.get("depart"))}
@@ -769,6 +943,7 @@ def create_app() -> FastAPI:
     @app.put("/api/dossier")
     def folder_change(request: Request, payload: dict = Body(...)) -> dict:
         require_local(request)
+        require_principal(request)
         try:
             report = datadir.change(str(payload.get("chemin") or ""), str(payload.get("mode") or ""))
         except datadir.DataDirError as exc:
@@ -783,6 +958,7 @@ def create_app() -> FastAPI:
     @app.post("/api/claude")
     def claude_connect(request: Request, payload: dict = Body(default={})) -> dict:
         require_local(request)
+        require_principal(request)
         if sys.platform not in ("win32", "darwin"):
             raise HTTPException(404, "Claude Desktop se branche depuis le PC où il est installé.")
         if claude_desktop.is_running():
@@ -813,6 +989,7 @@ def create_app() -> FastAPI:
         from . import desktop
 
         require_local(request)
+        require_principal(request)
         if "demarrage_windows" in payload:
             if app.state.quit is None or not desktop.startup_supported():
                 raise HTTPException(404, "Réglage propre à l'application Windows.")
@@ -838,9 +1015,10 @@ def create_app() -> FastAPI:
     def demo_switch(request: Request, payload: dict = Body(...)) -> dict:
         """Découvrir Foulée avec des données fictives, puis revenir à ses vraies données."""
         require_local(request)
-        if not payload.get("actif"):
+        if not payload.get("actif"):  # quitter la démo : depuis n'importe lequel de ses profils
             config.set_demo(False)
             return demo_status()
+        require_principal(request)
         if demo_build["en_cours"]:
             return demo_status()
         config.set_demo(True)  # base séparée (foulee-demo.db) : les vraies données ne sont pas touchées
@@ -862,7 +1040,8 @@ def create_app() -> FastAPI:
                 demo_build["en_cours"] = False
 
         demo_build["en_cours"] = True
-        threading.Thread(target=build, name="foulee-demo", daemon=True).start()
+        context = contextvars.copy_context()
+        threading.Thread(target=context.run, args=(build,), name="foulee-demo", daemon=True).start()
         return demo_status()
 
     # Appli installable sur l'écran d'accueil du téléphone (servie à la racine pour couvrir tout le site)

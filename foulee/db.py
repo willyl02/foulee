@@ -191,6 +191,7 @@ def now_iso() -> str:
 
 
 def connect(path: Path | None = None, *, readonly: bool = False) -> sqlite3.Connection:
+    config.check_access()  # Claude Desktop : seulement les profils qui l'autorisent
     path = path or config.db_path()
     if readonly:
         conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=15, check_same_thread=False)

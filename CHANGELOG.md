@@ -4,6 +4,17 @@ Les versions « bêta » (par exemple 0.4.0b1) sont des avant-premières : elles
 sur le canal bêta (Réglages → Mises à jour → « Recevoir les versions bêta »), puis sortent en
 version stable une fois éprouvées.
 
+## 0.5.0b4 — 11 novembre 2026 (bêta)
+
+- **Plusieurs utilisateurs** : un profil par personne, chacun avec ses données Garmin (sa propre clé API), ses vues, ses réglages, sa photo et sa synchro.
+  - En haut à droite de l'Accueil, le prénom du profil affiché : le chevron déplie la liste des profils pour passer de l'un à l'autre. Le choix est retenu sur chaque appareil ; sur un nouvel appareil, Foulée demande « Qui utilise Foulée ? ».
+  - Code facultatif à 4 chiffres par profil (Réglages → Profil et logo) ; seule son empreinte est gardée, 5 essais puis une minute d'attente. L'utilisateur principal peut effacer un code oublié.
+  - **Réglages → Gestion des utilisateurs**, pour l'utilisateur principal : ajouter (prénom, code facultatif), renommer, effacer un code, supprimer un profil (ses données restent chez Garmin). Lui seul règle l'installation : mises à jour, dossier des données, Claude Desktop, démarrage avec Windows, accès par le réseau local.
+  - Claude Desktop ne lit que les profils qui l'autorisent (case cochée d'office pour le principal, décochée pour les autres) ; il peut passer de l'un à l'autre en précisant de qui on parle.
+  - La synchro automatique (PC et serveur) passe sur chaque profil qui a une clé ; `foulee sync --profil <prénom>` pour un seul.
+  - Le profil principal garde ses données à la racine du dossier (rien ne bouge pour une installation existante) ; les autres profils ont leur sous-dossier, qui suit le dossier des données quand on le déplace. La démo montre un second profil.
+- Aide : nouvelle rubrique « Plusieurs utilisateurs ».
+
 ## 0.5.0b3 — 11 novembre 2026 (bêta)
 
 - Formulaire « Un bug, une idée ? » : **envoi par e-mail** pour qui n'a pas de compte GitHub. Le logiciel de messagerie s'ouvre avec un e-mail prêt (titre, message, informations techniques) ; les captures se téléchargent pour être jointes.

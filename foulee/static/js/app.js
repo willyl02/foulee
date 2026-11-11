@@ -8,6 +8,7 @@ import { renderFeedback } from "./feedback.js";
 import { icon } from "./icons.js";
 import { brandMark, setFavicon } from "./logos.js";
 import { renderSettings } from "./settings.js";
+import { renderChooser, whoButton, wireWho } from "./users.js";
 import { renderWelcome } from "./welcome.js";
 import * as A from "./tiles-activity.js";
 import * as D from "./tiles-data.js";
@@ -60,6 +61,13 @@ async function start() {
     return;
   }
   registerServiceWorker();
+  if (state.boot.profil_requis) {
+    // Plusieurs profils et aucun choisi sur cet appareil : « Qui utilise Foulée ? », rien d'autre
+    document.body.classList.add("choosing");
+    paintTheme();
+    renderChooser($("#page"), state.boot, { toast });
+    return;
+  }
   state.days = Number(store("foulee-period")) || 90;
   setupChrome();
   // Premier lancement (ni clé, ni données) : la page d'accueil guide pas à pas
@@ -75,7 +83,13 @@ function noData() { return !state.boot.volumes.daily && !state.boot.volumes.acti
 function needsWelcome() {
   const b = state.boot;
   // Ni données ni démo : clé à enregistrer, premier import à lancer, ou ancienne installation à reprendre
-  return b.acces === "local" && !b.demo && noData() && store("foulee-bienvenue") !== "vu";
+  return b.acces === "local" && !b.demo && noData() && store(welcomeKey()) !== "vu";
+}
+
+// Chaque profil voit la page d'accueil une fois (le principal garde la clé d'avant les profils)
+function welcomeKey() {
+  const id = state.boot.utilisateur?.id;
+  return !id || id === "p0" ? "foulee-bienvenue" : `foulee-bienvenue-${id}`;
 }
 
 function isLocalHost() {
@@ -91,6 +105,8 @@ function registerServiceWorker() {
 
 async function loadBoot() {
   state.boot = await api.get("/api/bootstrap", null, { fresh: true });
+  if (state.boot.profil_requis) return;
+  api.setProfile(state.boot.utilisateur?.id);
   state.catalog = Object.fromEntries(state.boot.metriques.map((m) => [m.key, m]));
   state.types = Object.fromEntries(state.boot.tuiles.map((t) => [t.type, t]));
   state.views = state.boot.vues;
@@ -289,6 +305,7 @@ async function renderView() {
           `<button type="button" data-days="${d}" aria-pressed="${d === state.days}">${l}</button>`).join("")}</div>
         <button class="btn${state.editing ? " btn-primary" : ""}" type="button" data-edit>${icon(state.editing ? "check" : "edit")}${state.editing ? "Terminer" : "Modifier la vue"}</button>
       </div>
+      ${view.id === "accueil" ? whoButton(state.boot) : ""}
     </header>
     ${state.editing ? viewBar() : ""}
     ${needsActivity ? '<div class="picker" id="picker"></div>' : ""}
@@ -300,6 +317,8 @@ async function renderView() {
     renderView();
   }));
   page.querySelector("[data-edit]").addEventListener("click", () => { state.editing = !state.editing; renderNav(); renderView(); });
+  const who = wireWho(page, state.boot, { toast });
+  if (who) state.pass.disposers.push(who);
   if (state.editing) wireViewBar(view);
   if (needsActivity) await renderPicker($("#picker"));
   if (token !== state.pass.token) return;
@@ -636,7 +655,7 @@ function showWelcome() {
   renderWelcome($("#page"), state.boot, {
     toast,
     onImport: () => pollSync(),
-    onDone: () => { store("foulee-bienvenue", "vu"); location.hash = "#/"; },
+    onDone: () => { store(welcomeKey(), "vu"); location.hash = "#/"; },
   });
 }
 

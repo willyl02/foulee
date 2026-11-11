@@ -239,29 +239,44 @@ def _parse(stamp: str | None) -> float | None:
         return None
 
 
+def _all_profiles() -> list[dict]:
+    from . import utilisateurs
+
+    return utilisateurs.profiles()
+
+
 class AutoSync:
-    """Synchro toutes les 3 heures, d'après l'heure de la dernière synchro réussie.
+    """Synchro toutes les 3 heures de chaque profil, d'après l'heure de sa dernière synchro réussie.
 
     Elle ne démarre qu'après une première synchro réussie : le premier import est un choix
     (date de début, ou reprise des données d'une ancienne installation).
+    start et wait_result visent le profil courant : tick les appelle profil par profil.
     """
 
     def __init__(self, start: Callable[[], bool], wait_result: Callable[[], dict], notify: Callable[[str], None],
                  *, every: float = SYNC_EVERY, check_every: float = CHECK_EVERY,
-                 first_delay: float = FIRST_CHECK_DELAY, clock: Callable[[], float] = time.time) -> None:
+                 first_delay: float = FIRST_CHECK_DELAY, clock: Callable[[], float] = time.time,
+                 profiles: Callable[[], list[dict]] = _all_profiles) -> None:
         self.start, self.wait_result, self.notify = start, wait_result, notify
         self.every, self.check_every, self.first_delay, self.clock = every, check_every, first_delay, clock
-        self.last_attempt: float | None = None
+        self.profiles = profiles
+        self.last_attempt: dict[str, float] = {}  # par profil : dernier essai en échec
         self.stopped = threading.Event()
         self.thread = threading.Thread(target=self._loop, name="foulee-synchro-auto", daemon=True)
 
+    @staticmethod
+    def _profile_key() -> str:
+        return (config.current_profile() or {}).get("id") or "p0"
+
     def due(self) -> bool:
+        """La synchro du profil courant est-elle due ?"""
         from . import db, sync, vault
 
         if config.is_demo() or not vault.has_key():
             return False
         now = self.clock()
-        if self.last_attempt and now - self.last_attempt < RETRY_AFTER_FAILURE:
+        last_attempt = self.last_attempt.get(self._profile_key())
+        if last_attempt and now - last_attempt < RETRY_AFTER_FAILURE:
             return False
         with db.session(readonly=True) as conn:
             if sync.key_refused(conn):
@@ -274,20 +289,37 @@ class AutoSync:
         return now - last >= self.every - 120
 
     def tick(self) -> dict | None:
-        """Une vérification : lance la synchro si elle est due et renvoie son résultat."""
+        """Une vérification par profil : lance chaque synchro due et renvoie le dernier résultat."""
+        entries = self.profiles()
+        result = None
+        for entry in entries:
+            if self.stopped.is_set():
+                break
+            with config.using_profile(entry):
+                state = self._tick_current(entry if len(entries) > 1 else None)
+            if state is not None:
+                result = state
+        return result
+
+    def _tick_current(self, entry: dict | None) -> dict | None:
         if not self.due() or not self.start():
             return None
-        from . import db, sync
+        from . import db, sync, utilisateurs
 
-        self.last_attempt = self.clock()
+        key = self._profile_key()
+        self.last_attempt[key] = self.clock()
         state = self.wait_result()
         if (state.get("resultat") or {}).get("statut") in ("ok", "partiel"):
-            self.last_attempt = None
+            self.last_attempt.pop(key, None)
         else:
             with db.session(readonly=True) as conn:
                 refused = sync.key_refused(conn)
             if refused:
-                self.notify("Garmin refuse ta clé API : remplace-la dans les Réglages de Foulée.")
+                if entry:
+                    name = utilisateurs.card(entry)["prenom"]
+                    self.notify(f"Garmin refuse la clé API de {name} : remplace-la dans les Réglages de son profil.")
+                else:
+                    self.notify("Garmin refuse ta clé API : remplace-la dans les Réglages de Foulée.")
         return state
 
     def _loop(self) -> None:
@@ -342,7 +374,7 @@ class DesktopApp:
         self.port: int | None = None
         self.web: WebServer | None = None
         self.icon = None
-        self.job = None
+        self.jobs = None  # une synchro suivie par profil (web.SyncJobs)
         self.autosync: AutoSync | None = None
         self._stopped = threading.Event()
         self._stop_lock = threading.Lock()
@@ -362,32 +394,53 @@ class DesktopApp:
             except Exception:  # notifications coupées dans Windows : sans importance
                 LOG.debug("Notification impossible", exc_info=True)
 
-    def can_sync(self) -> bool:
-        from . import vault
+    def _ready_profiles(self) -> list[dict]:
+        """Profils qui ont une clé Garmin (et dont aucune synchro ne tourne)."""
+        from . import utilisateurs, vault
 
-        return bool(self.job) and not config.is_demo() and vault.has_key() and not self.job.snapshot()["en_cours"]
+        ready = []
+        for entry in utilisateurs.profiles():
+            with config.using_profile(entry):
+                if vault.has_key() and not self.jobs.get(entry["id"]).snapshot()["en_cours"]:
+                    ready.append(entry)
+        return ready
+
+    def can_sync(self) -> bool:
+        return bool(self.jobs) and not config.is_demo() and bool(self._ready_profiles())
 
     def wait_for_sync(self, timeout: float = 4 * 3600) -> dict:
+        """Attend la fin de la synchro du profil courant."""
+        job = self.jobs.get()
         deadline = time.monotonic() + timeout
-        while self.job.snapshot()["en_cours"] and time.monotonic() < deadline and not self._stopped.is_set():
+        while job.snapshot()["en_cours"] and time.monotonic() < deadline and not self._stopped.is_set():
             time.sleep(1)
-        return self.job.snapshot()
+        return job.snapshot()
 
     def sync_now(self) -> None:
-        """Bouton « Synchroniser maintenant » : lance la synchro et en donne le résultat."""
-        from . import vault
+        """Bouton « Synchroniser maintenant » : synchronise chaque profil qui a une clé, puis résume."""
+        from . import utilisateurs
 
-        if not vault.has_key():
-            self.notify("Ajoute d'abord ta clé API Garmin dans Foulée.")
-            self.open_ui()
+        targets = self._ready_profiles()
+        if not targets:
+            self.notify("Une synchro est déjà en cours." if any(self.jobs.get(e["id"]).snapshot()["en_cours"]
+                                                              for e in utilisateurs.profiles())
+                        else "Ajoute d'abord ta clé API Garmin dans Foulée.")
+            if not self.can_sync():
+                self.open_ui()
             return
-        if not self.job.start():
-            self.notify("Une synchro est déjà en cours.")
-            return
+        several = len(utilisateurs.profiles()) > 1
 
         def report() -> None:
-            state = self.wait_for_sync()
-            self.notify(sync_summary(state))
+            lines = []
+            for entry in targets:
+                with config.using_profile(entry):
+                    name = utilisateurs.card(entry)["prenom"]
+                    if not self.jobs.get(entry["id"]).start():
+                        lines.append(f"{name} : une synchro est déjà en cours.")
+                        continue
+                    summary = sync_summary(self.wait_for_sync())
+                lines.append(f"{name} : {summary}" if several else summary)
+            self.notify("\n".join(lines))
 
         threading.Thread(target=report, name="foulee-synchro-bouton", daemon=True).start()
 
@@ -425,13 +478,13 @@ class DesktopApp:
         os.environ["FOULEE_PORT"] = str(self.port)
         app = create_app()
         app.state.quit = self.stop
-        self.job = app.state.sync_job
+        self.jobs = app.state.sync_jobs
         self.web = WebServer(app, sock)
         self.web.start()
         write_instance(self.port)
         LOG.info("Foulée %s prêt sur %s", __version__, self.url())
         updates.set_exit_hook(self.stop)
-        self.autosync = AutoSync(self.job.start, self.wait_for_sync, self.notify)
+        self.autosync = AutoSync(lambda: self.jobs.get().start(), self.wait_for_sync, self.notify)
         self.autosync.begin()
         if self.open_browser:
             self.open_ui()

@@ -21,6 +21,18 @@ export const FAQ = [
     ],
   },
   {
+    id: "profils", titre: "Plusieurs utilisateurs", icone: "user",
+    questions: [
+      { id: "ajouter", q: "Comment ajouter un profil pour quelqu'un de ma famille ?", r: () => `<p>L'utilisateur principal (celui qui a installé Foulée) ouvre ${reglages("utilisateurs", "Réglages → Gestion des utilisateurs")} → « Ajouter un utilisateur » : un prénom, et un code s'il le souhaite. Ensuite, on passe sur ce profil (le prénom, en haut à droite de l'Accueil) pour y enregistrer sa clé Garmin et lancer son premier import.</p>` },
+      { id: "changer", q: "Comment passer d'un profil à l'autre ?", r: () => `<p>Clique sur le prénom affiché en haut à droite de l'<a href="#/vue/accueil">Accueil</a> : le chevron déplie la liste des profils. Le choix est retenu sur l'appareil ; sur un nouvel appareil, Foulée demande d'abord « Qui utilise Foulée ? ».</p>` },
+      { id: "separe", q: "Qu'est-ce qui est propre à chaque profil ?", r: () => `<ul><li>À chacun : ses données Garmin (avec sa propre clé API), ses vues, ses réglages (VMA, zones, horaires, objectif…), son prénom, sa photo et sa synchro.</li><li>Commun : l'installation (mises à jour, dossier des données, Claude Desktop, accès par le réseau local), réglée depuis le profil de l'utilisateur principal.</li></ul>` },
+      { id: "code", q: "À quoi sert le code d'un profil ? Et si je l'oublie ?", r: () => `<p>Un code à 4 chiffres protège un profil : il est demandé pour y entrer depuis un autre profil ou un nouvel appareil. Chacun le pose, le change ou le retire dans ${reglages("profil", "Réglages → Profil et logo")}. Oublié ? L'utilisateur principal l'efface dans ${reglages("utilisateurs", "Gestion des utilisateurs")}, sans avoir à le connaître.</p>` },
+      { id: "claude", q: "Claude Desktop voit-il les données de tout le monde ?", r: () => `<p>Non : chaque profil décide. La case « Claude Desktop peut lire mes données » (${reglages("profil", "Réglages → Profil et logo")}) est cochée d'office pour l'utilisateur principal, décochée pour les autres. Pour qu'il regarde un autre profil qui l'autorise, dis-le-lui : « Regarde le profil de Léa ».</p>` },
+      { id: "synchro", q: "La synchro concerne-t-elle tous les profils ?", r: () => `<p>Oui : chaque profil qui a une clé est synchronisé toutes les 3 heures (sur le PC tant que Foulée tourne, sur un serveur jour et nuit). Le bouton « Synchroniser » de la colonne synchronise le profil affiché ; « Synchroniser maintenant », dans le menu de l'icône près de l'horloge, les synchronise tous.</p>` },
+      { id: "supprimer", q: "Comment supprimer un profil ?", r: () => `<p>L'utilisateur principal ouvre ${reglages("utilisateurs", "Gestion des utilisateurs")} et clique sur la corbeille du profil. Ses séances, ses mesures, ses vues, ses réglages et sa clé sont effacés de l'installation ; ses données restent chez Garmin. Le profil principal, lui, ne se supprime pas.</p>` },
+    ],
+  },
+  {
     id: "cle", titre: "Clé API Garmin", icone: "key",
     questions: [
       { id: "trouver", q: "Où trouver ma clé API personnelle ?", r: () => `<p>Dans Garmin Connect, sur le web : page ${ext(KEY_PAGE, "API personnelle")}. Crée une clé, copie-la avec le bouton « Copier », puis colle-la dans ${reglages("cle", "Réglages → Clé API Garmin")}. Foulée la fait vérifier par Garmin avant de l'enregistrer.</p>` },
@@ -120,7 +132,7 @@ export const FAQ = [
     id: "vie-privee", titre: "Vie privée et sécurité", icone: "eye",
     questions: [
       { id: "internet", q: "Mes données partent-elles sur Internet ?", r: () => `<p>Elles restent sur ta machine. Foulée ne contacte que Garmin (pour les récupérer), GitHub (pour les mises à jour) et le fond de carte choisi (OpenStreetMap ou IGN, à couper dans ${reglages("synchro", "Réglages → Synchro et calculs")}). Un signalement de bug ne part que si tu cliques pour l'envoyer.</p>` },
-      { id: "acces", q: "Qui peut ouvrir mon Foulée ?", r: () => `<p>Sur le PC, toi seul : l'interface n'écoute que la machine elle-même. Sur un serveur, tes appareils reliés par Tailscale, et ceux de la maison s'ils connaissent le mot de passe du réseau local.</p>` },
+      { id: "acces", q: "Qui peut ouvrir mon Foulée ?", r: () => `<p>Sur le PC, seulement ceux qui utilisent ce PC : l'interface n'écoute que la machine elle-même. Sur un serveur, tes appareils reliés par Tailscale, et ceux de la maison s'ils connaissent le mot de passe du réseau local. Avec plusieurs profils, un code à 4 chiffres protège celui qui le souhaite.</p>` },
       { id: "export", q: "Que contient un export de réglages ?", r: () => `<p>Tes réglages (VMA, FC, objectif, horaires, zones…), tes vues et ta photo si tu la joins. Jamais ta clé Garmin, ni ton mot de passe, ni ton jeton GitHub.</p>` },
       { id: "signalement", q: "Que contient un signalement de bug ?", r: () => `<p>Ce que tu écris, tes captures, et si tu le laisses coché, quelques informations techniques (version de Foulée, système, navigateur, page affichée). Tu vois le texte exact avant de l'envoyer.</p>` },
     ],

@@ -23,7 +23,13 @@ export function systemSections(boot) {
   const local = boot.acces === "local";
   const parts = [];
   if (local && !boot.demo) {
-    parts.push(section("cle", "Clé API Garmin", `Foulée s'en sert pour récupérer tes données chez Garmin. Elle est rangée ${boot.machine === "pc" ? "dans le Gestionnaire d'identification de Windows" : "sur le serveur, dans un fichier que seul Foulée peut lire"} : ni l'interface ni Claude ne la voient.`));
+    parts.push(section("cle", "Clé API Garmin", `Foulée s'en sert pour récupérer tes données chez Garmin${(boot.utilisateurs || []).length > 1 ? " ; chaque profil a la sienne" : ""}. Elle est rangée ${boot.machine === "pc" ? "dans le Gestionnaire d'identification de Windows" : "sur le serveur, dans un fichier que seul Foulée peut lire"} : ni l'interface ni Claude ne la voient.`));
+  }
+  if (boot.utilisateur && !boot.utilisateur.principal) {
+    // Le reste concerne toute l'installation : c'est l'affaire de l'utilisateur principal
+    const head = (boot.utilisateurs || []).find((u) => u.principal);
+    parts.push(`<section data-section="installation"><h2>Installation</h2><p class="intro">Mises à jour, dossier des données${boot.machine === "pc" ? ", Claude Desktop, démarrage avec Windows" : ", accès par le réseau local"} : ces réglages concernent toute l'installation. Ils se règlent depuis le profil de l'utilisateur principal${head ? `, ${F.escape(head.prenom)}` : ""}.</p></section>`);
+    return parts.join("");
   }
   if (local) {
     parts.push(section("dossier", "Dossier des données", "Ta base (séances, mesures, réglages, vues) et tes fichiers FIT. Tu peux la ranger ailleurs, sur un autre disque par exemple. L'ancien dossier n'est jamais effacé : tu le supprimes toi-même une fois rassuré."));

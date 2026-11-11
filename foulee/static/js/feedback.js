@@ -187,6 +187,7 @@ function techLines(boot, from, system) {
     `Système : ${system} ; navigateur : ${browserName()}`,
     `Écran : ${screen.width} × ${screen.height}, fenêtre ${innerWidth} × ${innerHeight}, thème ${themeName()}`,
     `Ouvert ${boot.acces === "local" ? "sur la machine où tourne Foulée" : "depuis un autre appareil (réseau)"}`,
+    ...((boot.utilisateurs || []).length > 1 ? [`Profils : ${boot.utilisateurs.length}, envoyé depuis ${boot.utilisateur?.principal ? "le profil principal" : "un autre profil"}`] : []),
     ...(from ? [`Page d'origine : ${from}`] : []),
     `Clé API Garmin : ${keyText(boot)}`,
     `Synchro : ${syncText(boot)}`,

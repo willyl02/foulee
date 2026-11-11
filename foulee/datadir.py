@@ -10,6 +10,9 @@ Trois façons de faire :
 L'ancien dossier n'est jamais effacé : on le supprime soi-même une fois rassuré.
 La base est copiée par la sauvegarde intégrée de SQLite, qui donne une copie
 cohérente même si Claude ou l'interface la lisent au même moment.
+
+Le dossier est celui de l'installation : il contient aussi les autres profils
+(« profils/<id> ») et leur liste (« utilisateurs.json »), qui le suivent.
 """
 
 from __future__ import annotations
@@ -94,7 +97,7 @@ def summary(folder: Path) -> dict | None:
 
 
 def describe() -> dict:
-    current = config.data_dir()
+    current = config.root_dir()
     source = config.data_dir_source()
     return {
         "chemin": str(current), "source": source, "modifiable": source != "env",
@@ -110,7 +113,7 @@ def inspect(target_text: str) -> dict:
         return {"chemin": target_text, "probleme": "Indique un chemin complet, par exemple D:\\Sport\\Foulee.",
                 "modes": []}
     target = _resolve(target_text)
-    current = config.data_dir()
+    current = config.root_dir()
     exists = target.is_dir()
     modes = {mode: _problem(target, current, mode) for mode in MODES}
     return {
@@ -205,13 +208,39 @@ def _copy_tree(source: Path, target: Path) -> tuple[int, int]:
     return files, size
 
 
+PROFILE_FILES = ("profil.jpg", "utilisateurs.json")  # photo du principal, liste des profils
+
+
+def _copy_profile(source: Path, target: Path) -> tuple[dict | None, int, int]:
+    """Base, fichiers FIT et photo d'un profil : (rapport de la base, fichiers FIT, octets copiés)."""
+    target.mkdir(parents=True, exist_ok=True)
+    base = _copy_database(source / DB_NAME, target / DB_NAME) if (source / DB_NAME).exists() else None
+    fit_files, size = _copy_tree(source / "fit", target / "fit") if (source / "fit").is_dir() else (0, 0)
+    size += (target / DB_NAME).stat().st_size if (target / DB_NAME).exists() else 0
+    for name in PROFILE_FILES:
+        if (source / name).is_file():
+            shutil.copy2(source / name, target / name)
+            size += (source / name).stat().st_size
+    return base, fit_files, size
+
+
 def _copy_data(source: Path, target: Path) -> dict:
     report: dict = {}
-    if (source / DB_NAME).exists():
-        report["base"] = _copy_database(source / DB_NAME, target / DB_NAME)
-    fit_files, fit_size = _copy_tree(source / "fit", target / "fit") if (source / "fit").is_dir() else (0, 0)
+    base, fit_files, size = _copy_profile(source, target)
+    if base:
+        report["base"] = base
+    profiles = 0
+    if (source / "profils").is_dir():  # les autres profils suivent le dossier de l'installation
+        for folder in sorted((source / "profils").iterdir()):
+            if folder.is_dir():
+                _base, files, copied = _copy_profile(folder, target / "profils" / folder.name)
+                fit_files += files
+                size += copied
+                profiles += 1
     report["fichiers_fit"] = fit_files
-    report["octets_copies"] = fit_size + ((target / DB_NAME).stat().st_size if (target / DB_NAME).exists() else 0)
+    report["octets_copies"] = size
+    if profiles:
+        report["profils"] = profiles
     return report
 
 
@@ -225,9 +254,13 @@ def change(target_text: str, mode: str) -> dict:
         raise DataDirError("Le dossier est imposé par la variable FOULEE_DATA (serveur) : change-la à sa source.")
     if not target_text or not os.path.isabs(os.path.expanduser(target_text)):
         raise DataDirError("Indique un chemin complet, par exemple D:\\Sport\\Foulee.")
-    if sync.is_running():
-        raise DataDirError("Une synchro est en cours : réessaie quand elle sera terminée.")
-    current = _resolve(config.data_dir())
+    from . import utilisateurs
+
+    for entry in utilisateurs.profiles():
+        with config.using_profile(entry):
+            if sync.is_running():
+                raise DataDirError("Une synchro est en cours : réessaie quand elle sera terminée.")
+    current = _resolve(config.root_dir())
     target = _resolve(target_text)
     problem = _problem(target, current, mode)
     if problem:
@@ -257,7 +290,7 @@ def previous_installs() -> list[dict]:
     candidates = [Path.home() / "Foulee" / "data", config.default_data_dir()]
     if config.is_packaged():
         candidates.append(Path(os.environ.get("USERPROFILE") or Path.home()) / "Foulee" / "data")
-    current = config.data_dir()
+    current = config.root_dir()
     found, seen = [], set()
     for folder in candidates:
         key = os.path.normcase(str(_resolve(folder)))

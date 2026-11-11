@@ -38,7 +38,7 @@ function el(html) {
   return tpl.content.firstElementChild;
 }
 
-function openDialog(inner) {
+export function openDialog(inner) {
   const dialog = el(`<dialog>${inner}</dialog>`);
   document.body.appendChild(dialog);
   dialog.addEventListener("close", () => dialog.remove());
