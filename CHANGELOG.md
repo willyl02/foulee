@@ -4,6 +4,11 @@ Les versions « bêta » (par exemple 0.4.0b1) sont des avant-premières : elles
 sur le canal bêta (Réglages → Mises à jour → « Recevoir les versions bêta »), puis sortent en
 version stable une fois éprouvées.
 
+## 0.6.0b2 — 12 novembre 2026 (bêta)
+
+- **Withings** : avec plusieurs profils (ou un code de profil), la connexion n'aboutissait pas. Après « Autoriser », on revenait dans les Réglages sans synchro, sans vue « Withings » et sans message. Au retour de la page relais, le navigateur n'envoie pas le cookie du profil (il est réservé aux pages de Foulée elle-même) : Foulée retrouve maintenant le profil grâce au jeton de la demande de connexion. Après la mise à jour, relance simplement « Connecter mon compte Withings ».
+- Un message de retour qui ne se rattache à aucun profil (demande expirée ou déjà servie) s'affiche quand même dans Réglages → Withings.
+
 ## 0.6.0b1 — 11 novembre 2026 (bêta)
 
 - **Withings** : relie ton compte Withings (balance, tensiomètre, Sleep Analyzer, montre) dans **Réglages → Withings**. Un pas-à-pas en quatre étapes guide tout : créer ton appli Withings (gratuite, une seule fois, avec les mots à repérer sur le site de Withings, en anglais), donner son ClientID et son Secret à Foulée, puis autoriser l'accès (« Allow this app »). Tu reviens tout seul dans Foulée en passant un instant par une petite page relais du dépôt : Withings exige une adresse publique en https pour ce retour. Le premier import récupère ton historique, puis tes mesures arrivent avec la synchro, toutes les 3 heures.

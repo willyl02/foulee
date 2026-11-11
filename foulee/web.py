@@ -962,6 +962,7 @@ def create_app() -> FastAPI:
     withings_notes: dict[str, dict] = {}  # profil → résultat de la dernière connexion, affiché une fois
     withings_lock = threading.Lock()
     pending_lifetime = 900
+    unknown_profile = ""  # retour illisible ou expiré : le profil n'est pas connu, le message va au premier venu
 
     def withings_note(profile_id: str, statut: str, message: str) -> None:
         with withings_lock:
@@ -971,7 +972,8 @@ def create_app() -> FastAPI:
         with db.session(readonly=True) as conn:
             info = withings_vue.status(conn)
         with withings_lock:
-            note = withings_notes.pop((request.state.profil or {}).get("id"), None)
+            note = withings_notes.pop((request.state.profil or {}).get("id"), None) or \
+                withings_notes.pop(unknown_profile, None)
         if note and time.time() - note["le"] < pending_lifetime:
             info["note"] = note
         info["local"] = bool(request.state.local)
@@ -1030,12 +1032,16 @@ def create_app() -> FastAPI:
         return {"url": withings_client.authorize_url(app_data["client_id"], state), "relais": withings_client.relay_url()}
 
     @app.get("/withings/retour")
-    def withings_return(request: Request, code: str = "", state: str = "", error: str = "") -> RedirectResponse:
-        """Retour de Withings (par la page relais) : échange du code, puis retour aux Réglages."""
-        me = (request.state.profil or {}).get("id", "")
+    def withings_return(code: str = "", state: str = "", error: str = "") -> RedirectResponse:
+        """Retour de Withings (par la page relais) : échange du code, puis retour aux Réglages.
 
-        def back(statut: str, message: str) -> RedirectResponse:
-            withings_note(me, statut, message)  # pour celui qui verra la page des Réglages
+        Le navigateur arrive d'un autre site, la page relais : il n'envoie donc pas le cookie du profil, réservé
+        aux requêtes venues de Foulée lui-même (SameSite=Strict). Le profil est celui qui a lancé la connexion,
+        retrouvé grâce au « state » : un jeton à usage unique que seul ce navigateur a reçu.
+        """
+
+        def back(statut: str, message: str, profile_id: str = unknown_profile) -> RedirectResponse:
+            withings_note(profile_id, statut, message)  # affiché par le panneau Withings des Réglages
             return RedirectResponse(f"/#/reglages?section=withings&withings={statut}", status_code=303)
 
         try:
@@ -1047,27 +1053,29 @@ def create_app() -> FastAPI:
             pending = withings_pending.pop(nonce, None)
         if not pending or time.time() - pending["le"] > pending_lifetime:
             return back("erreur", "Cette demande de connexion a expiré ou a déjà servi : relance la connexion.")
-        if pending["profil"] != me:
-            return back("erreur", "La connexion a été lancée depuis un autre profil : choisis-le, puis relance la "
-                                  "connexion.")
+        profile = utilisateurs.get(pending["profil"])
+        if not profile:
+            return back("erreur", "Le profil qui a lancé la connexion n'existe plus.")
+        mine = profile["id"]
         if error:
             return back("refus", "Withings n'a pas donné l'accès (bouton « Allow » non cliqué, ou demande annulée) : "
-                                 "rien n'a changé. Tu peux relancer la connexion quand tu veux.")
+                                 "rien n'a changé. Tu peux relancer la connexion quand tu veux.", mine)
         if not code:
-            return back("erreur", "Withings n'a pas renvoyé de code d'autorisation : relance la connexion.")
-        try:
-            withings_client.exchange_code(code)
-        except WithingsError as exc:
-            return back("erreur", str(exc))
-        with db.session() as conn:
-            db.set_meta(conn, "withings_connecte_le", db.now_iso())
-            db.delete_meta(conn, withings_vue.REFUSED)
-            views.sync_withings_view(conn, True, withings_vue.families(conn))
-            conn.commit()
-        started = jobs.get().start(sources=["withings"])
+            return back("erreur", "Withings n'a pas renvoyé de code d'autorisation : relance la connexion.", mine)
+        with config.using_profile(profile):  # jetons, base, vue et synchro de ce profil
+            try:
+                withings_client.exchange_code(code)
+            except WithingsError as exc:
+                return back("erreur", str(exc), mine)
+            with db.session() as conn:
+                db.set_meta(conn, "withings_connecte_le", db.now_iso())
+                db.delete_meta(conn, withings_vue.REFUSED)
+                views.sync_withings_view(conn, True, withings_vue.families(conn))
+                conn.commit()
+            started = jobs.get(mine).start(sources=["withings"])
         return back("connecte", "Compte Withings connecté. " + (
             "Premier import en cours : la vue « Withings » se remplit dans un instant." if started else
-            "Une synchro est déjà en cours : tes mesures Withings arriveront avec la suivante."))
+            "Une synchro est déjà en cours : tes mesures Withings arriveront avec la suivante."), mine)
 
     @app.delete("/api/withings")
     def withings_disconnect(request: Request, tout: int = 0) -> dict:

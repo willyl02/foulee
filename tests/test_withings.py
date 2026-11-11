@@ -265,14 +265,35 @@ def test_return_errors(withings):
     # Une adresse que la page relais refuserait, ou qui n'est pas celle de la page
     res = http.post("/api/withings/connexion", json={"origine": "http://autre-site.fr"}, headers=WRITE)
     assert res.status_code == 400 and "ne correspond pas" in res.json()["detail"]
-    # Lancée depuis un profil, revenue sur un autre (changé entre-temps) : le message va à celui qui voit la page
-    state = start()
-    other = utilisateurs.create("Léa")
-    http.cookies.set(utilisateurs.cookie_name(), utilisateurs.make_cookie(other))
-    assert back(code=withings.issue_code(), state=state) == "erreur"
-    assert "autre profil" in http.get("/api/withings").json()["note"]["message"]
-    with config.using_profile(other):
-        assert client.connected() is False
+
+
+def test_return_from_the_relay_comes_without_the_profile_cookie(withings):
+    """Plusieurs profils : le retour arrive de la page relais, un autre site, donc sans le cookie du profil
+    (SameSite=Strict). La connexion va au profil qui l'a lancée, retrouvé par le « state »."""
+    app = web.create_app()
+    lea = utilisateurs.create("Léa")
+    browser = TestClient(app)  # le navigateur, sur le profil de Léa
+    browser.cookies.set(utilisateurs.cookie_name(), utilisateurs.make_cookie(lea))
+    assert browser.put("/api/withings/appli", json={"client_id": CLIENT_ID, "client_secret": CLIENT_SECRET},
+                       headers=WRITE).status_code == 200
+    url = browser.post("/api/withings/connexion", json={"origine": "http://testserver"}, headers=WRITE).json()["url"]
+    state = parse_qs(urlparse(url).query)["state"][0]
+    from_relay = TestClient(app)  # le même navigateur, venu de la page relais : aucun cookie
+    res = from_relay.get("/withings/retour", params={"code": withings.issue_code(), "state": state},
+                         follow_redirects=False)
+    assert res.status_code == 303 and res.headers["location"].endswith("withings=connecte")
+    info = wait_for_sync(browser)
+    assert info["connecte"] and info["note"]["statut"] == "connecte" and info["familles"]
+    with config.using_profile(lea):
+        assert client.connected()
+        with db.session(readonly=True) as conn:
+            assert conn.execute("SELECT 1 FROM views WHERE id = 'withings'").fetchone()
+            assert conn.execute("SELECT COUNT(*) AS n FROM daily WHERE source = 'withings'").fetchone()["n"] > 0
+    assert client.connected() is False  # le profil principal n'a rien reçu
+    # Un retour qui ne mène à aucun profil (demande déjà servie) : le message s'affiche quand même
+    assert from_relay.get("/withings/retour", params={"code": "x", "state": state},
+                          follow_redirects=False).status_code == 303
+    assert "expiré ou a déjà servi" in browser.get("/api/withings").json()["note"]["message"]
 
 
 def test_secrets_only_from_this_machine(withings):
