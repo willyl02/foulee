@@ -12,6 +12,11 @@ Sur Windows, Foulée s'installe comme n'importe quel programme et tourne en
 arrière-plan, avec son icône près de l'horloge. Installé sur un serveur à la maison,
 il s'ouvre aussi **sur ton téléphone**, de partout, comme une appli (section 9).
 
+**Présentation illustrée** (18 pages, avec le téléchargement, l'installation pas à pas
+et la clé API Garmin) : [le PDF](docs/presentation/Foulee-presentation-beta-testeurs.pdf),
+ou [les mêmes pages en images JPG](docs/presentation/Foulee-presentation-pages-jpg.zip)
+à partager.
+
 Aucun service intermédiaire : ta machine parle directement à Garmin (client Python
 officiel de Garmin), et tout est stocké chez toi.
 
@@ -28,6 +33,8 @@ Garmin (API personnelle)  ──►  connecteurs + synchro  ──►  base loca
 ---
 
 ## 1. Installer Foulée sur Windows
+
+En images : pages 15 à 18 de la [présentation](docs/presentation/Foulee-presentation-beta-testeurs.pdf).
 
 1. Télécharge **`Foulee-Setup-<version>.exe`** sur la page des versions :
    https://github.com/willyl02/foulee/releases (pas besoin de compte GitHub).
