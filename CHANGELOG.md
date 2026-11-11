@@ -4,39 +4,19 @@ Les versions « bêta » (par exemple 0.4.0b1) sont des avant-premières : elles
 sur le canal bêta (Réglages → Mises à jour → « Recevoir les versions bêta »), puis sortent en
 version stable une fois éprouvées.
 
-## 0.5.0b4 — 11 novembre 2026 (bêta)
+## 0.5.0 — 11 novembre 2026
 
-- **Plusieurs utilisateurs** : un profil par personne, chacun avec ses données Garmin (sa propre clé API), ses vues, ses réglages, sa photo et sa synchro.
-  - En haut à droite de l'Accueil, le prénom du profil affiché : le chevron déplie la liste des profils pour passer de l'un à l'autre. Le choix est retenu sur chaque appareil ; sur un nouvel appareil, Foulée demande « Qui utilise Foulée ? ».
-  - Code facultatif à 4 chiffres par profil (Réglages → Profil et logo) ; seule son empreinte est gardée, 5 essais puis une minute d'attente. L'utilisateur principal peut effacer un code oublié.
-  - **Réglages → Gestion des utilisateurs**, pour l'utilisateur principal : ajouter (prénom, code facultatif), renommer, effacer un code, supprimer un profil (ses données restent chez Garmin). Lui seul règle l'installation : mises à jour, dossier des données, Claude Desktop, démarrage avec Windows, accès par le réseau local.
-  - Claude Desktop ne lit que les profils qui l'autorisent (case cochée d'office pour le principal, décochée pour les autres) ; il peut passer de l'un à l'autre en précisant de qui on parle.
-  - La synchro automatique (PC et serveur) passe sur chaque profil qui a une clé ; `foulee sync --profil <prénom>` pour un seul.
-  - Le profil principal garde ses données à la racine du dossier (rien ne bouge pour une installation existante) ; les autres profils ont leur sous-dossier, qui suit le dossier des données quand on le déplace. La démo montre un second profil.
-- Aide : nouvelle rubrique « Plusieurs utilisateurs ».
-
-## 0.5.0b3 — 11 novembre 2026 (bêta)
-
-- Formulaire « Un bug, une idée ? » : **envoi par e-mail** pour qui n'a pas de compte GitHub. Le logiciel de messagerie s'ouvre avec un e-mail prêt (titre, message, informations techniques) ; les captures se téléchargent pour être jointes.
-- Le dépôt de Foulée est désormais **public** : l'installateur se télécharge et les sujets se lisent sans compte GitHub, et les mises à jour n'ont plus besoin de jeton. Un jeton déjà enregistré qui expire ne bloque plus les mises à jour : Foulée réessaie sans.
-
-## 0.5.0b2 — 11 novembre 2026 (bêta)
-
-- **Aide et FAQ**, en bas de la colonne de gauche : 68 questions rangées en 11 thèmes (premiers pas, clé Garmin, synchro et données, tableaux de bord, entraînement et calculs, horaires de travail, Claude Desktop, téléphone et serveur, installation et mises à jour, vie privée, aide et retours). Un chevron déplie chaque réponse ; recherche sans accents (« cle refusee » trouve « clé refusée ») ; liens directs vers la bonne rubrique des réglages.
-- **« Un bug, une idée ? Parles-en ! »** : un formulaire pour signaler un bug, proposer une idée ou poser une question, avec un titre, un message et des captures d'écran (glissées, collées avec Ctrl+V ou choisies, cinq au plus). Il propose d'abord les réponses de l'aide qui ressemblent au titre, explique ce qu'on trouve sur la page des sujets GitHub (ouverts, fermés, étiquettes, recherche, 👍 plutôt qu'un doublon), joint si tu le veux quelques informations techniques lisibles avant l'envoi (version, système, navigateur, page d'origine, état de la clé et de la synchro ; jamais la clé ni le chemin du dossier), puis ouvre GitHub avec le sujet déjà rempli. Chaque capture se copie ou se télécharge pour la coller sur GitHub. Le brouillon est gardé si tu vas voir l'aide entre-temps.
-- Sur GitHub, l'étiquette (bug, enhancement, question) se pose toute seule d'après le début du titre des sujets préparés par Foulée.
-
-## 0.5.0b1 — 10 novembre 2026 (bêta)
-
-- **Page d'accueil** en tête des vues : bonjour (ta photo, ton poste du jour, ton objectif), forme du jour (FC de repos, VFC, sommeil, Body Battery, fraîcheur, SpO2, chacun face à tes habitudes, avec une phrase de synthèse), ta semaine (postes, séances, volume et charge face aux 4 semaines d'avant), records, Body Battery de la journée.
-- **Allures selon ta VMA** : le tableau du club (55 à 120 % de VMA, allures et vitesses, bandes de couleur), les temps de passage sur piste (200 à 800 m), le test VAMEVAL (palier, VMA validée, VMA interpolée) et une autre VMA à comparer. Mêmes chiffres que le classeur.
-- **Horaires de travail** : bureau, 2x8 matin / soir selon la parité des semaines, 3x8, 5x8 ou cycle personnalisé, heures de chaque poste, congés. Les comparaisons, les fonds colorés des courbes et le nuage de points suivent tous les postes ; l'ancien réglage matin / soir est repris tel quel.
-- **Zones FC** au choix : celles de ta montre (lues chez Garmin, avec ton seuil lactique), % de la FC max, % de la FC de réserve, % de la FC au seuil, ou bornes à la main comme sur Strava. **Zones d'allure** : % de la VMA, % de la vitesse au seuil, ou allures à la main. Une barre à cinq couleurs dont on tire les séparations.
-- **Toutes les données de Garmin dans les tuiles** : SpO2, respiration, minutes et objectifs, Body Battery de la nuit et des séances, phases du sommeil en %, dynamique de course (temps de contact au sol, oscillation et ratio vertical, foulée), puissance, transpiration… et toute autre valeur des réponses de Garmin, au choix dans une liste rangée par catégories, avec une recherche.
-- Nouvelles tuiles : **Journée en détail** (FC minute par minute, Body Battery, phases du sommeil, VFC de la nuit), **Records** (1 km, 1 mile, 5 km, 10 km, semi…), **Séance : autres mesures**. Le choix des tuiles est rangé par catégories, avec une recherche.
-- **Logo au choix** (sept dessins) ou **photo de profil** (importée et recadrée dans le navigateur, ou reprise de Garmin Connect), jusque dans l'onglet du navigateur.
+- **Plusieurs utilisateurs** : un profil par personne, avec ses données Garmin (sa propre clé API), ses vues, ses réglages, sa photo et sa synchro. Le prénom en haut à droite de l'Accueil, avec son chevron, pour passer d'un profil à l'autre ; code facultatif à 4 chiffres ; Réglages → Gestion des utilisateurs pour l'utilisateur principal, qui règle seul l'installation. Claude Desktop ne lit que les profils qui l'autorisent. Rien ne bouge pour une installation existante.
+- **Page d'accueil** en tête des vues : bonjour (photo, poste du jour, objectif), forme du jour face à tes habitudes, ta semaine, records, Body Battery de la journée.
+- **Allures selon ta VMA** : le tableau du club (55 à 120 % de VMA), les temps de passage sur piste, le test VAMEVAL. Mêmes chiffres que le classeur.
+- **Horaires de travail** : bureau, 2x8, 3x8, 5x8 ou cycle personnalisé, heures des postes et congés ; les comparaisons, les fonds colorés des courbes et le nuage de points suivent tous les postes.
+- **Zones FC et zones d'allure** au choix : celles de ta montre (avec ton seuil lactique), en pourcentage (FC max, FC de réserve, seuil, VMA…) ou bornes à la main comme sur Strava.
+- **Toutes les données de Garmin dans les tuiles** : SpO2, respiration, dynamique de course, puissance… et toute autre valeur des réponses de Garmin. Nouvelles tuiles : Journée en détail (FC minute par minute, phases du sommeil, VFC de la nuit), Records, Séance : autres mesures.
+- **Logo au choix ou photo de profil** (importée, ou reprise de Garmin Connect), jusque dans l'onglet du navigateur.
+- **Aide et FAQ** en bas de la colonne de gauche (75 questions rangées par thème, avec une recherche) et **« Un bug, une idée ? Parles-en ! »** : un formulaire avec captures d'écran, envoyé sur GitHub ou par e-mail.
 - **Export / import des réglages** (avec les vues et la photo) pour aligner le PC et le serveur.
-- Claude Desktop : nouveaux outils allures_vma, forme_du_jour, semaine, records, horaires, journee_detail et champs_garmin.
+- Le dépôt de Foulée est public : plus besoin de jeton GitHub pour les mises à jour, et un jeton expiré ne les bloque plus.
+- Claude Desktop : nouveaux outils (allures, forme du jour, semaine, records, horaires, journée en détail, champs Garmin, profils).
 
 ## 0.4.1 — 10 novembre 2026
 
