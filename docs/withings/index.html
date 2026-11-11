@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex">
+<title>Foulée · retour de Withings</title>
+<!--
+  Page relais de Foulée pour Withings.
+
+  Withings n'accepte comme adresse de retour qu'une adresse publique en https : il refuse
+  127.0.0.1 et les adresses du réseau local. Après « Autoriser », il envoie donc le navigateur
+  ici, avec un code à usage unique (valable 30 secondes) et le « state » préparé par Foulée,
+  qui contient l'adresse de TON Foulée (ce PC, ou ton serveur). Cette page renvoie aussitôt
+  le navigateur vers cette adresse, et rien d'autre :
+  - elle ne garde rien, n'appelle aucun service et ne charge aucun script extérieur ;
+  - elle n'accepte qu'une adresse locale (127.0.0.1, localhost, réseau de la maison,
+    Tailscale) : impossible de s'en servir pour envoyer le code ailleurs ;
+  - le code ne sert à rien sans le « Secret » de ton appli Withings, qui ne quitte jamais
+    ton Foulée.
+-->
+<style>
+  :root { color-scheme: light dark; --ink: #15201b; --muted: #5d6a64; --page: #f2f5f3; --card: #fcfdfc; --hair: #dce3df;
+    --red: #d3263a; }
+  @media (prefers-color-scheme: dark) {
+    :root { --ink: #e8eeeb; --muted: #a7b3ad; --page: #101614; --card: #182020; --hair: #2a3532; --red: #ff6b7d; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; background: var(--page);
+    color: var(--ink); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { width: 100%; max-width: 520px; background: var(--card); border: 1px solid var(--hair); border-radius: 14px;
+    padding: 28px 26px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 19px; margin-bottom: 18px; }
+  .balise { display: inline-grid; grid-template-rows: 1fr 1fr; width: 26px; height: 19px; border-radius: 3px; overflow: hidden;
+    box-shadow: 0 0 0 1px var(--hair); }
+  .balise i:first-child { background: #fff; }
+  .balise i:last-child { background: #d3263a; }
+  h1 { font-size: 21px; margin: 0 0 8px; line-height: 1.25; }
+  p { margin: 0 0 12px; color: var(--muted); }
+  p b { color: var(--ink); }
+  .btn { display: inline-block; margin-top: 6px; padding: 10px 16px; border-radius: 9px; background: var(--red); color: #fff;
+    font-weight: 600; text-decoration: none; }
+  .btn:focus-visible { outline: 3px solid color-mix(in srgb, var(--red) 40%, transparent); outline-offset: 2px; }
+  .error h1 { color: var(--red); }
+  code { font-size: 14px; }
+  .spinner { width: 22px; height: 22px; border-radius: 50%; border: 3px solid var(--hair); border-top-color: var(--red);
+    animation: spin 0.9s linear infinite; display: inline-block; vertical-align: -5px; margin-right: 8px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
+</style>
+</head>
+<body>
+<main id="box">
+  <div class="brand"><span class="balise"><i></i><i></i></span>Foulée</div>
+  <h1><span class="spinner" aria-hidden="true"></span>Retour vers Foulée…</h1>
+  <p>Un instant : ton navigateur repart vers ton Foulée avec l'autorisation de Withings.</p>
+</main>
+<noscript><p style="text-align:center">Active JavaScript pour revenir automatiquement vers Foulée.</p></noscript>
+<script>
+(function () {
+  "use strict";
+  var box = document.getElementById("box");
+  var brand = '<div class="brand"><span class="balise"><i></i><i></i></span>Foulée</div>';
+
+  function show(title, text, isError) {
+    box.className = isError ? "error" : "";
+    box.innerHTML = brand + "<h1></h1>" + text;
+    box.querySelector("h1").textContent = title;
+  }
+
+  // Adresses acceptées : la machine elle-même, le réseau de la maison, Tailscale
+  function localHost(hostname) {
+    var h = String(hostname || "").toLowerCase().replace(/^\[|\]$/g, "");
+    if (h === "localhost" || /\.localhost$/.test(h) || h === "::1") return true;
+    var m = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+    if (m) {
+      var a = +m[1], b = +m[2];
+      return a === 127 || a === 10 || (a === 192 && b === 168) || (a === 172 && b >= 16 && b <= 31) ||
+        (a === 100 && b >= 64 && b <= 127);
+    }
+    if (h.indexOf(":") >= 0) return /^(fc|fd|fe8|fe9|fea|feb)/.test(h);
+    if (h.indexOf(".") < 0) return h.length > 0;
+    return /\.(ts\.net|local|lan|home|home\.arpa|internal|intranet)$/.test(h);
+  }
+
+  function decodeState(state) {
+    var text = String(state || "").replace(/-/g, "+").replace(/_/g, "/");
+    while (text.length % 4) text += "=";
+    var data = JSON.parse(atob(text));
+    if (!data || typeof data.r !== "string" || typeof data.n !== "string") throw new Error("state");
+    return data;
+  }
+
+  var query = new URLSearchParams(location.search);
+  var code = query.get("code") || "";
+  var state = query.get("state") || "";
+  var error = query.get("error") || "";
+
+  if (!code && !state && !error) {
+    show("Page relais de Foulée",
+      "<p>Cette page sert d'étape quand tu connectes ton compte Withings à Foulée : Withings y renvoie ton " +
+      "navigateur après « Autoriser », et elle le redirige aussitôt vers <b>ton</b> Foulée. Elle ne garde rien et " +
+      "ne transmet rien ailleurs.</p><p>Pour connecter Withings : Foulée → Réglages → Withings.</p>" +
+      '<a class="btn" href="https://github.com/willyl02/foulee">Foulée sur GitHub</a>', false);
+    return;
+  }
+
+  var data;
+  try {
+    data = decodeState(state);
+  } catch (e) {
+    show("Retour impossible",
+      "<p>Withings n'a pas renvoyé les informations attendues" + (error ? " (<code></code>)" : "") + ".</p>" +
+      "<p>Retourne dans Foulée, Réglages → Withings, et relance la connexion.</p>", true);
+    if (error) box.querySelector("code").textContent = error;
+    return;
+  }
+
+  var target;
+  try {
+    target = new URL(data.r);
+  } catch (e) {
+    target = null;
+  }
+  if (!target || !/^https?:$/.test(target.protocol) || !localHost(target.hostname)) {
+    show("Adresse de retour refusée",
+      "<p>Cette page ne renvoie que vers un Foulée de ta maison : ce PC, ton serveur ou ton réseau Tailscale. " +
+      "L'adresse demandée (<code></code>) n'en fait pas partie.</p>", true);
+    box.querySelector("code").textContent = data.r;
+    return;
+  }
+
+  var params = new URLSearchParams();
+  if (code) params.set("code", code);
+  params.set("state", state);
+  if (error) params.set("error", error);
+  var url = target.origin + "/withings/retour?" + params.toString();
+
+  // Le code ne reste pas dans l'historique du navigateur
+  try { history.replaceState(null, "", location.pathname); } catch (e) { /* sans importance */ }
+  show("Retour vers Foulée…",
+    "<p>Si rien ne se passe, clique sur le bouton tout de suite : l'autorisation de Withings ne vaut que " +
+    "30 secondes.</p>" + '<a class="btn" id="go">Revenir à Foulée</a>', false);
+  var go = document.getElementById("go");
+  go.href = url;
+  location.replace(url);
+})();
+</script>
+</body>
+</html>
