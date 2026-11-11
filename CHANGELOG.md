@@ -4,24 +4,14 @@ Les versions « bêta » (par exemple 0.4.0b1) sont des avant-premières : elles
 sur le canal bêta (Réglages → Mises à jour → « Recevoir les versions bêta »), puis sortent en
 version stable une fois éprouvées.
 
-## 0.5.1b2 — 11 novembre 2026 (bêta)
+## 0.5.1 — 11 novembre 2026
 
-- **« Une nouvelle version est disponible ! »** en haut à droite de l'interface, dès qu'une version plus récente sort sur ton canal (stable ou bêta). Foulée regarde sur GitHub toutes les 3 heures, comme pour la synchro, et une vérification lancée depuis les Réglages met l'alerte à jour aussitôt.
-- Un clic sur l'alerte montre la version, sa date et ses nouveautés, avec **Installer maintenant** (Foulée se ferme, s'installe et se relance tout seul, puis la page se recharge) ou **Voir dans les Réglages**. Rien ne s'installe sans ta confirmation ; depuis un autre profil que le principal, l'alerte renvoie vers lui.
-- GitHub injoignable (pas d'Internet) : nouvel essai une demi-heure plus tard, sans message d'erreur dans l'interface.
-- Aide : nouvelle question « Comment savoir qu'une nouvelle version est sortie ? ».
-
-## 0.5.1b1 — 11 novembre 2026 (bêta)
-
-- **Mon club** : dans Réglages → Mon club, coche « Je fais partie d'un club » et saisis le numéro de club de ta licence (« N° Club », 6 chiffres). Une vue « Mon club » s'ajoute juste après l'Accueil :
-  - les coordonnées du club : président, siège (avec un lien vers la carte), téléphone et e-mail cliquables, site ;
-  - des boutons vers le **classement du club sur athle.fr**, pour la saison en cours et la précédente, vers la page du club et vers son site ;
-  - ta licence (numéro, type, date de fin), avec un rappel « Licence à renouveler » sur l'Accueil un mois avant la fin.
-- Les coordonnées se remplissent **en un copier-coller** : la fiche « Coordonnées et contacts » de la page du club sur athle.fr, collée dans les réglages, suffit à Foulée pour reconnaître le président, l'adresse, le code postal, la ville, le téléphone, l'e-mail et le site.
-- Foulée ne lit rien sur athle.fr : la FFA ne propose pas d'accès pour les applications. Le classement s'ouvre dans ton navigateur, directement chez la FFA, toujours à jour. Les saisons suivent celles de la FFA (du 1er septembre au 31 août).
-- Décocher la case retire la vue et garde ce que tu as saisi. Chaque profil a son club.
+- **Mon club** : dans Réglages → Mon club, coche « Je fais partie d'un club » et saisis le numéro de club de ta licence (« N° Club », 6 chiffres). Une vue « Mon club » s'ajoute juste après l'Accueil : les coordonnées du club (président, siège avec un lien vers la carte, téléphone et e-mail cliquables, site), des boutons vers le **classement du club sur athle.fr** (saison en cours et précédente), sa page et son site, et ta licence, avec un rappel « Licence à renouveler » sur l'Accueil un mois avant la fin.
+- Les coordonnées du club se remplissent **en un copier-coller** de sa fiche « Coordonnées et contacts » sur athle.fr. Foulée ne lit rien sur athle.fr (la FFA ne propose pas d'accès pour les applications) : le classement s'ouvre dans ton navigateur, chez la FFA, toujours à jour. Chaque profil a son club.
+- **« Une nouvelle version est disponible ! »** en haut à droite de l'interface, dès qu'une version plus récente sort sur ton canal (stable ou bêta). Foulée regarde sur GitHub toutes les 3 heures, comme pour la synchro. Un clic montre la version et ses nouveautés, avec **Installer maintenant** (après ta confirmation, Foulée s'installe et se relance tout seul) ou **Voir dans les Réglages**.
 - Une vue faite seulement de tuiles sans période (comme « Mon club ») n'affiche plus le sélecteur 7 j / 30 j / 90 j….
-- Aide : nouveau thème « Mon club (FFA) ». Claude Desktop voit ton club et les liens vers son classement (outil `reglages`), et peut le régler.
+- Aide : nouveau thème « Mon club (FFA) » et nouvelle question sur les mises à jour. Claude Desktop voit ton club et les liens vers son classement (outil `reglages`).
+- Une **présentation illustrée** de Foulée (PDF de 18 pages, avec le guide d'installation et la clé API Garmin) est disponible sur GitHub, dans le dossier `docs/presentation`.
 
 ## 0.5.0 — 11 novembre 2026
 
