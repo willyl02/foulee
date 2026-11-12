@@ -1141,3 +1141,94 @@ a.chip:hover { box-shadow: inset 0 0 0 1px var(--base); }
   .wi-form-help dd { margin-bottom: 8px; }
   .wi-big { font-size: 26px; }
 }
+
+/* ------------------------------------------------------------- Renfo : carte du corps */
+:root { --bm-off: #e2e8e4; --bm-idle: #cad3ce; }
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) { --bm-off: #253029; --bm-idle: #36423d; }
+}
+:root[data-theme="dark"] { --bm-off: #253029; --bm-idle: #36423d; }
+.bodymap { display: flex; gap: 4px; justify-content: center; align-items: stretch; min-height: 0; }
+.bm-fig { margin: 0; display: flex; flex-direction: column; align-items: center; flex: 1 1 0; min-width: 0; max-width: 170px; }
+.bm-fig svg { width: 100%; height: auto; display: block; overflow: visible; }
+.bm-fig figcaption { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.bodymap path, .bodymap ellipse { stroke: var(--surface); stroke-width: 1.8; stroke-linejoin: round; }
+.bm-neutral, .bm-off { fill: var(--bm-off); }
+.bm-m.bm-l0 { fill: var(--bm-idle); }
+.bm-l1 { fill: var(--seq-1); }
+.bm-l2 { fill: var(--seq-2); }
+.bm-l3 { fill: var(--seq-3); }
+.bm-l4 { fill: var(--seq-4); }
+.bm-m { transition: filter .15s; }
+.bm-m:hover { filter: brightness(1.12) saturate(1.1); }
+.bm-legend { display: flex; align-items: center; justify-content: center; gap: 4px; font-size: 12px; color: var(--muted); }
+.bm-legend i { width: 18px; height: 10px; border-radius: 3px; display: inline-block; }
+.bm-legend i.bm-l1 { background: var(--seq-1); }
+.bm-legend i.bm-l2 { background: var(--seq-2); }
+.bm-legend i.bm-l3 { background: var(--seq-3); }
+.bm-legend i.bm-l4 { background: var(--seq-4); }
+.bm-legend span:first-child { margin-right: 2px; }
+.bm-legend span:last-child { margin-left: 2px; }
+
+/* ------------------------------------------------------------- Renfo : tuiles */
+.rf { display: grid; grid-template-columns: minmax(0, 1fr) minmax(230px, 330px); gap: 22px; align-items: start; }
+.rf--seance { grid-template-columns: minmax(0, 1fr) minmax(190px, 260px); }
+.rf-side { min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+.rf-map { position: sticky; top: 0; display: flex; flex-direction: column; gap: 6px; padding-top: 2px; }
+.rf .rf-figures { margin-top: 0; }
+.rf-h { margin: 0 0 8px; font-size: 13px; font-weight: 500; color: var(--muted); }
+.rf-muscles { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; }
+.rf-muscles li { display: grid; grid-template-columns: 118px minmax(0, 1fr) 76px; align-items: center; gap: 10px; font-size: 14px; }
+.rf-mname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rf-bar { height: 8px; background: var(--surface-2); border-radius: 4px; overflow: hidden; }
+.rf-bar i { display: block; height: 100%; background: var(--seq-2); border-radius: 4px; }
+.rf-mval { text-align: right; color: var(--ink-2); font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.rf-rest, .rf-note { margin: 8px 0 0; font-size: 13px; color: var(--muted); }
+.rf-weeks-head { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 4px 12px; font-size: 13px; color: var(--muted); }
+.rf-weeks { position: relative; display: grid; grid-template-columns: repeat(var(--n, 12), minmax(0, 1fr)); gap: 5px;
+  height: 70px; margin-top: 20px; align-items: end; border-bottom: 1px solid var(--base); }
+.rf-week { height: 100%; display: flex; align-items: flex-end; justify-content: center; }
+.rf-week-bar { position: relative; width: 100%; max-width: 28px; background: var(--seq-1); border-radius: 4px 4px 0 0; }
+.rf-week.ok .rf-week-bar { background: var(--seq-3); }
+.rf-week-bar b { position: absolute; bottom: 100%; left: 0; right: 0; padding-bottom: 2px; text-align: center;
+  font: 500 11px/1.2 var(--font); color: var(--ink-2); }
+.rf-goal { position: absolute; left: 0; right: 0; border-top: 1.5px dashed var(--muted); pointer-events: none; z-index: 1; }
+.rf-goal-key { display: inline-block; width: 16px; margin-right: 6px; vertical-align: middle; border-top: 1.5px dashed var(--muted); }
+.rf-weeks-axis { display: flex; justify-content: space-between; margin-top: 4px; font-size: 12px; color: var(--muted); }
+.rf-table td { vertical-align: middle; }
+.rf-ex { font-weight: 500; }
+.rf-ex-m { font-size: 12px; color: var(--muted); }
+.rf-ex-m span { font-style: italic; }
+.rf-evo { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.rf-spark { flex: none; }
+.rf-spark polyline { fill: none; stroke: var(--seq-3); stroke-width: 1.8; stroke-linejoin: round; stroke-linecap: round; }
+.rf-spark circle { fill: var(--seq-3); }
+.rf-up { color: var(--good); font-weight: 500; }
+.rf-down { color: var(--bad); }
+.rf-same, .rf-muted { color: var(--muted); }
+.rf-narrow { display: none; }
+/* Téléphone : chaque exercice en carte (nom à gauche, l'essentiel à droite) plutôt qu'un tableau trop large */
+@media (max-width: 600px) {
+  .rf-cards thead { display: none; }
+  .rf-cards, .rf-cards tbody { display: block; }
+  .rf-cards tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "main top" "main bottom";
+    gap: 2px 12px; align-items: start; padding: 9px 2px; border-bottom: 1px solid var(--hair); }
+  .rf-cards td { padding: 0; border: 0; }
+  .rf-cards .rf-c-main { grid-area: main; }
+  .rf-cards .rf-c-top { grid-area: top; }
+  .rf-cards .rf-c-bottom { grid-area: bottom; justify-self: end; }
+  .rf-cards .rf-c-hide { display: none; }
+  .rf-cards tr.clickable:hover { background: var(--surface-2); }
+  .rf-narrow { display: block; }
+}
+@media (max-width: 1100px) {
+  .rf { grid-template-columns: minmax(0, 1fr) minmax(200px, 270px); gap: 16px; }
+  .rf--seance { grid-template-columns: minmax(0, 1fr) minmax(170px, 220px); }
+}
+@media (max-width: 900px) {
+  .grid > .tile--renfo, .grid > .tile--renfo_exercices, .grid > .tile--seance_renfo { height: auto; min-height: 120px; }
+  .grid > .tile--renfo .tile-body.scroll, .grid > .tile--seance_renfo .tile-body.scroll { overflow: visible; }
+  .rf { grid-template-columns: minmax(0, 1fr); }
+  .rf-map { position: static; order: -1; max-width: 340px; width: 100%; margin: 0 auto; }
+  .rf-muscles li { grid-template-columns: 104px minmax(0, 1fr) 70px; gap: 8px; }
+}

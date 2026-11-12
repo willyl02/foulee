@@ -19,7 +19,7 @@ import sqlite3
 from datetime import date, timedelta
 from typing import Callable
 
-from .. import analysis, config, db, fitfile
+from .. import analysis, config, db, fitfile, renfo, views
 from . import parse
 from .client import GarminError, GarminSession
 
@@ -123,9 +123,11 @@ def reparse_all(conn: sqlite3.Connection) -> dict:
         db.set_meta(conn, "garmin_profil", json.dumps(parse.profile_settings(profile)))
     rows = conn.execute("SELECT payload FROM raw WHERE source = ? AND kind = 'activity'", (SOURCE,)).fetchall()
     for r in rows:
-        row = parse.parse_activity(json.loads(r["payload"]))
+        item = json.loads(r["payload"])
+        row = parse.parse_activity(item)
         if row:
             upsert_activity(conn, row)
+            renfo.store_exercises(conn, row["id"], item)
     counts["activities"] = len(rows)
     settings = db.get_settings(conn)
     analysis.refresh_all_activities(conn, settings)
@@ -265,6 +267,7 @@ def run(conn: sqlite3.Connection, *, since: date | None = None, fit_days: int | 
                     summary["seances_nouvelles"] += 1
                 else:
                     summary["seances_maj"] += 1
+                renfo.store_exercises(conn, row["id"], item)
                 state = conn.execute("SELECT has_streams FROM activities WHERE id = ?", (row["id"],)).fetchone()
                 if state["has_streams"] == 0:
                     need_fit.append((row["id"], row["date"]))
@@ -299,6 +302,7 @@ def run(conn: sqlite3.Connection, *, since: date | None = None, fit_days: int | 
             raise GarminError(f"Aucune donnée n'a pu être lue chez Garmin. {summary['erreurs'][0]}")
         progress("Calcul de la charge d'entraînement…", 0.98)
         analysis.recompute_daily_calc(conn)
+        views.sync_renfo_view(conn)  # la vue « Renfo » arrive avec les premiers exercices
         summary["appels"] = session.calls
     finally:
         session.close()

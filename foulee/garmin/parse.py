@@ -19,6 +19,8 @@ import re
 from datetime import datetime, timezone
 from typing import Any, Iterable
 
+from .. import renfo
+
 # ---------------------------------------------------------------- helpers
 
 def num(value: Any) -> float | None:
@@ -466,6 +468,7 @@ def activity_extra(item: dict) -> dict:
         text = item.get(name) or summary.get(name)
         if isinstance(text, str) and text.strip():
             extra[key] = text.strip()[:60]
+    extra.update(renfo.totals(renfo.parse_summary(item)))  # renfo : séries, répétitions, tonnage, effort
     return extra
 
 

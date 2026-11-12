@@ -156,7 +156,7 @@ def test_database_from_0_4_is_upgraded():
     conn.commit()
     conn.close()
     with db.session() as conn:
-        assert db.get_meta(conn, "schema_version") == "2"
+        assert db.get_meta(conn, "schema_version") == str(db.SCHEMA_VERSION)
         row = conn.execute("SELECT extra, hr_zones_garmin FROM activities").fetchone()
         assert json.loads(row["extra"]) == {"gct": 241.1, "best_5000": 1290.0}
         assert json.loads(row["hr_zones_garmin"])[1] == 100.0

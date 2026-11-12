@@ -22,7 +22,7 @@ from typing import Any
 from mcp.server.mcpserver import MCPServer
 from mcp_types import ToolAnnotations
 
-from . import __version__, analysis, club, config, db, metrics, reglages, schedule, utilisateurs, vault, views
+from . import __version__, analysis, club, config, db, metrics, reglages, renfo, schedule, utilisateurs, vault, views
 from . import sync as sync_module
 from .garmin import intraday
 
@@ -61,6 +61,11 @@ Repères :
   wi_muscle_kg, wi_bp_sys, wi_bp_dia, wi_pulse, wi_sleep_s…), source « withings » dans la table
   daily. Pour le corps, la dernière pesée du jour ; pour la tension, la moyenne du jour. Ces
   chiffres sont des repères : tu ne poses pas de diagnostic médical.
+- Renfo : les exercices de renforcement enregistrés par la montre, d'après le résumé de Garmin
+  Connect (corrections faites dans l'appli comprises). Outil renfo pour une période (séances,
+  exercices et leur progression, muscles travaillés, régularité) ; detail_seance → renfo pour une
+  séance. Muscles : 1 série compte pour 1 sur un muscle principal, ½ sur un secondaire. Métriques
+  act.sets (séries), act.reps, act.volume (tonnage en kg), act.sets_effort (temps d'effort).
 """
 
 READ = ToolAnnotations(readOnlyHint=True, openWorldHint=False)
@@ -307,7 +312,78 @@ def detail_seance(seance_id: str) -> dict[str, Any]:
         "autres_mesures": {m["label"]: m["affiche"] for m in detail.get("mesures", [])},
         "telechargement_fit": status,
     })
+    if detail.get("renfo"):
+        compact["renfo"] = _renfo_session(detail["renfo"])
     return compact
+
+
+def _set_text(e: dict) -> str:
+    """« 4 × 8 répétitions », « 4 × 30 s », « 64 répétitions en 10 séries », avec la charge."""
+    d = e["detail"]
+    if d.get("mode") == "temps":
+        text = f"{e['series']} × {metrics.fmt_duration(d['par_serie_s'])}"
+    elif d.get("par_serie"):
+        text = f"{e['series']} × {d['par_serie']} répétitions"
+    elif e["repetitions"]:
+        text = f"{e['repetitions']} répétitions en {e['series']} séries"
+    else:
+        text = f"{e['series']} série{'s' if e['series'] > 1 else ''}"
+    if e.get("charge_max_kg"):
+        text += f", {e['charge_max_kg']:g} kg"
+    return text
+
+
+def _muscles_text(load: dict[str, float]) -> dict[str, float]:
+    return {renfo.MUSCLE_LABELS[m]: v for m, v in sorted(load.items(), key=lambda kv: -kv[1])}
+
+
+def _renfo_session(data: dict) -> dict[str, Any]:
+    return {
+        "exercices": [{"nom": e["nom"], "nom_garmin": e["nom_garmin"], "series": _set_text(e),
+                       "tonnage_kg": e["tonnage_kg"], "temps_effort": metrics.fmt_duration(e["duree_s"]),
+                       "muscles": [m["nom"] + ("" if m["role"] == "principal" else " (secondaire)")
+                                   for m in e["muscles"]]}
+                      for e in data["exercices"]],
+        "muscles_series": _muscles_text(data["muscles"]),
+        "totaux": {"series": data["series"], "repetitions": data["repetitions"], "tonnage_kg": data["tonnage_kg"],
+                   "temps_effort": metrics.fmt_duration(data["effort_s"]) if data["effort_s"] else None},
+    }
+
+
+@mcp.tool(name="renfo", annotations=READ)
+def renfo_period(debut: str | None = None, fin: str | None = None) -> dict[str, Any]:
+    """Renfo sur une période (30 jours par défaut) : séances, exercices (séries, répétitions, charge, et leur
+    évolution séance après séance), muscles travaillés (en séries : 1 si muscle principal, ½ si secondaire),
+    muscles peu ou pas travaillés, et séances de renfo par semaine sur les 12 dernières semaines."""
+    a, b = _period(debut, fin, 30)
+    with db.session(readonly=True) as conn:
+        data = renfo.period(conn, a, b)
+    exercises = []
+    for e in data["exercices"]:
+        exercises.append({
+            "nom": e["nom"], "nom_garmin": e["nom_garmin"], "seances": e["seances"], "series": e["series"],
+            "repetitions": e["repetitions"], "charge_max_kg": e["charge_max_kg"], "tonnage_kg": e["tonnage_kg"],
+            "muscles_principaux": [m["nom"] for m in e["muscles"] if m["role"] == "principal"],
+            "evolution": [{"date": h["date"], "series": h["series"], "repetitions": h["repetitions"],
+                           "par_serie": h["par_serie"], "par_serie_s": h["par_serie_s"], "charge_kg": h["charge_kg"]}
+                          for h in e["historique"]][-12:],
+        })
+    worked = data["muscles"]
+    return {
+        "periode": {"debut": data["debut"], "fin": data["fin"]},
+        "totaux": {"seances": data["nb_seances"], "series": data["series"], "repetitions": data["repetitions"],
+                   "tonnage_kg": data["tonnage_kg"],
+                   "temps_effort": metrics.fmt_duration(data["effort_s"]) if data["effort_s"] else None},
+        "seances": [{k: s[k] for k in ("id", "date", "nom", "exercices", "series", "tonnage_kg")}
+                    for s in data["seances"]],
+        "muscles_series": _muscles_text(worked),
+        "muscles_non_travailles": [label for key, label in renfo.MUSCLES if not worked.get(key)],
+        "exercices": exercises,
+        "semaines": [{"semaine_du": w["debut"], "seances": w["seances"], "series": w["series"]}
+                     for w in data["semaines"]],
+        "lecture": "Séries par muscle : 1 série compte pour 1 sur un muscle principal, ½ sur un secondaire ; "
+                   "échauffement et étirements comptent au plus ½.",
+    }
 
 
 @mcp.tool(annotations=READ)

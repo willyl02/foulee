@@ -171,6 +171,14 @@ _METRICS = [
            kind="activity"),
     Metric("act.resp", "Respiration en séance", "resp/min", "dec1", "Séances", kind="activity"),
     Metric("act.temp_max", "Température max en séance", "°C", "int", "Séances", agg="max", kind="activity"),
+    # ------------------------------------------------------------- renfo
+    Metric("act.sets", "Séries de renfo", "", "int", "Renfo", agg="sum", kind="activity",
+           description="Séries enregistrées par la montre (exercices de renforcement), toutes séances du jour."),
+    Metric("act.reps", "Répétitions de renfo", "", "int", "Renfo", agg="sum", kind="activity"),
+    Metric("act.volume", "Tonnage de renfo", "kg", "int", "Renfo", agg="sum", kind="activity",
+           description="Répétitions × charge, cumulées sur les séries (exercices avec charge seulement)."),
+    Metric("act.sets_effort", "Temps d'effort en renfo", "h", "duration", "Renfo", agg="sum", kind="activity",
+           description="Durée des séries, sans les temps de repos."),
     # ------------------------------------------------- technique de course
     Metric("act.gct", "Temps de contact au sol", "ms", "int", "Technique de course", kind="activity",
            better="down", description="Moyenne des séances (pondérée par la durée). Capteur ou montre compatible."),
@@ -274,6 +282,10 @@ ACTIVITY_SOURCES: dict[str, tuple[str, Any, str, float]] = {
     "act.bb_impact": ("extra", "bb_impact", "sum", 1),
     "act.resp": ("extra", "resp", "avg", 1),
     "act.temp_max": ("extra", "temp_max", "max", 1),
+    "act.sets": ("extra", "sets", "sum", 1),
+    "act.reps": ("extra", "reps", "sum", 1),
+    "act.volume": ("extra", "volume", "sum", 1),
+    "act.sets_effort": ("extra", "sets_effort", "sum", 1),
     "act.gct": ("extra", "gct", "avg", 1),
     "act.gcb": ("extra", "gcb", "avg", 1),
     "act.vo": ("extra", "vo", "avg", 1),
@@ -287,8 +299,8 @@ ACTIVITY_SOURCES: dict[str, tuple[str, Any, str, float]] = {
     **{f"act.az{i}_s": ("az", i - 1, "sum", 1) for i in range(1, 6)},
 }
 
-CATEGORIES = ["Sommeil", "Récupération", "Journée", "Stress", "Corps", "Charge", "Séances", "Technique de course",
-              "Puissance", "Withings"]
+CATEGORIES = ["Sommeil", "Récupération", "Journée", "Stress", "Corps", "Charge", "Séances", "Renfo",
+              "Technique de course", "Puissance", "Withings"]
 
 # --------------------------------------------------- données brutes de Garmin
 # Toute valeur numérique des réponses gardées telles quelles (table raw) peut servir de métrique :

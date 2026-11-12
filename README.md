@@ -145,7 +145,8 @@ mesures déjà importées restent.
 | Accueil | Bonjour (photo, poste du jour, objectif), forme du jour face à tes habitudes, ta semaine, tes allures selon ta VMA (tableau du club, piste, test VAMEVAL), Body Battery de la journée, records |
 | Aujourd'hui | Nuit, VFC, FC de repos, Body Battery au réveil, stress, km sur 7 jours, fraîcheur, dernière séance |
 | Entraînement | Km par semaine, forme et fatigue (charge chronique, aiguë, fraîcheur, ratio), zones FC et d'allure, liste des séances |
-| Séance | Résumé, carte, courbes synchronisées (FC, allure, altitude, cadence…), autres mesures (dynamique de course, puissance, respiration…), tours ou découpage au km |
+| Renfo | Dès ta première séance de renfo détaillée : muscles travaillés (carte du corps face et dos, séries par muscle), régularité face à ton objectif, chaque exercice et sa progression, temps, séries et tonnage par semaine, séances |
+| Séance | Résumé, exercices de renfo (avec la carte du corps), carte, courbes synchronisées (FC, allure, altitude, cadence…), autres mesures (dynamique de course, puissance, respiration…), tours ou découpage au km |
 | Récup & postes | Comparaison d'un poste de travail à l'autre, sommeil, VFC, FC de repos, nuage sommeil → VFC, calendrier |
 | Cap semi de Paris | Compte à rebours, allure cible, fractions rapides face à l'allure cible, volume, charge, zones, VO2max |
 | Mon club | Si tu l'as coché dans les Réglages : ton club FFA (coordonnées, site, carte), ta licence, et son classement sur athle.fr en un clic |
@@ -162,6 +163,23 @@ en JSON.
 La tuile **Journée en détail** montre heure par heure la FC, la Body Battery, les
 phases du sommeil ou la VFC de la nuit. Ces courbes sont demandées à Garmin quand
 la tuile les affiche (un appel par jour), puis gardées dans ta base.
+
+**Renfo** : pour chaque séance de musculation, Garmin Connect garde le détail
+exercice par exercice (séries, répétitions, durée, charge), corrections faites dans
+l'appli comprises. Foulée le lit à la synchro (sans fichier FIT), traduit les
+exercices en français et en déduit les muscles travaillés : une série compte pour 1
+sur un muscle principal, pour ½ sur un muscle secondaire (au plus ½ pour
+l'échauffement et les étirements). La vue **Renfo** arrive après « Entraînement »
+avec ta première séance de renfo détaillée : carte du corps (face et dos), séries
+par muscle et muscles laissés de côté, séances par semaine face à ton objectif
+(2 par défaut), chaque exercice avec sa dernière séance et sa progression (charge,
+répétitions ou durée par série). Dans la vue **Séance**, la tuile « Exercices de
+renfo » s'affiche pour les séances de renfo et s'efface pour les autres. Quatre
+métriques rejoignent les tuiles (catégorie « Renfo ») : séries, répétitions, tonnage
+et temps d'effort. Sur la montre, lance l'activité « Musculation » et choisis
+l'exercice à chaque série (ou suis un entraînement de renfo préparé dans Garmin
+Connect) ; une séance enregistrée sans le détail se complète après coup dans l'appli
+Garmin Connect.
 
 Les **Réglages** contiennent :
 
@@ -190,7 +208,7 @@ Les **Réglages** contiennent :
 **Aide et retours**, en bas de la colonne de gauche (menu ☰ sur téléphone) :
 
 - **Aide et FAQ** : les questions les plus courantes, rangées par thème (premiers
-  pas, profils, clé Garmin, synchro, tableaux de bord, calculs, mon club, horaires,
+  pas, profils, clé Garmin, synchro, tableaux de bord, calculs, renfo, mon club, Withings, horaires,
   Claude Desktop, téléphone, installation, vie privée), avec une recherche et des liens directs vers
   la bonne rubrique des réglages ;
 - **Un bug, une idée ? Parles-en !** : un formulaire (titre, message, captures
@@ -252,6 +270,7 @@ Garmin, les mots de passe et le jeton GitHub n'y figurent jamais.
    - « Quelles allures pour 6 × 800 m à 100 % de VMA ? Et sur piste, au 400 m ? »
    - « Comment est ma forme ce matin ? »
    - « Analyse ma séance de fractionné d'hier : tours, FC, découplage. »
+   - « Quels muscles ai-je travaillés en renfo ce mois-ci ? Qu'est-ce que je néglige ? »
    - « Où en est ma charge d'entraînement ? Suis-je frais pour samedi ? »
    - « Crée-moi une vue qui suit mes fractions longues et mon volume depuis octobre. »
    - « Ma VMA est maintenant de 16,5 km/h, mets à jour les réglages. »
@@ -541,6 +560,7 @@ foulee/
   db.py            schéma SQLite (et sa mise à niveau), réglages
   metrics.py       catalogue des métriques (libellés, unités, formats) et données brutes de Garmin
   analysis.py      tous les calculs (séries, charge, zones, postes, objectif, allures VMA, forme du jour…)
+  renfo.py         renfo : exercices du résumé de Garmin Connect, noms en français, muscles travaillés
   schedule.py      horaires de travail : bureau, 2x8, 3x8, 5x8, cycle personnalisé, congés
   zones.py         méthodes des zones FC et d'allure
   reglages.py      contrôle des réglages, export et import

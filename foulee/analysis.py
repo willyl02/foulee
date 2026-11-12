@@ -15,7 +15,7 @@ from collections import defaultdict
 from datetime import date, datetime, timedelta
 from typing import Any, Iterable
 
-from . import db, fitfile, metrics, schedule, zones as zone_methods
+from . import db, fitfile, metrics, renfo, schedule, zones as zone_methods
 
 # ======================================================================
 #  Dates
@@ -959,6 +959,7 @@ def activity_detail(conn: sqlite3.Connection, activity_id: str, settings: dict) 
     data["zones_fc_noms"] = hrp["bornes"]
     data["zones_allure_noms"] = hrp["allure"]["bornes"]
     data["mesures"] = activity_measures(row, data["extra"])
+    data["renfo"] = renfo.session(conn, activity_id)  # exercices de renfo, muscles travaillés (ou None)
     if row["sport"] in metrics.RUNNING_SPORTS:
         vma = float(settings.get("vma_kmh") or 16)
         if row["avg_speed"]:

@@ -12,6 +12,7 @@ import { renderSettings } from "./settings.js";
 import { renderChooser, whoButton, wireWho } from "./users.js";
 import { renderWelcome } from "./welcome.js";
 import * as A from "./tiles-activity.js";
+import * as R from "./tiles-renfo.js";
 import * as D from "./tiles-data.js";
 import * as H from "./tiles-home.js";
 import * as W from "./tiles-withings.js";
@@ -22,6 +23,7 @@ const RENDERERS = {
   activites: A.activites, derniere_seance: A.derniere_seance, seance_resume: A.seance_resume,
   seance_carte: A.seance_carte, seance_courbes: A.seance_courbes, seance_tours: A.seance_tours,
   seance_mesures: A.seance_mesures,
+  renfo: R.renfo, renfo_exercices: R.renfo_exercices, seance_renfo: R.seance_renfo,
   profil: H.profil, forme: H.forme, allures: H.allures, semaine: H.semaine, records: H.records, journee: H.journee,
   club: H.club, withings: W.withings,
 };
@@ -423,7 +425,12 @@ function renderTile(view, tile, index, ctx) {
   el.innerHTML = `${renderer.ownHead ? "" : `<div class="tile-head"><h2 class="tile-title" title="${F.escape(title)}">${F.escape(title)}</h2><span class="tile-sub"></span></div>`}
     <div class="tile-body"></div>${state.editing ? tileTools() : ""}`;
   const body = el.querySelector(".tile-body");
-  const tileCtx = { ...ctx, sub: (text) => { const s = el.querySelector(".tile-sub"); if (s) { s.textContent = text; s.title = text; } } };
+  const tileCtx = {
+    ...ctx,
+    sub: (text) => { const s = el.querySelector(".tile-sub"); if (s) { s.textContent = text; s.title = text; } },
+    /** La tuile n'a rien à montrer ici (séance sans renfo…) : elle s'efface, sauf pendant la modification de la vue. */
+    hide: () => { if (!state.editing) el.hidden = true; },
+  };
   D.message(body, "Chargement…");
   const keep = (disposable) => {
     if (ctx.token !== state.pass.token) disposable.dispose();

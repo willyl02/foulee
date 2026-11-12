@@ -17,7 +17,7 @@ from typing import Any, Iterator
 
 from . import config
 
-SCHEMA_VERSION = 2  # 2 : colonnes « extra » et « hr_zones_garmin » des séances (0.5)
+SCHEMA_VERSION = 3  # 2 : colonnes « extra » et « hr_zones_garmin » des séances (0.5) ; 3 : exercices de renfo
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (
@@ -108,6 +108,21 @@ CREATE TABLE IF NOT EXISTS laps (
     intensity   TEXT,
     PRIMARY KEY (activity_id, idx)
 );
+
+-- Renfo : exercices d'une séance tels que Garmin les résume (corrections de Garmin Connect comprises)
+CREATE TABLE IF NOT EXISTS exercises (
+    activity_id TEXT NOT NULL,
+    idx         INTEGER NOT NULL,
+    category    TEXT NOT NULL,          -- catégorie d'exercice de Garmin, en minuscules (squat, lunge…)
+    name        TEXT,                   -- exercice de Garmin (weighted_back_squats…), NULL si non précisé
+    sets        INTEGER NOT NULL,       -- séries
+    reps        INTEGER,                -- répétitions, toutes séries comprises
+    duration_s  REAL,                   -- temps d'effort, toutes séries comprises
+    max_kg      REAL,                   -- charge la plus lourde
+    volume_kg   REAL,                   -- tonnage : répétitions × charge
+    PRIMARY KEY (activity_id, idx)
+);
+CREATE INDEX IF NOT EXISTS exercises_name ON exercises(category, name);
 
 -- Courbes d'une séance (FC, vitesse, altitude, GPS…) en JSON compressé
 CREATE TABLE IF NOT EXISTS streams (
@@ -233,11 +248,27 @@ def _migrate(conn: sqlite3.Connection) -> None:
         version = _schema_version(conn)
         if version < 2:
             _migrate_v2(conn)
+        if version < 3:
+            _migrate_v3(conn)
         conn.execute("UPDATE meta SET value = ? WHERE key = 'schema_version'", (str(SCHEMA_VERSION),))
         conn.commit()
     except BaseException:
         conn.rollback()
         raise
+
+
+def _migrate_v3(conn: sqlite3.Connection) -> None:
+    """0.6 : exercices de renfo, relus dans les résumés de séance gardés (aucun appel à Garmin)."""
+    from . import renfo
+    from .garmin import parse
+
+    for row in conn.execute("SELECT payload FROM raw WHERE source = 'garmin' AND kind = 'activity' "
+                            "AND payload LIKE '%summarizedExerciseSets%'").fetchall():
+        item = json.loads(row["payload"])
+        parsed = parse.parse_activity(item)
+        if parsed:
+            conn.execute("UPDATE activities SET extra = ? WHERE id = ?", (parsed["extra"], parsed["id"]))
+            renfo.store_exercises(conn, parsed["id"], item)
 
 
 def _migrate_v2(conn: sqlite3.Connection) -> None:

@@ -144,7 +144,10 @@ export const serie = {
       return s;
     };
     const axisFor = (i, extra = {}) => {
-      const range = metas[i].fmt === "pace" ? C.paceRange(stacked ? plotted[i] : plotted.flat()) : {};
+      const values = stacked ? plotted[i] : plotted.flat();
+      const range = metas[i].fmt === "pace" ? C.paceRange(values)
+        : metas[i].fmt === "duration" && p.style === "barres" && (stacked || metas.every((m) => m.fmt === "duration"))
+          ? C.durationRange(values) : {};
       return C.valueAxis(P, metas[i], { scale: p.style !== "barres", ...range, ...extra });
     };
     if (!stacked) {

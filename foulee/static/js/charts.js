@@ -101,10 +101,27 @@ export function paceRange(values) {
   return { min: Math.floor(lo / interval) * interval, max: Math.ceil(hi / interval) * interval, interval };
 }
 
+/** Graduation d'un axe de durée (tracé en heures) : « 20 min », « 1 h », « 1 h 30 ». */
+export function hoursLabel(v) {
+  if (!F.isNum(v)) return "";
+  const minutes = Math.round(v * 60);
+  if (!minutes) return "0";
+  if (minutes < 60) return `${minutes} min`;
+  return minutes % 60 ? `${Math.floor(minutes / 60)} h ${String(minutes % 60).padStart(2, "0")}` : `${minutes / 60} h`;
+}
+
+/** Pas « ronds » en minutes pour un axe de durées courtes (valeurs en heures) ; rien au-delà de 4 h. */
+export function durationRange(values) {
+  const hi = Math.max(0, ...values.filter(F.isNum));
+  if (!(hi > 0) || hi > 4) return {};
+  const step = [5, 10, 15, 20, 30, 60].find((m) => (hi * 60) / m <= 5) || 60;
+  return { min: 0, max: (Math.ceil((hi * 60) / step) * step) / 60, interval: step / 60 };
+}
+
 export function valueAxis(p, meta, { gridIndex = 0, scale = true, min, max, interval, splitNumber = 4, formatter, hideMax = false } = {}) {
   let fmt = formatter || ((v) => F.axis(meta, v));
   let inverse = false;
-  if (!formatter && meta?.fmt === "duration") fmt = (v) => `${F.isNum(v) && Number.isInteger(v) ? v : F.dec1(v)} h`;
+  if (!formatter && meta?.fmt === "duration") fmt = hoursLabel;
   if (!formatter && meta?.fmt === "pace") { fmt = (v) => F.chrono(v); inverse = true; }
   return {
     type: "value", gridIndex, scale, min, max, interval, splitNumber, inverse,

@@ -16,7 +16,7 @@ import math
 import random
 from datetime import date, datetime, timedelta
 
-from . import analysis, config, db, utilisateurs, views
+from . import analysis, config, db, renfo, utilisateurs, views
 from .garmin.sync import upsert_activity
 
 SECOND_PROFILE = "Léo"
@@ -52,6 +52,8 @@ class Athlete:
         if rng.random() < 0.06:  # imprévu : séance sautée
             return []
         if phase == "recup":
+            if weekday == 0 and days_to_race < -4:
+                return [{"kind": "strength"}]  # renfo léger : la reprise commence par là
             return [{"kind": "easy", "km": rng.uniform(5, 8)}] if weekday in (2, 5) and days_to_race < -7 else []
         if phase == "affutage":
             return [{"kind": "easy", "km": rng.uniform(6, 8)}] if weekday in (1, 3) else []
@@ -63,7 +65,8 @@ class Athlete:
         if weekday == 2:
             return [{"kind": "easy", "km": rng.uniform(8, 11) * week_factor}]
         if weekday == 3:
-            return [{"kind": "tempo" if phase == "semi" else "easy", "km": rng.uniform(9, 12)}]
+            run = {"kind": "tempo" if phase == "semi" else "easy", "km": rng.uniform(9, 12)}
+            return [run, {"kind": "strength"}] if rng.random() < 0.35 else [run]
         if weekday == 4:
             return [{"kind": "bike"}] if rng.random() < 0.25 else []
         if weekday == 5:
@@ -230,6 +233,7 @@ def _build_profile(days: int, seed: int) -> dict:
         if candidate.exists():
             candidate.unlink()
     rng = random.Random(seed)
+    renfo_rng = random.Random(seed + 101)  # à part, pour ne pas changer le reste de la démo
     athlete = Athlete(rng)
     today = date.today()
     start = today - timedelta(days=days)
@@ -292,9 +296,17 @@ def _build_profile(days: int, seed: int) -> dict:
                     "hr_zones_garmin": None, "start_lat": BASE_LAT, "start_lon": BASE_LON, "lap_count": len(sim["laps"]),
                 }
                 extra = activity_extra(sim, trimp, rng)
+                exercises = None
+                if sim["sport"] == "renfo":
+                    row["name"], exercises = renfo_session(renfo_rng, (day - start).days / days)
+                    extra.update(renfo.totals(renfo.parse_summary({"summarizedExerciseSets": exercises})))
                 row["extra"] = json.dumps(extra) if extra else None
                 upsert_activity(conn, row)
-                db.put_raw(conn, "garmin", "activity", row["source_id"], garmin_payload(row, extra))
+                payload = garmin_payload(row, extra)
+                if exercises:
+                    payload["summarizedExerciseSets"] = exercises
+                    renfo.store_exercises(conn, activity_id, payload)
+                db.put_raw(conn, "garmin", "activity", row["source_id"], payload)
                 day_load += row["garmin_load"]
                 if sim["streams"]:
                     laps = []
@@ -392,6 +404,7 @@ def _build_profile(days: int, seed: int) -> dict:
             if weekday == 6:
                 conn.commit()
         analysis.recompute_daily_calc(conn)
+        views.sync_renfo_view(conn)
         db.set_meta(conn, "last_sync", db.now_iso())
         db.set_meta(conn, "demo", "1")
         conn.commit()
@@ -481,6 +494,46 @@ def activity_extra(sim: dict, trimp: float, rng: random.Random) -> dict:
             boost = 1.06 if meters <= 1609 else 1.03 if meters <= 5000 else 1.0
             extra[f"best_{meters}"] = round(meters / (speed * boost * rng.uniform(0.99, 1.04)), 1)
     return extra
+
+
+# Séances de renfo de la démo : deux routines de coureur en alternance, charges en hausse au fil des mois.
+# (catégorie, exercice, séries, répétitions ou secondes « 40s », charge au début, charge à la fin)
+RENFO_ROUTINES = [
+    ("Renfo jambes", [
+        ("SQUAT", "GOBLET_SQUAT", 3, 10, 12, 16),
+        ("LUNGE", "DUMBBELL_LUNGE", 3, 8, 6, 8),
+        ("CALF_RAISE", "SINGLE_LEG_STANDING_CALF_RAISE", 3, 12, 0, 8),
+        ("HIP_RAISE", "SINGLE_LEG_HIP_RAISE", 3, 10, 0, 0),
+        ("PLANK", "SIDE_PLANK", 2, "40s", 0, 0),
+    ]),
+    ("Renfo gainage et haut du corps", [
+        ("HIP_RAISE", "KETTLEBELL_SWING", 4, 12, 12, 16),
+        ("PUSH_UP", "PUSH_UP", 3, 10, 0, 0),
+        ("ROW", "DUMBBELL_ROW", 3, 10, 10, 12),
+        ("HIP_STABILITY", "DEAD_BUG", 3, 12, 0, 0),
+        ("HIP_STABILITY", "LATERAL_WALKS_WITH_BAND_AT_ANKLES", 2, 20, 0, 0),
+        ("PLANK", "PLANK", 3, "45s", 0, 0),
+    ]),
+]
+
+
+def renfo_session(rng: random.Random, progress: float) -> tuple[str, list[dict]]:
+    """Nom et résumé par exercice d'une séance de renfo simulée, au format de Garmin (grammes, millisecondes)."""
+    name, routine = RENFO_ROUTINES[rng.random() < 0.5]
+    out = []
+    for category, exercise, sets, amount, low, high in routine:
+        if rng.random() < 0.08:
+            continue  # exercice sauté ce jour-là
+        load = round((low + (high - low) * progress) / 2) * 2 if high else 0  # par pas de 2 kg
+        timed = isinstance(amount, str)
+        seconds = int(amount[:-1]) if timed else 0
+        reps = 0 if timed else amount + (2 if progress > 0.6 and load == 0 else 0)
+        out.append({
+            "category": category, "subCategory": exercise, "sets": sets, "reps": sets * reps,
+            "volume": sets * reps * load * 1000, "maxWeight": load * 1000,
+            "duration": sets * (seconds if timed else reps * rng.uniform(2.4, 3.2)) * 1000,
+        })
+    return name, out
 
 
 def garmin_payload(row: dict, extra: dict) -> dict:

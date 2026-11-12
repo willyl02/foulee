@@ -66,6 +66,26 @@ function traceSVG(streams, p) {
 }
 
 // ------------------------------------------------------------- liste
+// Colonnes de la liste. « has » : une colonne vide pour toutes les séances affichées ne s'affiche pas
+// (pas de distance ni d'allure pour une liste de renfo). « renfo » : seulement si toutes sont du renfo.
+const LIST_COLUMNS = [
+  { head: "Date", cell: (a) => F.escape(F.dateShort(a.date)) },
+  { head: "Séance", cls: "name", cell: (a) => `${F.escape(a.name || a.sport_label)} <span class="sport-tag">${F.escape(a.sport_label)}</span>` },
+  { head: "Distance", num: true, has: (a) => a.distance_m > 0, cell: (a) => (a.distance_m ? `${F.dec1(a.distance_m / 1000)} km` : "–") },
+  { head: "Durée", num: true, cell: (a) => F.escape(a.duree) },
+  { head: "Allure / vitesse", num: true, has: (a) => a.avg_speed > 0, cell: (a) => F.escape(speedText(a)) },
+  { head: "Séries", num: true, renfo: true, has: (a) => a.extra?.sets > 0, cell: (a) => F.int(a.extra?.sets) },
+  { head: "Tonnage", num: true, renfo: true, has: (a) => a.extra?.volume > 0, cell: (a) => (a.extra?.volume > 0 ? `${F.int(a.extra.volume)} kg` : "–") },
+  { head: "FC moy.", num: true, has: (a) => a.avg_hr > 0, cell: (a) => F.int(a.avg_hr) },
+  { head: "D+", num: true, has: (a) => a.elev_gain_m > 0, cell: (a) => (a.elev_gain_m ? `${F.int(a.elev_gain_m)} m` : "–") },
+  { head: "Charge", num: true, has: (a) => a.load > 0, cell: (a) => F.int(a.load) },
+];
+
+function listColumns(rows) {
+  const allRenfo = rows.every((a) => a.sport === "renfo");
+  return LIST_COLUMNS.filter((c) => (!c.renfo || allRenfo) && (!c.has || rows.some(c.has)));
+}
+
 export const activites = {
   title: () => "Séances",
   async render(body, p, ctx) {
@@ -83,17 +103,16 @@ export const activites = {
       if (!rows.length) return message(body, "Aucune séance sur cette période.");
       ctx.sub(`${rows.length}${more ? "+" : ""} séance${rows.length > 1 ? "s" : ""}`);
       body.classList.add("scroll");
+      const cols = listColumns(rows);
+      const td = (c, a) => {
+        if (c.num) return `<td class="num">${c.cell(a)}</td>`;
+        if (c.cls === "name") return `<td class="name" title="${F.escape(a.description || a.name || "")}">${c.cell(a)}</td>`;
+        return `<td>${c.cell(a)}</td>`;
+      };
       body.innerHTML = `<table class="table">
-        <thead><tr><th>Date</th><th>Séance</th><th class="num">Distance</th><th class="num">Durée</th><th class="num">Allure / vitesse</th><th class="num">FC moy.</th><th class="num">D+</th><th class="num">Charge</th></tr></thead>
+        <thead><tr>${cols.map((c) => `<th${c.num ? ' class="num"' : ""}>${F.escape(c.head)}</th>`).join("")}</tr></thead>
         <tbody>${rows.map((a) => `<tr class="clickable" data-id="${F.escape(a.id)}" tabindex="0">
-          <td>${F.escape(F.dateShort(a.date))}</td>
-          <td class="name" title="${F.escape(a.description || a.name || "")}">${F.escape(a.name || a.sport_label)} <span class="sport-tag">${F.escape(a.sport_label)}</span></td>
-          <td class="num">${a.distance_m ? `${F.dec1(a.distance_m / 1000)} km` : "–"}</td>
-          <td class="num">${F.escape(a.duree)}</td>
-          <td class="num">${F.escape(speedText(a))}</td>
-          <td class="num">${F.int(a.avg_hr)}</td>
-          <td class="num">${a.elev_gain_m ? `${F.int(a.elev_gain_m)} m` : "–"}</td>
-          <td class="num">${F.int(a.load)}</td></tr>`).join("")}</tbody></table>
+          ${cols.map((c) => td(c, a)).join("")}</tr>`).join("")}</tbody></table>
         ${more ? `<div class="tile-foot"><span></span><button class="btn btn-ghost" data-more type="button">Afficher plus</button></div>` : ""}`;
       body.querySelectorAll("tr[data-id]").forEach((tr) => {
         const open = () => ctx.openActivity(tr.dataset.id);

@@ -4,6 +4,19 @@ Les versions « bêta » (par exemple 0.4.0b1) sont des avant-premières : elles
 sur le canal bêta (Réglages → Mises à jour → « Recevoir les versions bêta »), puis sortent en
 version stable une fois éprouvées.
 
+## 0.6.0b3 — 12 novembre 2026 (bêta)
+
+- **Renfo** : tes séances de musculation, exercice par exercice. Foulée lit le résumé que Garmin Connect garde pour chaque séance (séries, répétitions, durée, charge), corrections faites dans l'appli comprises, sans fichier FIT. Les séances déjà importées sont relues à la mise à jour, sans rien redemander à Garmin.
+- Les exercices **en français** (« Élévation des mollets debout sur une jambe », « Chaise lestée »…) : près de 1 000 des 1 846 exercices de Garmin, dont les plus courants en course à pied. Les autres gardent leur famille en français suivie du nom de Garmin.
+- **Muscles travaillés**, sur une carte du corps face et dos (16 groupes musculaires) : une série compte pour 1 sur un muscle principal, pour ½ sur un muscle secondaire, au plus ½ pour l'échauffement et les étirements. La liste dit aussi quels muscles la période a laissés de côté.
+- Une vue **Renfo** s'ajoute après « Entraînement » dès ta première séance de renfo détaillée : muscles travaillés, séances par semaine face à ton objectif (2 par défaut, réglable), chaque exercice avec sa dernière séance et sa progression (charge, répétitions ou durée par série), temps, séries et tonnage par semaine, liste des séances. Ses tuiles suivent la période choisie en haut de la vue.
+- Vue **Séance** : la tuile « Exercices de renfo » (séries, charge, tonnage, temps d'effort et carte du corps) s'ajoute sous le résumé ; elle s'efface pour les séances sans renfo. Sur téléphone, les exercices s'affichent en cartes.
+- Quatre métriques dans toutes les tuiles (catégorie « Renfo ») : séries, répétitions, tonnage et temps d'effort.
+- **Claude Desktop** voit ton renfo : nouvel outil `renfo` (séances, exercices et leur évolution, muscles travaillés ou négligés, régularité), et le détail des exercices dans `detail_seance`.
+- Liste des séances : une colonne vide pour toutes les séances affichées (distance, allure, D+ pour du renfo) ne s'affiche plus ; une liste de séances de renfo montre leurs séries et leur tonnage.
+- Courbes de durées courtes : graduations en minutes (« 20 min », « 1 h 20 ») au lieu de « 0,3 h ».
+- Aide : nouveau thème « Renfo ». Mode démo : deux routines de renfo de coureur, avec des charges qui progressent.
+
 ## 0.6.0b2 — 12 novembre 2026 (bêta)
 
 - **Withings** : avec plusieurs profils (ou un code de profil), la connexion n'aboutissait pas. Après « Autoriser », on revenait dans les Réglages sans synchro, sans vue « Withings » et sans message. Au retour de la page relais, le navigateur n'envoie pas le cookie du profil (il est réservé aux pages de Foulée elle-même) : Foulée retrouve maintenant le profil grâce au jeton de la demande de connexion. Après la mise à jour, relance simplement « Connecter mon compte Withings ».

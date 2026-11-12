@@ -62,6 +62,7 @@ const P = {
   bulb: '<path d="M9.5 18.5h5M10.5 21h3"/><path d="M12 3.5a5.5 5.5 0 0 0-3.4 9.8c.6.5.9 1.2.9 2v.7h5v-.7c0-.8.3-1.5.9-2A5.5 5.5 0 0 0 12 3.5z"/>',
   club: '<circle cx="9" cy="8.5" r="3"/><path d="M3.5 19.5c.5-3.2 2.7-5.2 5.5-5.2s5 2 5.5 5.2"/><path d="M15.5 5.7a3 3 0 0 1 0 5.6M17 14.6c2 .6 3.2 2.3 3.5 4.9"/>',
   scale: '<rect x="3.5" y="4" width="17" height="16" rx="3.5"/><path d="M8.2 10a5 5 0 0 1 7.6 0"/><path d="M12 11.2l1.5-2.3"/>',
+  dumbbell: '<path d="M8 12h8"/><rect x="4.5" y="7" width="3.5" height="10" rx="1.2"/><rect x="16" y="7" width="3.5" height="10" rx="1.2"/><path d="M2.5 10v4M21.5 10v4"/>',
   lock: '<rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5M12 14.6v2.3"/>',
   chevron: '<path d="m6 9 6 6 6-6"/>',
   feedback: '<path d="M4.5 5.5h15a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H10l-4.5 3.5v-3.5h-1a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1z"/><path d="M12 8.3v3.6M12 14.3v.2"/>',

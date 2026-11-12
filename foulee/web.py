@@ -50,6 +50,7 @@ from . import (
     metrics,
     profile,
     reglages,
+    renfo,
     retours,
     schedule,
     updates,
@@ -385,6 +386,13 @@ def create_app() -> FastAPI:
     def get_records(start: str | None = None, end: str | None = None, sport: str | None = "pied") -> dict:
         with db.session(readonly=True) as conn:
             return analysis.records(conn, _day(start), _day(end), None if sport in (None, "", "tous") else sport)
+
+    @app.get("/api/renfo")
+    def get_renfo(start: str | None = None, end: str | None = None, semaines: int = 12) -> dict:
+        """Bilan du renfo sur la période : séances, muscles travaillés, exercices et leur progression."""
+        a, b = _period(start, end, 30)
+        with db.session(readonly=True) as conn:
+            return renfo.period(conn, a, b, max(4, min(int(semaines), 52)))
 
     @app.get("/api/journee")
     def get_day_detail(donnee: str = "body_battery", day: str | None = None) -> dict:

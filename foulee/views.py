@@ -164,6 +164,32 @@ TILE_TYPES: list[dict[str, Any]] = [
         "params": [{"key": "sport", "label": "Sport", "kind": "sport", "default": "tous"}],
     },
     {
+        "type": "renfo", "label": "Renfo : muscles travaillés", "icone": "dumbbell", "categorie": "Entraînement",
+        "description": "Les muscles que tes séances de renfo ont fait travailler (carte du corps, face et dos), "
+                       "tes séances et ta régularité semaine après semaine, d'après les exercices enregistrés "
+                       "par ta montre.",
+        "taille": {"w": 12, "h": 4},
+        "params": [
+            {"key": "periode", "label": "Période (jours)", "kind": "periode", "default": "herite"},
+            {"key": "objectif", "label": "Objectif : séances de renfo par semaine (0 = aucun)", "kind": "number",
+             "default": 2},
+        ],
+    },
+    {
+        "type": "renfo_exercices", "label": "Renfo : exercices et progression", "icone": "dumbbell",
+        "categorie": "Entraînement",
+        "description": "Chaque exercice de la période : séances, séries, répétitions, charge, et son évolution "
+                       "d'une séance à l'autre.",
+        "taille": {"w": 12, "h": 3},
+        "params": [{"key": "periode", "label": "Période (jours)", "kind": "periode", "default": "herite"}],
+    },
+    {
+        "type": "seance_renfo", "label": "Séance : exercices de renfo", "icone": "dumbbell", "categorie": "Séances",
+        "description": "Les exercices de la séance choisie (séries, répétitions, charge) et les muscles travaillés. "
+                       "La tuile s'efface pour les séances sans renfo.",
+        "taille": {"w": 12, "h": 3}, "params": [],
+    },
+    {
         "type": "seance_resume", "label": "Séance : résumé", "icone": "info", "categorie": "Séances",
         "description": "Chiffres clés de la séance choisie en haut de la vue.",
         "taille": {"w": 12, "h": 1}, "params": [],
@@ -239,9 +265,10 @@ TILE_TYPES: list[dict[str, Any]] = [
 TILE_INDEX = {t["type"]: t for t in TILE_TYPES}
 WIDTHS = (3, 4, 6, 8, 12)
 ICONS = ["home", "sun", "activity", "map", "moon", "flag", "heart", "chart", "calendar", "star", "bolt", "layers",
-         "run", "trophy", "clock", "user", "club", "scale"]
+         "run", "trophy", "clock", "user", "club", "scale", "dumbbell"]
 CLUB_VIEW = "club"
 WITHINGS_VIEW = "withings"
+RENFO_VIEW = "renfo"
 
 
 def _tile(kind: str, w: int | None = None, h: int | None = None, titre: str | None = None, **params: Any) -> dict:
@@ -316,6 +343,7 @@ def default_views() -> list[dict]:
             "id": "seance", "name": "Séance", "icon": "map",
             "spec": {"tuiles": [
                 _tile("seance_resume", 12, 1),
+                _tile("seance_renfo", 12, 3),
                 _tile("seance_carte", 6, 3),
                 _tile("seance_courbes", 6, 3),
                 _tile("seance_mesures", 12, 2),
@@ -410,8 +438,22 @@ def ensure_default_views(conn: sqlite3.Connection) -> None:
     if not conn.execute("SELECT COUNT(*) AS n FROM views").fetchone()["n"]:
         reset_default_views(conn)
         db.set_meta(conn, "vue_accueil", "1")
+        db.set_meta(conn, "vue_seance_renfo", "1")
         conn.commit()
         return
+    if db.get_meta(conn, "vue_seance_renfo") is None:
+        # 0.6 : les exercices de renfo dans la vue « Séance » déjà en place, une seule fois
+        row = conn.execute("SELECT spec FROM views WHERE id = 'seance'").fetchone()
+        if row:
+            spec = json.loads(row["spec"])
+            tiles = spec.get("tuiles", [])
+            if not any(t.get("type") == "seance_renfo" for t in tiles):
+                at = next((i + 1 for i, t in enumerate(tiles) if t.get("type") == "seance_resume"), 0)
+                tiles.insert(at, _tile("seance_renfo", 12, 3))
+                conn.execute("UPDATE views SET spec = ?, updated_at = ? WHERE id = 'seance'",
+                             (json.dumps(spec, ensure_ascii=False), db.now_iso()))
+        db.set_meta(conn, "vue_seance_renfo", "1")
+        conn.commit()
     if db.get_meta(conn, "vue_accueil") is None:
         # 0.5 : la page d'accueil arrive en tête des vues déjà en place, une seule fois
         if not conn.execute("SELECT 1 FROM views WHERE id = 'accueil'").fetchone():
@@ -423,6 +465,9 @@ def ensure_default_views(conn: sqlite3.Connection) -> None:
                  db.now_iso()),
             )
         db.set_meta(conn, "vue_accueil", "1")
+        conn.commit()
+    if db.get_meta(conn, "renfo_vue") is None and sync_renfo_view(conn):
+        # 0.6 : exercices retrouvés par la mise à niveau de la base, la vue « Renfo » sans attendre une synchro
         conn.commit()
 
 
@@ -557,6 +602,41 @@ def sync_withings_view(conn: sqlite3.Connection, enabled: bool, families: list[s
             (view["id"], view["name"], view["icon"], position, spec, db.now_iso()),
         )
     db.set_meta(conn, "withings_vue_auto", spec)
+
+
+def renfo_view() -> dict:
+    """La vue « Renfo » : muscles travaillés, exercices et leur progression, régularité, séances."""
+    return {"id": RENFO_VIEW, "name": "Renfo", "icon": "dumbbell", "spec": {"tuiles": [
+        _tile("renfo", 12, 4),
+        _tile("renfo_exercices", 12, 3),
+        _tile("serie", 6, 2, titre="Temps de renfo par semaine", metriques=["act.duration_s"], style="barres",
+              agregation="semaine", sport="renfo", periode="180"),
+        _tile("serie", 6, 2, titre="Séries et tonnage par semaine", metriques=["act.sets", "act.volume"],
+              style="barres", agregation="semaine", disposition="empiler", periode="180"),
+        _tile("activites", 12, 3, titre="Séances de renfo", sport="renfo", limite=20),
+    ]}}
+
+
+def sync_renfo_view(conn: sqlite3.Connection) -> bool:
+    """La vue « Renfo » arrive une fois, avec les premiers exercices de renfo (après « Entraînement »).
+    Si on la supprime, elle ne revient pas : « renfo_vue » le retient."""
+    from . import renfo  # import local : renfo ne dépend pas des vues
+
+    if db.get_meta(conn, "renfo_vue") or not renfo.has_any(conn):
+        return False
+    if not conn.execute("SELECT 1 FROM views WHERE id = ?", (RENFO_VIEW,)).fetchone():
+        view = renfo_view()
+        anchor = conn.execute("SELECT position FROM views WHERE id IN ('entrainement', 'accueil') "
+                              "ORDER BY id = 'accueil' LIMIT 1").fetchone()
+        position = (anchor["position"] + 1) if anchor else 0
+        conn.execute("UPDATE views SET position = position + 1 WHERE position >= ?", (position,))
+        conn.execute(
+            "INSERT INTO views(id, name, icon, position, spec, builtin, updated_at) VALUES (?, ?, ?, ?, ?, 0, ?)",
+            (view["id"], view["name"], view["icon"], position, json.dumps(view["spec"], ensure_ascii=False),
+             db.now_iso()),
+        )
+    db.set_meta(conn, "renfo_vue", "1")
+    return True
 
 
 def reorder_views(conn: sqlite3.Connection, ids: list[str]) -> None:
