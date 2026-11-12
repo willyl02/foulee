@@ -271,8 +271,10 @@ select:hover, input:hover, textarea:hover { border-color: var(--base); }
 .tile.drop-before { box-shadow: -4px 0 0 0 var(--focus); }
 .tile.drop-after { box-shadow: 4px 0 0 0 var(--focus); }
 .tile.is-dragging { opacity: 0.35; }
-.add-tile { grid-column: span 3; display: grid; place-items: center; border: 1px dashed var(--base); border-radius: 12px;
-  background: transparent; color: var(--ink-2); cursor: pointer; font-weight: 500; }
+.add-tile { grid-column: span 3; display: grid; place-content: center; justify-items: center; gap: 8px; min-height: 120px;
+  border: 1px dashed var(--base); border-radius: 12px; background: transparent; color: var(--ink-2); cursor: pointer;
+  font: inherit; font-weight: 500; }
+.add-tile svg { width: 26px; height: 26px; }
 .add-tile:hover { background: var(--surface); color: var(--ink); }
 .view-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: -6px 0 18px; padding: 10px 12px;
   border-radius: 12px; background: var(--surface); box-shadow: 0 0 0 1px var(--hair); }
@@ -319,6 +321,7 @@ dialog::backdrop { background: rgba(10, 16, 13, 0.45); }
 .settings h2 { margin: 0 0 4px; font: 600 21px/1.2 var(--font-figures); }
 .settings .intro { margin: 0 0 14px; color: var(--ink-2); font-size: 14.5px; max-width: 68ch; }
 .form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0 18px; }
+.rhythm-grid { grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); }  /* « Toutes les 3 heures (conseillé) » en entier */
 .computed { font-size: 14px; color: var(--ink-2); margin: -4px 0 14px; }
 .computed b { color: var(--ink); }
 .settings-foot { position: sticky; bottom: 0; display: flex; gap: 10px; align-items: center; padding: 14px 0; background: var(--page); border-top: 1px solid var(--hair); }
@@ -337,6 +340,10 @@ code { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-siz
 .computed.warn, .computed.ok, .ok { display: flex; gap: 8px; align-items: flex-start; }
 .computed.warn svg, .computed.ok svg, .ok svg { width: 18px; height: 18px; flex: none; margin-top: 1px; }
 .computed.warn svg { color: var(--gr-red); }
+.computed.info { display: flex; gap: 8px; align-items: flex-start; max-width: 78ch; }
+.computed.info svg { width: 18px; height: 18px; flex: none; margin-top: 1px; color: var(--muted); }
+.computed[hidden] { display: none; }
+.computed[data-rhythm-note] { max-width: 78ch; }
 .computed.ok svg, .ok svg { color: var(--good); }
 .hint.error { color: var(--bad); }
 .badge { display: inline-block; padding: 0 8px; border-radius: 999px; font-size: 12.5px; color: var(--ink-2);
@@ -413,6 +420,7 @@ details.token .key-row { margin-top: 6px; }
   .grid > .tile { grid-column: span 6 !important; grid-row: auto !important;
                   height: calc(var(--h, 2) * var(--row) + (var(--h, 2) - 1) * var(--gap)); }
   .grid > .tile--kpi { grid-column: span 3 !important; height: auto; min-height: 96px; }
+  .grid > .add-tile { grid-column: span 6; min-height: 96px; }
   .grid > .tile--activites, .grid > .tile--seance_tours, .grid > .tile--postes { height: calc(3 * var(--row) + 2 * var(--gap)); }
   .grid > .tile--derniere_seance { height: auto; }
   .grid > .tile--calendrier { height: 250px; }

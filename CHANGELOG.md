@@ -4,6 +4,13 @@ Les versions « bêta » (par exemple 0.4.0b1) sont des avant-premières : elles
 sur le canal bêta (Réglages → Mises à jour → « Recevoir les versions bêta »), puis sortent en
 version stable une fois éprouvées.
 
+## 0.6.0b7 — 12 novembre 2026 (bêta)
+
+- **Rythme de la synchro automatique**, dans Réglages → Synchro et calculs : un délai pour Garmin et un pour Withings, de 30 minutes à 12 heures (3 heures par défaut). 3 heures est un bon compromis : séances, nuits et pesées arrivent dans la journée sans solliciter Garmin et Withings pour rien. En dessous, Foulée prévient qu'il redemanderait sans cesse des données qui n'ont pas bougé ; pour une donnée tout de suite, « Synchroniser » reste là. Claude Desktop peut aussi changer ce réglage.
+- Chaque source suit son propre délai, compté depuis sa dernière synchro réussie : si Withings échoue alors que Garmin répond (ou l'inverse), la source en panne est réessayée au bout d'une demi-heure au lieu d'attendre le tour suivant.
+- Serveur : la minuterie regarde toutes les 15 minutes ce qui est dû, et ne synchronise que les sources dont le délai est écoulé (la mise à jour du serveur l'installe d'elle-même).
+- Mode édition d'une vue : le « + » d'« Ajouter une tuile » occupait tout le bouton. Il reprend sa taille, et le bouton prend toute la largeur sur téléphone.
+
 ## 0.6.0b6 — 12 novembre 2026 (bêta)
 
 - Withings, activité : sans podomètre Withings, son appli envoie des journées à 0 pas. Foulée ne montre plus de carte « 0 pas » ni de courbe de pas à zéro : l'activité Withings (carte et tuiles de la vue) n'apparaît que si des pas ont été comptés ces 90 derniers jours. La vue Withings suit à la synchro suivante, tant que tu ne l'as pas modifiée toi-même.

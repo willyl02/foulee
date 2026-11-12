@@ -8,7 +8,7 @@
 #   1. les paquets nécessaires (curl, git) ;
 #   2. l'utilisateur système « foulee » et ses données dans /var/lib/foulee ;
 #   3. Python et les bibliothèques, avec uv (dans /opt/uv et /opt/foulee/.venv) ;
-#   4. les services : l'interface (foulee-web), la synchro toutes les 3 heures (foulee-sync.timer)
+#   4. les services : l'interface (foulee-web), la synchro automatique (foulee-sync.timer)
 #      et les mises à jour demandées depuis les Réglages (foulee-maj), via configurer-serveur.sh ;
 #   5. Tailscale, qui relaie l'interface en HTTPS vers tes seuls appareils ;
 #   6. ta clé Garmin et le premier import.
@@ -64,7 +64,7 @@ install -d -m 0755 /opt/uv
 say "Foulée $("$ROOT/.venv/bin/foulee" --version | awk '{print $2}') est installé."
 
 # ---------------------------------------------------------------------------
-step 4/6 "Services : interface, synchro toutes les 3 heures, mises à jour"
+step 4/6 "Services : interface, synchro automatique, mises à jour"
 bash "$ROOT/scripts/configurer-serveur.sh"
 systemctl restart foulee-web.service
 say "Interface, synchro automatique et mises à jour depuis les Réglages en route."

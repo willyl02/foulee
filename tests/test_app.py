@@ -87,9 +87,11 @@ class FakeJob:
     def __init__(self, outcome="ok"):
         self.outcome = outcome
         self.started = 0
+        self.sources = []
 
-    def start(self):
+    def start(self, sources):
         self.started += 1
+        self.sources.append(sources)
         if self.outcome == "ok":
             with db.session() as conn:
                 db.set_meta(conn, "last_sync", db.now_iso())
@@ -111,6 +113,7 @@ def test_autosync_runs_when_due_only():
     with db.session() as conn:
         db.set_meta(conn, "last_sync", "2026-01-01 08:00:00")  # premier import fait il y a longtemps
     assert auto.tick()["resultat"]["statut"] == "ok" and job.started == 1
+    assert job.sources == [["garmin"]]  # Withings n'est pas connecté
     assert auto.tick() is None  # la dernière synchro est toute fraîche
     now[0] += desktop.SYNC_EVERY
     assert auto.tick() is not None and job.started == 2
@@ -127,7 +130,7 @@ def test_autosync_runs_when_due_only():
     assert failing.started == 2 and notes == []
 
     # Clé refusée par Garmin : une notification, puis plus d'essai jusqu'à la nouvelle clé
-    def refuse():
+    def refuse(sources):
         with db.session() as conn:
             db.set_meta(conn, "cle_refusee", json.dumps({"depuis": db.now_iso(), "statut": 401}))
         return True
@@ -147,7 +150,7 @@ def test_autosync_warns_once_when_withings_withdraws_access():
     with db.session() as conn:
         db.set_meta(conn, "last_sync", "2026-01-01 08:00:00")
 
-    def withdrawn():  # Garmin répond, Withings refuse le renouvellement de l'accès
+    def withdrawn(sources):  # Garmin répond, Withings refuse le renouvellement de l'accès
         with db.session() as conn:
             db.set_meta(conn, "last_sync", db.now_iso())
             db.set_meta(conn, "withings_refus", json.dumps({"depuis": db.now_iso(), "statut": 401}))

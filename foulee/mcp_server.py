@@ -603,6 +603,8 @@ def modifier_reglages(changements: dict[str, Any]) -> dict[str, Any]:
     pct_reserve, pct_seuil, bornes) ; {"zones_allure": {"methode": "pct_vma", "pct": [70, 80, 88, 95]}}.
     Club FFA : {"club": {"actif": true, "numero": "012345", "nom": "…"}} ajoute la vue « Mon club » (numéro de
     club de la licence, 6 chiffres) ; {"club": {"actif": false}} la retire en gardant les informations.
+    Synchro automatique : {"synchro_auto": {"garmin": 180, "withings": 180}}, un délai par source en minutes, de 30 à
+    720 ; 3 heures est le bon compromis (plus rapproché, Foulée sollicite Garmin et Withings pour rien).
     Les calculs dépendants (zones, TRIMP, charge) sont refaits aussitôt.
     """
     with db.session() as conn:

@@ -374,7 +374,7 @@ async function appPanel(box, { toast }) {
   }
   box.innerHTML = `
     ${info.demarrage_windows === null ? "" : `<label class="check"><input type="checkbox" data-startup ${info.demarrage_windows ? "checked" : ""}>Lancer Foulée à l'ouverture de session Windows</label>`}
-    <p class="computed">Tant que Foulée tourne, la synchro se fait toute seule toutes les ${info.synchro_auto_heures} heures. Pour l'arrêter : clic droit sur son icône près de l'horloge, puis « Quitter Foulée ».</p>`;
+    <p class="computed">Tant que Foulée tourne, la synchro se fait toute seule, au rythme choisi dans « Synchro et calculs » (toutes les 3 heures par défaut). Pour l'arrêter : clic droit sur son icône près de l'horloge, puis « Quitter Foulée ».</p>`;
   box.querySelector("[data-startup]")?.addEventListener("change", async (event) => {
     const wanted = event.target.checked;
     try {

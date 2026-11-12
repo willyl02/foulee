@@ -204,7 +204,7 @@ def test_auto_sync_checks_each_profile():
             db.set_meta(conn, "last_sync", "2026-01-01 08:00:00")
     started = []
 
-    def start():
+    def start(sources):
         started.append(config.current_profile()["id"])
         with db.session() as conn:
             db.set_meta(conn, "last_sync", db.now_iso())

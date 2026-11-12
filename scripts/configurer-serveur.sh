@@ -5,7 +5,8 @@
 #
 # Services mis en place :
 #   foulee-web          l'interface (127.0.0.1 pour Tailscale, et le réseau local si activé)
-#   foulee-sync.timer   la synchro avec Garmin toutes les 3 heures
+#   foulee-sync.timer   la synchro automatique : vérifiée toutes les 15 minutes, chaque source au rythme
+#                       choisi dans les Réglages de chaque profil (3 heures par défaut)
 #   foulee-maj.path     attend les demandes de mise à jour déposées par l'interface,
 #   foulee-maj.service  et les traite en root (vérifier, ou installer depuis GitHub)
 
@@ -74,7 +75,7 @@ EOF
 
 cat > /etc/systemd/system/foulee-sync.service <<EOF
 [Unit]
-Description=Foulée : synchronisation avec Garmin
+Description=Foulée : synchronisation automatique (Garmin, Withings)
 After=network-online.target
 Wants=network-online.target
 
@@ -85,18 +86,18 @@ Group=foulee
 WorkingDirectory=$ROOT
 EnvironmentFile=$ENV_FILE
 Environment=HOME=$DATA
-ExecStart=$ROOT/.venv/bin/foulee sync --quiet
+ExecStart=$ROOT/.venv/bin/foulee sync --quiet --auto
 NoNewPrivileges=yes
 EOF
 
 cat > /etc/systemd/system/foulee-sync.timer <<EOF
 [Unit]
-Description=Foulée : synchro toutes les 3 heures
+Description=Foulée : synchro automatique (vérifiée toutes les 15 minutes)
 
 [Timer]
-OnCalendar=*-*-* 02/3:17:00
+OnCalendar=*:2/15
 Persistent=true
-RandomizedDelaySec=5min
+RandomizedDelaySec=2min
 
 [Install]
 WantedBy=timers.target
@@ -131,3 +132,5 @@ EOF
 
 systemctl daemon-reload
 systemctl enable --now foulee-web.service foulee-sync.timer foulee-maj.path >/dev/null 2>&1
+# Minuterie déjà active (mise à jour) : elle repart avec son nouveau rythme
+systemctl restart foulee-sync.timer >/dev/null 2>&1 || true

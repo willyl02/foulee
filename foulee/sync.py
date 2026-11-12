@@ -15,7 +15,7 @@ import logging
 import os
 import sys
 import time
-from datetime import date
+from datetime import date, datetime
 from typing import Callable
 
 from . import config, db, vault
@@ -32,6 +32,13 @@ SOURCES = {
 }
 LABELS = {"garmin": "Garmin", "withings": "Withings"}
 SETTINGS_SECTIONS = {"garmin": "cle", "withings": "withings"}  # où la réparer dans les Réglages
+
+# Synchro automatique (Réglages → Synchro et calculs) : un délai par source, en minutes. 3 heures est un bon
+# compromis ; en dessous de 30 minutes on solliciterait Garmin et Withings pour rien, au-delà de 12 heures
+# les données arriveraient trop tard. Pour une donnée tout de suite : « Synchroniser ».
+DEFAULT_INTERVAL = 180
+MIN_INTERVAL, MAX_INTERVAL = 30, 720
+RETRY_AFTER_FAILURE = 30 * 60  # après un échec, pas plus d'un essai par demi-heure
 
 
 def active_sources() -> list[str]:
@@ -194,6 +201,60 @@ def key_refused(conn) -> dict | None:
         return json.loads(raw) if raw else None
     except ValueError:
         return None
+
+
+def intervals(settings: dict) -> dict[str, int]:
+    """Le délai de synchro automatique de chaque source, en minutes (borné, 3 heures par défaut)."""
+    chosen = settings.get("synchro_auto") if isinstance(settings.get("synchro_auto"), dict) else {}
+    out = {}
+    for name in SOURCES:
+        try:
+            minutes = int(chosen.get(name) or DEFAULT_INTERVAL)
+        except (TypeError, ValueError):
+            minutes = DEFAULT_INTERVAL
+        out[name] = min(MAX_INTERVAL, max(MIN_INTERVAL, minutes))
+    return out
+
+
+def _timestamp(text: str | None) -> float | None:
+    try:
+        return datetime.fromisoformat(text).timestamp() if text else None
+    except (TypeError, ValueError):
+        return None
+
+
+def due_sources(conn, now: float | None = None) -> list[str]:
+    """Les sources du profil courant dont la synchro automatique est due, d'après le délai choisi pour chacune
+    et l'heure de sa dernière synchro réussie (journal des synchros).
+
+    Rien avant le premier import (il se décide sur la page d'accueil), rien pour une clé ou un accès refusés
+    (il faut passer par les Réglages), et pas plus d'un essai par demi-heure après un échec."""
+    from .withings import vue as withings_vue  # (import tardif : withings.vue importe les vues)
+
+    if config.is_demo() or not vault.has_key():
+        return []
+    last_sync = db.get_meta(conn, "last_sync")
+    if last_sync is None:
+        return []
+    now = time.time() if now is None else now
+    every = intervals(db.get_settings(conn))
+    history = _history(conn)
+    due = []
+    for name in active_sources():
+        if (key_refused(conn) if name == "garmin" else withings_vue.refused(conn) if name == "withings" else None):
+            continue
+        runs = [(when, res[name]) for when, res in history if isinstance(res.get(name), dict)]
+        ok = next((when for when, res in runs if not res.get("erreur")), None)
+        if ok is None and name == "garmin":
+            ok = last_sync  # journal d'avant la 0.6 : la dernière synchro réussie, toutes sources confondues
+        ok_at = _timestamp(ok)
+        if ok_at is not None and now - ok_at < every[name] * 60 - 120:
+            continue
+        failed_at = _timestamp(runs[0][0]) if runs and runs[0][1].get("erreur") else None
+        if failed_at is not None and now - failed_at < RETRY_AFTER_FAILURE:
+            continue
+        due.append(name)
+    return due
 
 
 def _history(conn, limit: int = 120) -> list[tuple[str, dict]]:

@@ -221,10 +221,15 @@ def _profiles_for(name: str | None) -> list[dict]:
 
 
 def cmd_sync(args: argparse.Namespace) -> int:
-    """Synchronise chaque profil qui a une clé (ou celui demandé avec --profil)."""
+    """Synchronise chaque profil qui a une clé (ou celui demandé avec --profil).
+
+    --auto (minuterie du serveur, toutes les 15 minutes) : seulement les sources dont la synchro est due,
+    au rythme choisi dans les Réglages de chaque profil (3 heures par défaut)."""
     from . import utilisateurs, vault
 
     targets = _profiles_for(getattr(args, "profil", None))
+    if getattr(args, "auto", False):
+        return _sync_due(args, targets)
     if len(targets) == 1:
         with config.using_profile(targets[0]):
             return _sync_profile(args)
@@ -242,7 +247,26 @@ def cmd_sync(args: argparse.Namespace) -> int:
     return worst
 
 
-def _sync_profile(args: argparse.Namespace) -> int:
+def _sync_due(args: argparse.Namespace, targets: list[dict]) -> int:
+    """Synchro automatique : chaque profil, seulement les sources dont le délai est écoulé."""
+    from . import db, sync, utilisateurs
+
+    worst = 0
+    for entry in targets:
+        with config.using_profile(entry):
+            if sync.is_running():
+                continue  # une synchro est déjà en cours (« Synchroniser », premier import) : rien à ajouter
+            with db.session(readonly=True) as conn:
+                due = sync.due_sources(conn)
+            if not due:
+                continue
+            if not args.quiet:
+                _say(f"\n— {utilisateurs.card(entry)['prenom']} : {', '.join(sync.LABELS[s] for s in due)}")
+            worst = max(worst, _sync_profile(args, sources=due))
+    return worst
+
+
+def _sync_profile(args: argparse.Namespace, sources: list[str] | None = None) -> int:
     from . import sync
 
     since = date.fromisoformat(args.depuis) if getattr(args, "depuis", None) else None
@@ -251,7 +275,7 @@ def _sync_profile(args: argparse.Namespace) -> int:
         _say("Synchro en cours (tu peux laisser tourner)…")
     try:
         result = sync.run(since=since, fit_days=args.fit_jours, with_fit=not args.sans_fit,
-                          progress=_progress_printer(args.quiet))
+                          progress=_progress_printer(args.quiet), sources=sources)
     except sync.SyncBusy as exc:
         _say(str(exc))
         return 3
@@ -264,17 +288,30 @@ def _sync_profile(args: argparse.Namespace) -> int:
     if result.get("statut") == "demo":
         _say(result["message"])
         return 0
-    garmin = result["sources"].get("garmin", {})
-    if "erreur" in garmin:
+    garmin = result["sources"].get("garmin")
+    withings = result["sources"].get("withings")
+    if garmin is not None and "erreur" in garmin:
         _say(f"✗ {garmin['erreur']}")
         return 2
-    _say(f"\n✓ Synchro {result['statut']} en {round(time.monotonic() - started)} s ({garmin.get('appels', 0)} appels à Garmin)")
-    for label, count in garmin.get("flux", {}).items():
-        _say(f"   {label:<20} {count} jour(s)")
-    _say(f"   séances              {garmin.get('seances_nouvelles', 0)} nouvelle(s), {garmin.get('seances_maj', 0)} mise(s) à jour")
-    _say(f"   fichiers FIT         {garmin.get('fit', 0)} téléchargé(s)")
-    for error in garmin.get("erreurs", []):
-        _say(f"   ! {error}")
+    if garmin is None and withings is not None and "erreur" in withings:  # synchro de Withings seul
+        _say(f"✗ Withings : {withings['erreur']}")
+        return 2
+    calls = f" ({garmin.get('appels', 0)} appels à Garmin)" if garmin is not None else ""
+    _say(f"\n✓ Synchro {result['statut']} en {round(time.monotonic() - started)} s{calls}")
+    if garmin is not None:
+        for label, count in garmin.get("flux", {}).items():
+            _say(f"   {label:<20} {count} jour(s)")
+        _say(f"   séances              {garmin.get('seances_nouvelles', 0)} nouvelle(s), {garmin.get('seances_maj', 0)} mise(s) à jour")
+        _say(f"   fichiers FIT         {garmin.get('fit', 0)} téléchargé(s)")
+        for error in garmin.get("erreurs", []):
+            _say(f"   ! {error}")
+    if withings is not None:
+        if "erreur" in withings:
+            _say(f"   ! Withings : {withings['erreur']}")
+        else:
+            _say(f"   Withings             {withings.get('mesures', 0)} mesure(s), {withings.get('nuits', 0)} nuit(s)")
+            for error in withings.get("erreurs", []):
+                _say(f"   ! Withings : {error}")
     return 0
 
 
@@ -606,6 +643,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--fit-jours", type=int, help="télécharger les FIT des N derniers jours")
     p.add_argument("--quiet", action="store_true", help="aucun affichage (tâche planifiée)")
     p.add_argument("--profil", help="un seul profil (prénom ou identifiant) ; par défaut : tous ceux qui ont une clé")
+    p.add_argument("--auto", action="store_true",
+                   help="seulement les sources dont la synchro est due (rythme choisi dans les Réglages)")
     p.set_defaults(func=cmd_sync)
 
     p = sub.add_parser("web", help="ouvrir l'interface dans le navigateur")

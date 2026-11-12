@@ -1158,7 +1158,7 @@ def create_app() -> FastAPI:
         return {
             "application": running,
             "demarrage_windows": desktop.startup_enabled() if running and desktop.startup_supported() else None,
-            "synchro_auto_heures": desktop.SYNC_EVERY // 3600 if running else None,
+            "synchro_auto_heures": desktop.SYNC_EVERY // 3600 if running else None,  # rythme par défaut
         }
 
     @app.get("/api/app")

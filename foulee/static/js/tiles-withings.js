@@ -117,7 +117,7 @@ export const withings = {
           <a class="btn btn-ghost icon-btn club-edit" href="#/reglages?section=withings" title="Réglages Withings" aria-label="Réglages Withings">${icon("settings")}</a>
         </header>
         ${cards.length ? `<div class="wi-cards">${cards.join("")}</div>` : `<p class="wi-empty">${icon("info")}<span>${st.connecte
-          ? "Pas encore de mesure Withings. Pèse-toi ou prends ta tension : la mesure arrive avec la prochaine synchro, toutes les 3 heures."
+          ? "Pas encore de mesure Withings. Pèse-toi ou prends ta tension : la mesure arrive avec la prochaine synchro (toutes les 3 heures par défaut)."
           : "Relie ton compte Withings dans <a href=\"#/reglages?section=withings\">Réglages → Withings</a> : tes pesées, ta tension et tes nuits s'afficheront ici."}</span></p>`}
       </div>`;
   },

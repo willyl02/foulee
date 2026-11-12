@@ -65,7 +65,7 @@ Name: "fr"; MessagesFile: "compiler:Languages\French.isl"
 
 [CustomMessages]
 fr.TaskDesktop=Créer une icône sur le Bureau
-fr.TaskStartup=Lancer Foulée à l'ouverture de session (synchro automatique toutes les 3 heures)
+fr.TaskStartup=Lancer Foulée à l'ouverture de session (synchro automatique)
 fr.RunNow=Ouvrir Foulée maintenant
 fr.EraseQuestion=Effacer aussi tes données Foulée de ce PC ?%n%nBase (séances, mesures, vues), fichiers FIT, réglages et clé API Garmin.%n%nRéponds « Non » pour les garder, par exemple pour réinstaller Foulée plus tard.
 fr.KeptData=Foulée est désinstallé. Tes données sont conservées : tu les retrouveras en réinstallant Foulée.

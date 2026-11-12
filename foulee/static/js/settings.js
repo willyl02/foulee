@@ -106,6 +106,7 @@ export function renderSettings(page, boot, { onSaved, onProfile, refreshBoot, to
           <label class="field"><span>Charge d'une séance</span><select name="charge_source"><option value="garmin" ${s.charge_source !== "trimp" ? "selected" : ""}>Charge Garmin (TRIMP si absente)</option><option value="trimp" ${s.charge_source === "trimp" ? "selected" : ""}>TRIMP calculé par Foulée</option></select></label>
           <label class="field"><span>Fond de carte</span><select name="carte_fond">${[["osm", "OpenStreetMap"], ["ign", "Plan IGN"], ["aucun", "Aucun (tracé seul, rien ne sort du PC)"]].map(([v, l]) => `<option value="${v}" ${s.carte_fond === v ? "selected" : ""}>${l}</option>`).join("")}</select></label>
         </div>
+        ${syncRhythm(s, boot)}
       </section>
 
       <section data-section="vues">
@@ -179,6 +180,7 @@ export function renderSettings(page, boot, { onSaved, onProfile, refreshBoot, to
   refresh();
 
   form.querySelector("[data-reset-views]").addEventListener("click", resetViews);
+  wireSyncRhythm(form);
   // Withings connecté ou déconnecté : la colonne (vue « Withings ») et le bandeau suivent, la page reste en place
   wireSystem(page.querySelector("#settings-system"), boot, { toast, startSync, onWithings: () => refreshBoot() });
   buildJumps(page);
@@ -208,6 +210,7 @@ export function renderSettings(page, boot, { onSaved, onProfile, refreshBoot, to
       zones_allure: pace,
       fractions_seuil_pct_vma: num("fractions") || 85,
       fit_auto_jours: Number(val("fit_auto_jours")),
+      synchro_auto: syncRhythmValue(form, s),
       charge_source: val("charge_source"),
       carte_fond: val("carte_fond"),
     };
@@ -223,6 +226,74 @@ export function renderSettings(page, boot, { onSaved, onProfile, refreshBoot, to
       status.classList.add("error");
     }
   });
+}
+
+// ---------------------------------------------------------------- rythme de la synchro automatique
+// De 30 minutes à 12 heures (bornes vérifiées par le serveur, voir sync.py), 3 heures conseillées.
+const RHYTHMS = [30, 60, 120, 180, 240, 360, 480, 720];
+const DEFAULT_RHYTHM = 180;
+
+/** « 30 minutes », « 1 heure », « 8 heures », « 1 h 30 ». */
+function span(minutes) {
+  if (minutes < 60) return `${minutes} minutes`;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return m ? `${h} h ${String(m).padStart(2, "0")}` : `${h} heure${h > 1 ? "s" : ""}`;
+}
+const every = (minutes) => (minutes === 60 ? "toutes les heures" : `toutes les ${span(minutes)}`);
+const cap = (text) => text.charAt(0).toUpperCase() + text.slice(1);
+
+function rhythmSelect(name, label, minutes) {
+  const chosen = Math.min(720, Math.max(30, Math.round(Number(minutes) || DEFAULT_RHYTHM)));
+  // un délai réglé ailleurs (par Claude : 90 minutes…) reste proposé, pour ne pas être remplacé à l'enregistrement
+  const values = [...new Set([...RHYTHMS, chosen])].sort((a, b) => a - b);
+  return `<label class="field"><span>${label}</span><select name="${name}" data-rhythm>${values.map((v) =>
+    `<option value="${v}" ${v === chosen ? "selected" : ""}>${cap(every(v))}${v === DEFAULT_RHYTHM ? " (conseillé)" : ""}</option>`).join("")}</select></label>`;
+}
+
+/** Un délai par source branchée (Garmin toujours, Withings s'il est connecté), avec le conseil des 3 heures. */
+function syncRhythm(s, boot) {
+  const chosen = s.synchro_auto || {};
+  const where = boot.machine === "serveur" ? "sur le serveur, jour et nuit" : "sur ce PC, tant que Foulée est ouvert (son icône près de l'horloge)";
+  return `<h3>Synchro automatique</h3>
+    <p class="intro">Foulée récupère tout seul tes nouvelles données, au rythme choisi pour chaque source : ${where}.</p>
+    <div class="form-grid rhythm-grid">
+      ${rhythmSelect("synchro_garmin", "Garmin", chosen.garmin)}
+      ${boot.withings?.connecte ? rhythmSelect("synchro_withings", "Withings", chosen.withings) : ""}
+    </div>
+    <p class="computed info">${icon("info")}<span><b>3 heures, c'est un bon compromis</b> : tes séances, tes nuits et tes pesées arrivent dans la journée sans solliciter Garmin et Withings pour rien. Plus rapproché, Foulée redemande sans cesse des données qui n'ont pas bougé. Besoin d'une donnée tout de suite (la séance de ce matin) ? «&nbsp;Synchroniser&nbsp;», dans la colonne de gauche, la récupère à l'instant.</span></p>
+    <p class="computed" data-rhythm-note hidden></p>`;
+}
+
+function syncRhythmValue(form, s) {
+  const out = { ...(s.synchro_auto || {}) };
+  for (const name of ["garmin", "withings"]) {
+    const value = form.elements[`synchro_${name}`]?.value;
+    if (value) out[name] = Number(value);
+  }
+  return out;
+}
+
+/** Sous le choix : ce que coûte un rythme serré (des demandes pour rien) ou lâche (des données en retard). */
+function wireSyncRhythm(form) {
+  const note = form.querySelector("[data-rhythm-note]");
+  if (!note) return;
+  const update = () => {
+    const values = [...form.querySelectorAll("[data-rhythm]")].map((el) => Number(el.value));
+    const fast = Math.min(...values);
+    const slow = Math.max(...values);
+    let text = "";
+    if (fast < DEFAULT_RHYTHM) {
+      text = `${icon("warning")}<span>${cap(every(fast))} : environ ${Math.round(1440 / fast)} synchros par jour, la plupart sans rien de nouveau, et les services peuvent limiter les demandes trop fréquentes. Pour une donnée précise, «&nbsp;Synchroniser&nbsp;» au bon moment fait mieux.</span>`;
+    } else if (slow > 360) {
+      text = `${icon("info")}<span>${cap(every(slow))} : une nouvelle séance ou une pesée peut mettre jusqu'à ${span(slow)} à arriver dans Foulée.</span>`;
+    }
+    note.innerHTML = text;
+    note.className = `computed ${fast < DEFAULT_RHYTHM ? "warn" : "info"}`;
+    note.hidden = !text;
+  };
+  form.querySelectorAll("[data-rhythm]").forEach((el) => el.addEventListener("change", update));
+  update();
 }
 
 /**

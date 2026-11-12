@@ -73,17 +73,18 @@ if (Ask "Créer le raccourci « Foulée » sur le Bureau ?") {
 }
 
 Write-Host "`n[6/6] Synchro automatique" -ForegroundColor Cyan
-if (Ask "Synchroniser automatiquement toutes les 3 heures (tâche planifiée Windows, invisible) ?") {
+if (Ask "Synchroniser automatiquement (tâche planifiée Windows, invisible ; toutes les 3 heures par défaut) ?") {
     try {
-        $action = New-ScheduledTaskAction -Execute $PythonW -Argument "-m foulee sync --quiet" -WorkingDirectory $Root
-        # Tous les jours à 5 h 17, puis toutes les 3 heures pendant 23 heures (motif fiable sous Windows PowerShell 5.1)
+        # --auto : seulement les sources dont la synchro est due, au rythme choisi dans les Réglages (3 heures par défaut)
+        $action = New-ScheduledTaskAction -Execute $PythonW -Argument "-m foulee sync --quiet --auto" -WorkingDirectory $Root
+        # Tous les jours à 5 h 17, puis toutes les 15 minutes pendant 23 h 45 (motif fiable sous Windows PowerShell 5.1)
         $trigger = New-ScheduledTaskTrigger -Daily -At "05:17"
-        $trigger.Repetition = (New-ScheduledTaskTrigger -Once -At "05:17" -RepetitionInterval (New-TimeSpan -Hours 3) `
-            -RepetitionDuration (New-TimeSpan -Hours 23)).Repetition
+        $trigger.Repetition = (New-ScheduledTaskTrigger -Once -At "05:17" -RepetitionInterval (New-TimeSpan -Minutes 15) `
+            -RepetitionDuration (New-TimeSpan -Hours 23 -Minutes 45)).Repetition
         $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
             -ExecutionTimeLimit (New-TimeSpan -Hours 2) -MultipleInstances IgnoreNew
         Register-ScheduledTask -TaskName "Foulee - synchro" -Action $action -Trigger $trigger -Settings $settings `
-            -Description "Synchronise Foulée avec Garmin toutes les 3 heures" -Force | Out-Null
+            -Description "Synchronise Foulée (Garmin, Withings) au rythme choisi dans ses Réglages" -Force | Out-Null
         Write-Host "Tâche « Foulee - synchro » créée (visible dans le Planificateur de tâches)."
     } catch {
         Write-Warning "Création de la tâche impossible : $($_.Exception.Message)"

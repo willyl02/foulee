@@ -51,7 +51,7 @@ export async function withingsPanel(box, boot, { toast, onChange, startSync }) {
     if (refused) {
       lines.push(`<p class="computed warn">${icon("warning")}<span><b>Withings n'accepte plus l'accès de Foulée</b> depuis le ${F.escape(F.dateTime(refused.depuis))} : la synchro de tes mesures Withings est en pause. Tu as peut-être retiré l'accès dans ton compte Withings, ou la connexion a expiré. Reconnecte ton compte (étape 3) : tes mesures déjà importées restent là.</span></p>`);
     } else if (note?.statut !== "connecte") {  // sinon, la note du retour dit déjà « connecté »
-      lines.push(`<p class="computed ok">${icon("check")}<span><b>Compte Withings connecté${since}.</b> Tes mesures arrivent avec la synchro, toutes les 3 heures.</span></p>`);
+      lines.push(`<p class="computed ok">${icon("check")}<span><b>Compte Withings connecté${since}.</b> Tes mesures arrivent avec la synchro automatique (toutes les 3 heures par défaut).</span></p>`);
     }
     lines.push(`<dl class="about wi-about">
         <dt>Dernière synchro Withings</dt><dd>${running ? `<span class="wi-running">${icon("sync")}En cours…</span>` : info.derniere_synchro ? F.escape(F.relative(info.derniere_synchro)) : "pas encore"}</dd>
@@ -147,7 +147,7 @@ export async function withingsPanel(box, boot, { toast, onChange, startSync }) {
         <span class="wi-step-num" aria-hidden="true">4</span>
         <div class="wi-step-body">
           <h3>C'est prêt</h3>
-          <p>Le premier import récupère ton historique${boot.reglages?.historique_depuis ? ` depuis le ${F.escape(F.dateLong(boot.reglages.historique_depuis, { year: true, weekday: false }))}` : ""}, et la vue <b>Withings</b> apparaît dans la colonne de gauche, juste après l'Accueil. Ensuite, tes pesées, ta tension et tes nuits arrivent avec la synchro, toutes les 3 heures, comme tes données Garmin. Tu retrouves aussi les mesures Withings dans toutes les tuiles (catégorie « Withings ») et Claude Desktop les voit.</p>
+          <p>Le premier import récupère ton historique${boot.reglages?.historique_depuis ? ` depuis le ${F.escape(F.dateLong(boot.reglages.historique_depuis, { year: true, weekday: false }))}` : ""}, et la vue <b>Withings</b> apparaît dans la colonne de gauche, juste après l'Accueil. Ensuite, tes pesées, ta tension et tes nuits arrivent avec la synchro automatique (toutes les 3 heures par défaut), comme tes données Garmin. Tu retrouves aussi les mesures Withings dans toutes les tuiles (catégorie « Withings ») et Claude Desktop les voit.</p>
         </div>
       </li>
     </ol>
@@ -167,7 +167,7 @@ export async function withingsPanel(box, boot, { toast, onChange, startSync }) {
         <dt>Withings dit que mon compte ne peut pas partager ses données</dt>
         <dd>Compte créé après le 12 octobre 2026 sans abonnement Withings+ : Withings le demande pour partager tes données avec une appli comme Foulée.</dd>
         <dt>Connecté, mais aucune mesure</dt>
-        <dd>Vérifie que tes mesures apparaissent dans l'appli Withings de ton téléphone : Foulée lit ce que Withings a reçu. Une nouvelle pesée arrive avec la synchro suivante, toutes les 3 heures, ou tout de suite avec « Synchroniser maintenant ».</dd>
+        <dd>Vérifie que tes mesures apparaissent dans l'appli Withings de ton téléphone : Foulée lit ce que Withings a reçu. Une nouvelle pesée arrive avec la synchro suivante (toutes les 3 heures par défaut), ou tout de suite avec « Synchroniser maintenant ».</dd>
       </dl>
     </details>`;
 

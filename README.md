@@ -61,9 +61,9 @@ démo complète ; le bandeau « Quitter la démo » te ramène à tes vraies don
 Ensuite, Foulée tourne en arrière-plan avec son **icône près de l'horloge** (dans la
 flèche « ^ » si Windows la range) : un clic ouvre l'interface, un clic droit propose
 **Synchroniser maintenant**, **Lancer au démarrage de Windows** et **Quitter Foulée**.
-Tant qu'il tourne, la synchro se fait toute seule **toutes les 3 heures** (au réveil
-du PC si elle a été manquée). Relancer Foulée depuis le menu Démarrer rouvre simplement
-l'interface.
+Tant qu'il tourne, la synchro se fait toute seule, **toutes les 3 heures** par défaut
+(au réveil du PC si elle a été manquée ; rythme réglable, voir plus bas). Relancer
+Foulée depuis le menu Démarrer rouvre simplement l'interface.
 
 ### Tu avais installé Foulée avec l'archive (dossier `C:\Users\<toi>\Foulee`) ?
 
@@ -121,7 +121,7 @@ pas à pas ; compte une dizaine de minutes, une seule fois, de préférence depu
    depuis la machine elle-même ou par Tailscale.
 3. **Connecter mon compte Withings** : la page de Withings s'ouvre, clique sur **Allow
    this app**. Tu reviens tout seul dans les Réglages, et le premier import démarre.
-   Ensuite, tes mesures arrivent avec la synchro, toutes les 3 heures.
+   Ensuite, tes mesures arrivent avec la synchro, toutes les 3 heures par défaut.
 
 **Pourquoi une page relais ?** Après « Allow », Withings renvoie ton navigateur vers
 une adresse publique en https, enregistrée dans ton appli : il refuse l'adresse de ton
@@ -163,6 +163,12 @@ en JSON.
 La tuile **Journée en détail** montre heure par heure la FC, la Body Battery, les
 phases du sommeil ou la VFC de la nuit. Ces courbes sont demandées à Garmin quand
 la tuile les affiche (un appel par jour), puis gardées dans ta base.
+
+**Rythme de la synchro automatique** (Réglages → Synchro et calculs) : un délai par
+source, Garmin et Withings, de 30 minutes à 12 heures (3 heures par défaut). 3 heures est
+un bon compromis : séances, nuits et pesées arrivent dans la journée sans solliciter
+Garmin et Withings pour rien ; plus rapproché, Foulée redemande sans cesse des données qui
+n'ont pas bougé. Pour une donnée tout de suite, le bouton **Synchroniser** suffit.
 
 **Pastilles de connexion** : en haut à droite de chaque vue (dans la barre du haut
 sur téléphone), une pastille par source branchée sur le profil, Garmin et Withings :
@@ -323,11 +329,11 @@ maintenant** télécharge l'installateur, vérifie son empreinte SHA-256, puis F
 ferme, s'installe et se relance tout seul (une minute environ) ; la page se recharge
 d'elle-même. Tes données, ta clé et tes vues ne bougent pas.
 
-Inutile d'y penser : Foulée regarde sur GitHub toutes les 3 heures (comme la synchro)
-et, dès qu'une version plus récente sort sur ton canal, **« Une nouvelle version est
-disponible ! »** s'affiche en haut à droite de l'interface. Un clic montre les
-nouveautés ; **Installer maintenant** lance la mise à jour après confirmation (depuis le
-profil principal), ou **Voir dans les Réglages** mène à cette section.
+Inutile d'y penser : Foulée regarde sur GitHub toutes les 3 heures et, dès qu'une
+version plus récente sort sur ton canal, **« Une nouvelle version est disponible ! »**
+s'affiche en haut à droite de l'interface. Un clic montre les nouveautés ; **Installer
+maintenant** lance la mise à jour après confirmation (depuis le profil principal), ou
+**Voir dans les Réglages** mène à cette section.
 
 - **Recevoir les versions bêta** (case à cocher) : les avant-premières arrivent sur
   ton PC avant tout le monde, pour les essayer. Décoche pour revenir au canal stable ;
@@ -404,7 +410,8 @@ apt update && apt install -y git && git clone https://github.com/willyl02/foulee
 1. Git récupère le code (s'il demande un nom d'utilisateur, c'est que l'adresse du
    dépôt est mal tapée).
 2. Le script installe Python et les bibliothèques, puis les services : l'interface
-   (`foulee-web`) et la synchro toutes les 3 heures (`foulee-sync.timer`).
+   (`foulee-web`) et la synchro automatique (`foulee-sync.timer`, vérifiée toutes les
+   15 minutes, chaque source à son rythme).
 3. Il affiche un lien Tailscale : ouvre-le et valide l'ajout du serveur. Si un
    second lien demande d'activer HTTPS (« Serve »), valide-le aussi.
 4. Il demande ta **clé Garmin** et lance le premier import. Tu peux aussi la
@@ -474,7 +481,8 @@ Sans l'installateur, à partir du code (archive `foulee-<version>.zip` ou `git c
 3. Double-clique sur **`Installer-Foulee.cmd`** : il installe **uv** et les
    bibliothèques dans `.venv`, crée la base de démonstration, enregistre ta clé (lue
    dans le presse-papiers), ajoute Foulée à Claude Desktop, crée le raccourci et la
-   tâche planifiée « Foulee - synchro ».
+   tâche planifiée « Foulee - synchro » (elle regarde toutes les 15 minutes si une synchro
+   est due, au rythme choisi dans les Réglages).
 
 Dans ce mode, les données restent dans `Foulee\data`, la mise à jour se fait avec
 `Mettre-a-jour-Foulee.cmd` (nouvelle archive dans Téléchargements), et

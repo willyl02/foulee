@@ -4,8 +4,9 @@ C'est ce que lancent le menu Démarrer et le raccourci du Bureau (« foulee app 
 - l'interface tourne dans ce processus, sur http://127.0.0.1:8770 (ce PC seulement) ;
 - l'icône près de l'horloge : Ouvrir Foulée, Synchroniser maintenant, Lancer au
   démarrage de Windows, Quitter ;
-- la synchro se fait toute seule : au démarrage si la dernière date de plus de
-  3 heures, puis toutes les 3 heures (la mise en veille est prise en compte) ;
+- la synchro se fait toute seule : au démarrage si la dernière est trop ancienne, puis au
+  rythme choisi dans les Réglages pour chaque source (3 heures par défaut ; la mise en veille
+  est prise en compte) ;
 - une seule copie à la fois : relancer Foulée ouvre simplement l'interface.
 
 Ailleurs que sous Windows (ou avec --sans-icone), même chose sans l'icône.
@@ -24,7 +25,6 @@ import threading
 import time
 import urllib.request
 import webbrowser
-from datetime import datetime
 from pathlib import Path
 from typing import Callable
 
@@ -34,7 +34,7 @@ LOG = logging.getLogger("foulee.app")
 
 MUTEX_NAME = "Local\\Foulee-app"
 INSTANCE_FILE = "app.json"
-SYNC_EVERY = 3 * 3600          # une synchro toutes les 3 heures…
+SYNC_EVERY = 3 * 3600          # rythme par défaut (Réglages → Synchro et calculs, voir sync.intervals)…
 RETRY_AFTER_FAILURE = 30 * 60  # …et pas plus d'un essai par demi-heure quand ça échoue
 CHECK_EVERY = 10 * 60          # on regarde l'heure régulièrement : la mise en veille fausse les minuteries
 FIRST_CHECK_DELAY = 60
@@ -232,13 +232,6 @@ def set_startup(enabled: bool) -> None:  # pragma: no cover - Windows uniquement
 
 
 # ---------------------------------------------------------- synchro auto
-def _parse(stamp: str | None) -> float | None:
-    try:
-        return datetime.fromisoformat(stamp).timestamp() if stamp else None
-    except ValueError:
-        return None
-
-
 def _all_profiles() -> list[dict]:
     from . import utilisateurs
 
@@ -246,19 +239,20 @@ def _all_profiles() -> list[dict]:
 
 
 class AutoSync:
-    """Synchro toutes les 3 heures de chaque profil, d'après l'heure de sa dernière synchro réussie.
+    """Synchro automatique de chaque profil : chaque source (Garmin, Withings) au rythme choisi dans ses
+    Réglages, d'après l'heure de sa dernière synchro réussie (voir sync.due_sources).
 
     Elle ne démarre qu'après une première synchro réussie : le premier import est un choix
     (date de début, ou reprise des données d'une ancienne installation).
-    start et wait_result visent le profil courant : tick les appelle profil par profil.
+    start(sources) et wait_result visent le profil courant : tick les appelle profil par profil.
     """
 
-    def __init__(self, start: Callable[[], bool], wait_result: Callable[[], dict], notify: Callable[[str], None],
-                 *, every: float = SYNC_EVERY, check_every: float = CHECK_EVERY,
+    def __init__(self, start: Callable[[list[str]], bool], wait_result: Callable[[], dict],
+                 notify: Callable[[str], None], *, check_every: float = CHECK_EVERY,
                  first_delay: float = FIRST_CHECK_DELAY, clock: Callable[[], float] = time.time,
                  profiles: Callable[[], list[dict]] = _all_profiles) -> None:
         self.start, self.wait_result, self.notify = start, wait_result, notify
-        self.every, self.check_every, self.first_delay, self.clock = every, check_every, first_delay, clock
+        self.check_every, self.first_delay, self.clock = check_every, first_delay, clock
         self.profiles = profiles
         self.last_attempt: dict[str, float] = {}  # par profil : dernier essai en échec
         self.stopped = threading.Event()
@@ -268,25 +262,16 @@ class AutoSync:
     def _profile_key() -> str:
         return (config.current_profile() or {}).get("id") or "p0"
 
-    def due(self) -> bool:
-        """La synchro du profil courant est-elle due ?"""
-        from . import db, sync, vault
+    def due(self) -> list[str]:
+        """Les sources du profil courant dont la synchro est due (liste vide : rien à faire)."""
+        from . import db, sync
 
-        if config.is_demo() or not vault.has_key():
-            return False
         now = self.clock()
         last_attempt = self.last_attempt.get(self._profile_key())
         if last_attempt and now - last_attempt < RETRY_AFTER_FAILURE:
-            return False
+            return []
         with db.session(readonly=True) as conn:
-            if sync.key_refused(conn):
-                return False  # Garmin refuse la clé : on attend qu'elle soit remplacée
-            last = _parse(db.get_meta(conn, "last_sync"))
-        if last is None:
-            # Jamais synchronisé ici : le premier import (ou la reprise d'une ancienne installation)
-            # se décide sur la page d'accueil, jamais tout seul
-            return False
-        return now - last >= self.every - 120
+            return sync.due_sources(conn, now)
 
     def tick(self) -> dict | None:
         """Une vérification par profil : lance chaque synchro due et renvoie le dernier résultat."""
@@ -302,14 +287,15 @@ class AutoSync:
         return result
 
     def _tick_current(self, entry: dict | None) -> dict | None:
-        if not self.due():
+        sources = self.due()
+        if not sources:
             return None
         from . import db, sync, utilisateurs
         from .withings import vue as withings_vue
 
         with db.session(readonly=True) as conn:
             withings_refused = withings_vue.refused(conn) is not None
-        if not self.start():
+        if not self.start(sources):
             return None
         key = self._profile_key()
         self.last_attempt[key] = self.clock()
@@ -495,7 +481,8 @@ class DesktopApp:
         write_instance(self.port)
         LOG.info("Foulée %s prêt sur %s", __version__, self.url())
         updates.set_exit_hook(self.stop)
-        self.autosync = AutoSync(lambda: self.jobs.get().start(), self.wait_for_sync, self.notify)
+        self.autosync = AutoSync(lambda sources: self.jobs.get().start(sources=sources), self.wait_for_sync,
+                                 self.notify)
         self.autosync.begin()
         if self.open_browser:
             self.open_ui()

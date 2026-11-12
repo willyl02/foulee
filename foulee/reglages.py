@@ -76,6 +76,18 @@ def clean(key: str, value: Any) -> Any:
         if not test:
             raise SettingsError("Temps du test VAMEVAL illisible : de 2:00 à 59:59 (minutes:secondes).")
         return test["temps"]
+    if key == "synchro_auto":
+        from . import sync
+
+        if not isinstance(value, dict):
+            raise SettingsError("Synchro automatique : un délai par source, en minutes.")
+        cleaned = {}
+        for name, minutes in value.items():
+            if name not in sync.SOURCES:
+                raise SettingsError(f"Synchro automatique : source inconnue « {name} ».")
+            label = f"Synchro automatique {sync.LABELS.get(name, name)}"
+            cleaned[name] = int(_number(minutes, sync.MIN_INTERVAL, sync.MAX_INTERVAL, f"{label} (minutes)"))
+        return cleaned
     if key == "canal_maj":
         from . import updates
 
