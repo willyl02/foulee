@@ -17,7 +17,8 @@ from typing import Any, Iterator
 
 from . import config
 
-SCHEMA_VERSION = 3  # 2 : colonnes « extra » et « hr_zones_garmin » des séances (0.5) ; 3 : exercices de renfo
+SCHEMA_VERSION = 4  # 2 : colonnes « extra » et « hr_zones_garmin » des séances (0.5) ; 3 : exercices de renfo ;
+# 4 : exercices relus, seulement pour la musculation et le cardio (0.6.0b4)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (
@@ -248,8 +249,8 @@ def _migrate(conn: sqlite3.Connection) -> None:
         version = _schema_version(conn)
         if version < 2:
             _migrate_v2(conn)
-        if version < 3:
-            _migrate_v3(conn)
+        if version < 4:
+            _migrate_renfo(conn)  # 3 et 4 : la même relecture, une seule fois
         conn.execute("UPDATE meta SET value = ? WHERE key = 'schema_version'", (str(SCHEMA_VERSION),))
         conn.commit()
     except BaseException:
@@ -257,8 +258,9 @@ def _migrate(conn: sqlite3.Connection) -> None:
         raise
 
 
-def _migrate_v3(conn: sqlite3.Connection) -> None:
-    """0.6 : exercices de renfo, relus dans les résumés de séance gardés (aucun appel à Garmin)."""
+def _migrate_renfo(conn: sqlite3.Connection) -> None:
+    """0.6 : exercices de renfo, relus dans les résumés de séance gardés (aucun appel à Garmin). Relu une
+    seconde fois en 0.6.0b4 : la 0.6.0b3 gardait aussi les séries « devinées » en yoga, Pilates ou mobilité."""
     from . import renfo
     from .garmin import parse
 

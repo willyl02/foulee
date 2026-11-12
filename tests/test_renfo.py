@@ -32,13 +32,18 @@ def lighter(sets: list[dict], kg: float) -> list[dict]:
     return out
 
 
-def strength(n: int, day: dt.date, sets: list[dict]) -> dict:
+# Ce que la montre « devine » pendant une séance de Pilates ou de mobilité : pas du renfo
+GUESSED = [{"category": "SHRUG", "subCategory": None, "reps": 15, "volume": 0.0, "duration": 2566000.0, "sets": 1,
+            "maxWeight": 0.0}]
+
+
+def strength(n: int, day: dt.date, sets: list[dict], type_key: str = "strength_training") -> dict:
     start = dt.datetime(day.year, day.month, day.day, 18, 0)
     return {
         "activityId": 60_000_000 + n, "activityName": f"Renfo {n}",
         "startTimeLocal": start.strftime("%Y-%m-%d %H:%M:%S"),
         "startTimeGMT": (start - dt.timedelta(hours=1)).strftime("%Y-%m-%d %H:%M:%S"),
-        "activityType": {"typeId": 13, "typeKey": "strength_training"},
+        "activityType": {"typeId": 13, "typeKey": type_key},
         "duration": 1800.0, "movingDuration": 1700.0, "elapsedDuration": 1850.0,
         "averageHR": 96.0, "maxHR": 131.0, "calories": 180.0,
         "totalSets": sum(e["sets"] for e in sets), "activeSets": sum(e["sets"] for e in sets),
@@ -52,6 +57,7 @@ def garmin(monkeypatch):
         fake.activities.append(strength(1, fake.today - dt.timedelta(days=2), LEGS))
         fake.activities.append(strength(2, fake.today - dt.timedelta(days=9), lighter(LEGS, 2)))
         fake.activities.append(strength(3, fake.today - dt.timedelta(days=16), []))  # séance sans détail
+        fake.activities.append(strength(4, fake.today - dt.timedelta(days=5), GUESSED, "pilates"))
         monkeypatch.setenv("GARMIN_PERSONAL_API_BASE_URL", fake.url)
         vault.set_key("cle-de-test")
         sync.run(since=fake.today - dt.timedelta(days=35))
@@ -154,6 +160,10 @@ def test_sync_stores_exercises_and_session_detail(garmin):
         empty = analysis.activity_detail(conn, "garmin:60000003", db.get_settings(conn))["renfo"]
         assert empty["exercices"] == [] and empty["series"] == 0  # séance de renfo sans détail
         assert analysis.activity_detail(conn, "garmin:50000000", db.get_settings(conn))["renfo"] is None  # une course
+        # Pilates : les séries devinées par la montre ne comptent pas
+        assert analysis.activity_detail(conn, "garmin:60000004", db.get_settings(conn))["renfo"] is None
+        extra = conn.execute("SELECT extra FROM activities WHERE id = 'garmin:60000004'").fetchone()[0]
+        assert "sets" not in json.loads(extra or "{}")
 
 
 def test_period_progression_and_regularity(garmin):
@@ -178,6 +188,26 @@ def test_corrections_in_garmin_connect_replace_the_exercises(garmin):
         names = [r["name"] for r in conn.execute(
             "SELECT name FROM exercises WHERE activity_id = 'garmin:60000001' ORDER BY idx")]
     assert names == ["goblet_squat", "walking_lunge", "side_plank"]
+
+
+def test_which_sessions_count(garmin):
+    """Musculation et HIIT comptent ; un changement de type d'activité dans Garmin Connect est suivi ;
+    un exercice pas choisi sur la montre passe en dernier."""
+    hiit = strength(5, garmin.today - dt.timedelta(days=1), [
+        {"category": "TOTAL_BODY", "subCategory": "BURPEE", "reps": 30, "volume": 0, "duration": 120000, "sets": 3},
+        {"category": "UNKNOWN", "subCategory": None, "reps": 12, "volume": 0, "duration": 60000, "sets": 2},
+    ], "hiit")
+    garmin.activities.append(hiit)
+    garmin.activities[7]["activityType"]["typeKey"] = "strength_training"  # Pilates → musculation
+    garmin.activities[5]["activityType"]["typeKey"] = "yoga"  # musculation → yoga (il y a 9 jours)
+    sync.run(since=garmin.today - dt.timedelta(days=20))  # au-delà des 7 derniers jours : « synchronise depuis… »
+    with db.session() as conn:
+        stored = {r[0] for r in conn.execute("SELECT DISTINCT activity_id FROM exercises")}
+        assert stored == {"garmin:60000001", "garmin:60000004", "garmin:60000005"}
+        data = renfo.period(conn, garmin.today - dt.timedelta(days=29), garmin.today)
+    assert data["nb_seances"] == 4  # 60000001, 60000003 (sans détail), 60000004 et la séance de HIIT
+    assert data["exercices"][-1]["nom"] == "Exercice non précisé" and data["exercices"][-1]["inconnu"]
+    assert data["exercices"][0]["inconnu"] is False
 
 
 def test_web_api_and_views(garmin):
@@ -232,6 +262,20 @@ def test_seance_tile_added_once_to_an_existing_seance_view():
     with db.session() as conn:
         tiles = [t["type"] for t in json.loads(conn.execute("SELECT spec FROM views WHERE id = 'seance'").fetchone()[0])["tuiles"]]
         assert "seance_renfo" not in tiles  # elle ne revient pas
+
+
+def test_upgrade_from_0_6_0b3_drops_guessed_sets(garmin):
+    """La 0.6.0b3 gardait aussi les séries devinées en Pilates : la mise à niveau les retire."""
+    with db.session() as conn:
+        conn.execute("INSERT INTO exercises(activity_id, idx, category, name, sets, reps, duration_s, max_kg, "
+                     "volume_kg) VALUES ('garmin:60000004', 0, 'shrug', NULL, 1, 15, 2566, 0, 0)")
+        conn.execute("""UPDATE activities SET extra = '{"sets": 1, "reps": 15}' WHERE id = 'garmin:60000004'""")
+        conn.execute("UPDATE meta SET value = '3' WHERE key = 'schema_version'")
+    with db.session() as conn:
+        assert not conn.execute("SELECT 1 FROM exercises WHERE activity_id = 'garmin:60000004'").fetchone()
+        extra = conn.execute("SELECT extra FROM activities WHERE id = 'garmin:60000004'").fetchone()[0]
+        assert "sets" not in json.loads(extra or "{}")
+        assert conn.execute("SELECT COUNT(*) FROM exercises").fetchone()[0] == 6
 
 
 def test_upgrade_reads_exercises_back_from_saved_garmin_answers(garmin):

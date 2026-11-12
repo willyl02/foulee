@@ -33,6 +33,7 @@ function setsText(e) {
 }
 
 function musclesText(e) {
+  if (e.inconnu) return F.escape("Pas choisi sur la montre : compte dans les séries, pas dans les muscles");
   const main = e.muscles.filter((m) => m.role === "principal").map((m) => m.nom);
   const other = e.muscles.filter((m) => m.role !== "principal").map((m) => m.nom.toLowerCase());
   if (!main.length && !other.length) return "";

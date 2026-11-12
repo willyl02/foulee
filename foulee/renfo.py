@@ -7,6 +7,9 @@ l'appli Garmin Connect (exercice changé, répétitions ajustées) : c'est lui q
 
 Foulée le range dans la table ``exercises``, traduit les exercices en français et en déduit les muscles
 travaillés : une série compte pour 1 sur un muscle principal, pour ½ sur un muscle secondaire.
+
+Seules comptent les séances de musculation et de cardio / HIIT (``SPORTS``) : en yoga, Pilates ou
+mobilité, la montre « devine » des séries (un haussement d'épaules de 40 minutes…) qui n'en sont pas.
 """
 
 from __future__ import annotations
@@ -19,6 +22,7 @@ from datetime import date, timedelta
 from typing import Any
 
 P, S = 1.0, 0.5  # muscle principal, muscle secondaire
+SPORTS = ("renfo", "cardio")  # sports de Foulée dont les exercices comptent (musculation, cardio / HIIT)
 
 # Groupes musculaires de la carte du corps, dans l'ordre d'affichage
 MUSCLES: list[tuple[str, str]] = [
@@ -521,9 +525,13 @@ def totals(exercises: list[dict]) -> dict[str, float]:
 
 
 def store_exercises(conn: sqlite3.Connection, activity_id: str, item: dict) -> int:
-    """Range les exercices d'une séance (remplace ceux d'avant : Garmin Connect a pu être corrigé)."""
-    exercises = parse_summary(item)
+    """Range les exercices d'une séance déjà enregistrée (remplace ceux d'avant : Garmin Connect a pu être
+    corrigé, jusqu'au type d'activité). Rien pour une séance hors ``SPORTS``."""
     conn.execute("DELETE FROM exercises WHERE activity_id = ?", (activity_id,))
+    row = conn.execute("SELECT sport FROM activities WHERE id = ?", (activity_id,)).fetchone()
+    if not row or row["sport"] not in SPORTS:
+        return 0
+    exercises = parse_summary(item)
     for idx, e in enumerate(exercises):
         conn.execute(
             "INSERT INTO exercises(activity_id, idx, category, name, sets, reps, duration_s, max_kg, volume_kg) "
@@ -570,6 +578,7 @@ def describe(e: dict) -> dict:
     muscles = exercise_muscles(e["category"], e["name"])
     return {
         "cle": _key(e["category"], e["name"]),
+        "inconnu": e["category"] == "unknown",  # exercice pas choisi sur la montre (ni reconnu par elle)
         "nom": exercise_name(e["category"], e["name"]),
         "nom_garmin": e["name"] or e["category"],
         "categorie": CATEGORIES.get(e["category"], (e["category"], {}))[0],
@@ -599,7 +608,7 @@ def _rows(conn: sqlite3.Connection, where: str, params: list[Any]) -> list[dict]
 def session(conn: sqlite3.Connection, activity_id: str) -> dict | None:
     """Exercices d'une séance, muscles travaillés et totaux ; None si ce n'est pas une séance de renfo."""
     row = conn.execute("SELECT sport FROM activities WHERE id = ?", (activity_id,)).fetchone()
-    if not row:
+    if not row or row["sport"] not in SPORTS:
         return None
     rows = _rows(conn, "e.activity_id = ?", [activity_id])
     if not rows and row["sport"] != "renfo":
@@ -665,7 +674,7 @@ def period(conn: sqlite3.Connection, start: date, end: date, weeks: int = 12) ->
             "historique": history,
         })
         exercises.append(info)
-    exercises.sort(key=lambda x: (-x["seances"], -x["series"], x["nom"]))
+    exercises.sort(key=lambda x: (x["inconnu"], -x["seances"], -x["series"], x["nom"]))  # non précisés en dernier
 
     # Régularité : séances de renfo par semaine (lundi → dimanche), les dernières semaines jusqu'à « end »
     last = _week_start(end)

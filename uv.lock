@@ -371,7 +371,7 @@ wheels = [
 
 [[package]]
 name = "foulee"
-version = "0.6.0b3"
+version = "0.6.0b4"
 source = { editable = "." }
 dependencies = [
     { name = "fastapi" },

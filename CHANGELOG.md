@@ -4,6 +4,12 @@ Les versions « bêta » (par exemple 0.4.0b1) sont des avant-premières : elles
 sur le canal bêta (Réglages → Mises à jour → « Recevoir les versions bêta »), puis sortent en
 version stable une fois éprouvées.
 
+## 0.6.0b4 — 12 novembre 2026 (bêta)
+
+- **Renfo** : seules les séances de musculation et de cardio / HIIT comptent. En yoga, Pilates ou mobilité, la montre « devine » des séries (un haussement d'épaules pendant 40 minutes de mobilité…) : elles ne s'ajoutent plus à tes séances de renfo, à tes muscles travaillés ni aux métriques de renfo. Si tu avais installé la 0.6.0b3, la mise à jour les retire toute seule.
+- Un exercice que la montre n'a pas identifié (« Exercice non précisé ») passe en fin de liste, avec une explication : il compte dans les séries, pas dans les muscles.
+- Si tu changes le type d'une séance dans Garmin Connect (de « Mobilité » à « Musculation », par exemple), Foulée suit à la synchro suivante.
+
 ## 0.6.0b3 — 12 novembre 2026 (bêta)
 
 - **Renfo** : tes séances de musculation, exercice par exercice. Foulée lit le résumé que Garmin Connect garde pour chaque séance (séries, répétitions, durée, charge), corrections faites dans l'appli comprises, sans fichier FIT. Les séances déjà importées sont relues à la mise à jour, sans rien redemander à Garmin.

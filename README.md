@@ -179,7 +179,8 @@ métriques rejoignent les tuiles (catégorie « Renfo ») : séries, répétitio
 et temps d'effort. Sur la montre, lance l'activité « Musculation » et choisis
 l'exercice à chaque série (ou suis un entraînement de renfo préparé dans Garmin
 Connect) ; une séance enregistrée sans le détail se complète après coup dans l'appli
-Garmin Connect.
+Garmin Connect. Seules comptent les séances de musculation et de cardio / HIIT : en
+yoga, Pilates ou mobilité, la montre « devine » des séries qui n'en sont pas.
 
 Les **Réglages** contiennent :
 

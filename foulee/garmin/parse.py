@@ -468,7 +468,10 @@ def activity_extra(item: dict) -> dict:
         text = item.get(name) or summary.get(name)
         if isinstance(text, str) and text.strip():
             extra[key] = text.strip()[:60]
-    extra.update(renfo.totals(renfo.parse_summary(item)))  # renfo : séries, répétitions, tonnage, effort
+    type_info = item.get("activityType") or item.get("activityTypeDTO") or {}
+    if normalize_sport(type_info.get("typeKey") if isinstance(type_info, dict) else None) in renfo.SPORTS:
+        # renfo : séries, répétitions, tonnage, effort (pas les séries « devinées » en yoga ou en mobilité)
+        extra.update(renfo.totals(renfo.parse_summary(item)))
     return extra
 
 
