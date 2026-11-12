@@ -141,6 +141,9 @@ def statut() -> dict[str, Any]:
             "cle_api_garmin": "présente" if vault.has_key() else "absente",
             "withings": _withings_state(conn),
             "synchro": sync_module.last_sync_info(conn),
+            # état de chaque source (ok, ko, attente) avec le message de la dernière synchro qui n'a pas abouti
+            "connexions": [{k: c.get(k) for k in ("nom", "etat", "texte", "erreur", "derniere_reussie")}
+                           for c in sync_module.connections(conn)],
             "donnees_quotidiennes": {"du": first["a"], "au": first["b"]},
             "seances": {"nombre": acts["n"], "du": acts["a"], "au": acts["b"]},
             "aujourdhui": date.today().isoformat(),

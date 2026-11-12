@@ -164,6 +164,13 @@ La tuile **Journée en détail** montre heure par heure la FC, la Body Battery, 
 phases du sommeil ou la VFC de la nuit. Ces courbes sont demandées à Garmin quand
 la tuile les affiche (un appel par jour), puis gardées dans ta base.
 
+**Pastilles de connexion** : en haut à droite de chaque vue (dans la barre du haut
+sur téléphone), une pastille par source branchée sur le profil, Garmin et Withings :
+verte quand sa dernière synchro a abouti, rouge quand elle n'a pas abouti ou que la
+clé (l'accès) manque ou est refusée, grise avant la première synchro. Un clic montre
+le message d'erreur, la dernière synchro réussie, « Réessayer » et le lien vers les
+Réglages de la source. Claude les voit aussi (outil `statut`).
+
 **Renfo** : pour chaque séance de musculation, Garmin Connect garde le détail
 exercice par exercice (séries, répétitions, durée, charge), corrections faites dans
 l'appli comprises. Foulée le lit à la synchro (sans fichier FIT), traduit les

@@ -11,6 +11,7 @@ import { startUpdateAlert } from "./maj.js";
 import { renderSettings } from "./settings.js";
 import { renderChooser, whoButton, wireWho } from "./users.js";
 import { renderWelcome } from "./welcome.js";
+import { connPills, wireConn } from "./connections.js";
 import * as A from "./tiles-activity.js";
 import * as R from "./tiles-renfo.js";
 import * as D from "./tiles-data.js";
@@ -37,6 +38,7 @@ const THEME_LABELS = { auto: "Thème : automatique", light: "Thème : clair", da
 const state = {
   boot: null, catalog: {}, types: {}, views: [], viewId: null, days: 90, editing: false,
   activityId: null, pass: { token: 0, disposers: [] }, syncTimer: null, dragIndex: null,
+  syncPolling: false, connTimer: null,  // synchro suivie depuis cette page ; relecture des pastilles
   fromHash: "",  // dernière page visitée avant le formulaire de retours (jointe au signalement)
 };
 
@@ -85,6 +87,9 @@ async function start() {
   matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { if (themeChoice() === "auto") rerender(); });
   route();
   if (state.boot.synchro?.en_cours) pollSync();
+  // Pastilles de connexion : revérifiées toutes les 2 minutes et au retour sur l'onglet (synchros automatiques)
+  setInterval(refreshConn, 120000);
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") refreshConn(); });
 }
 
 function noData() { return !state.boot.volumes.daily && !state.boot.volumes.activities; }
@@ -135,6 +140,9 @@ function setupChrome() {
   paintTheme();
   renderBrand();
   renderStrip();
+  // Sur téléphone, les pastilles de connexion vont dans la barre du haut (toujours visible)
+  paintConn();
+  wireConn($(".topbar"), connState, { onSync: startSync });
   renderNav();
   renderSyncLine();
 }
@@ -311,6 +319,7 @@ async function renderView() {
   const todayIso = F.isoDate(new Date());
   page.innerHTML = `
     <header class="head">
+      <div class="conn" role="group" aria-label="Connexions">${connPills(state.boot.connexions, connBusy())}</div>
       <div><h1>${F.escape(view.name)}</h1>
         <div class="head-sub"><span>${F.escape(F.dateLong(todayIso))}</span>${shiftChip()}</div></div>
       <div class="head-tools">
@@ -332,6 +341,8 @@ async function renderView() {
   page.querySelector("[data-edit]").addEventListener("click", () => { state.editing = !state.editing; renderNav(); renderView(); });
   const who = wireWho(page, state.boot, { toast });
   if (who) state.pass.disposers.push(who);
+  const conn = wireConn(page.querySelector(".head"), connState, { onSync: startSync });
+  if (conn) state.pass.disposers.push(conn);
   if (state.editing) wireViewBar(view);
   if (needsActivity) await renderPicker($("#picker"));
   if (token !== state.pass.token) return;
@@ -744,6 +755,8 @@ async function startSync() {
 
 function pollSync() {
   clearTimeout(state.syncTimer);
+  state.syncPolling = true;
+  paintConn();
   const tick = async () => {
     let status;
     try { status = await api.get("/api/sync", null, { fresh: true }); } catch (e) { state.syncTimer = setTimeout(tick, 3000); return; }
@@ -753,6 +766,7 @@ function pollSync() {
       state.syncTimer = setTimeout(tick, 1500);
       return;
     }
+    state.syncPolling = false;
     if (job.erreur) toast(`Synchro impossible : ${job.erreur}`, { error: true });
     else if (job.resultat) syncToast(job.resultat.sources || {});
     api.clearCache();
@@ -760,10 +774,40 @@ function pollSync() {
     renderStrip();
     renderSyncLine();
     renderNav();
+    paintConn();
     // Sur les Réglages, la page reste en place (saisie en cours, position) : le panneau Withings suit seul
     if (!isSettings()) rerender();
   };
   tick();
+}
+
+// ------------------------------------------------------------ pastilles de connexion
+function connBusy() { return Boolean(state.syncPolling || state.boot.synchro?.en_cours); }
+
+function connState() {
+  return { list: state.boot.connexions || [], busy: connBusy(), demo: state.boot.demo, local: state.boot.acces === "local" };
+}
+
+/** Redessine les pastilles (en-tête de la vue, barre du téléphone), sauf celles dont le détail est ouvert. */
+function paintConn() {
+  document.querySelectorAll("#page .head > .conn, .topbar > .conn").forEach((box) => {
+    if (!box.querySelector(".conn-pill[aria-expanded='true']")) box.innerHTML = connPills(state.boot.connexions, connBusy());
+  });
+}
+
+/** État des sources relu sans recharger la page : une synchro automatique a pu passer entre-temps. */
+async function refreshConn() {
+  if (document.visibilityState !== "visible" || state.syncPolling || !state.boot || state.boot.profil_requis) return;
+  clearTimeout(state.connTimer);
+  let status;
+  try { status = await api.get("/api/sync", null, { fresh: true }); } catch (e) { return; }  // serveur injoignable : plus tard
+  if (state.syncPolling) return;
+  const { connexions, en_cours: busy, derniere_reussie: lastOk, derniere: last } = status;
+  if (connexions) state.boot.connexions = connexions;
+  state.boot.synchro = { ...state.boot.synchro, en_cours: busy, derniere_reussie: lastOk, derniere: last };
+  paintConn();
+  renderSyncLine(busy ? { en_cours: true, message: "Synchro automatique" } : undefined);
+  if (busy) state.connTimer = setTimeout(refreshConn, 15000);
 }
 
 /** Bilan d'une synchro, source par source (Garmin, Withings), dans un seul message. */

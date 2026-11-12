@@ -18,7 +18,7 @@ import time
 from datetime import date
 from typing import Callable
 
-from . import config, db
+from . import config, db, vault
 from .garmin import sync as garmin_sync
 from .withings import client as withings_client
 from .withings import sync as withings_sync
@@ -30,6 +30,8 @@ SOURCES = {
     "garmin": garmin_sync.run,
     "withings": withings_sync.run,
 }
+LABELS = {"garmin": "Garmin", "withings": "Withings"}
+SETTINGS_SECTIONS = {"garmin": "cle", "withings": "withings"}  # où la réparer dans les Réglages
 
 
 def active_sources() -> list[str]:
@@ -192,6 +194,62 @@ def key_refused(conn) -> dict | None:
         return json.loads(raw) if raw else None
     except ValueError:
         return None
+
+
+def _history(conn, limit: int = 120) -> list[tuple[str, dict]]:
+    """Les dernières synchros, de la plus récente à la plus ancienne : (fin, résultat de chaque source)."""
+    out = []
+    for row in conn.execute("SELECT finished_at, summary FROM sync_log ORDER BY id DESC LIMIT ?", (limit,)):
+        try:
+            results = json.loads(row["summary"] or "{}")
+        except ValueError:
+            continue
+        if isinstance(results, dict):
+            out.append((row["finished_at"], results))
+    return out
+
+
+def connections(conn) -> list[dict]:
+    """Pastilles de l'en-tête : une par source branchée sur le profil (Garmin toujours, Withings s'il est
+    connecté ; une autre source plus tard : une entrée de plus dans ``SOURCES`` et ``LABELS``).
+
+    État « ok » : la dernière synchro de la source a abouti (même avec des alertes dans le journal) ;
+    « ko » : elle n'a pas abouti, ou la clé (l'accès) manque ou est refusée ; « attente » : pas encore
+    de synchro. Jamais de clé ni de jeton dans la réponse : seulement l'état et le message d'erreur."""
+    from .withings import vue as withings_vue  # (import tardif : withings.vue importe les vues)
+
+    demo = config.is_demo()
+    names = ["garmin"]
+    if withings_vue.families(conn) if demo else (withings_client.connected() or withings_vue.refused(conn)):
+        names.append("withings")
+    history = [] if demo else _history(conn)
+    out = []
+    for name in names:
+        runs = [(when, res[name]) for when, res in history if isinstance(res.get(name), dict)]
+        last = runs[0] if runs else None
+        item: dict = {
+            "cle": name, "nom": LABELS.get(name, name.capitalize()), "reglages": SETTINGS_SECTIONS.get(name),
+            "derniere": last[0] if last else None,
+            "derniere_reussie": next((when for when, res in runs if not res.get("erreur")), None),
+            "erreur": None, "alertes": 0, "bloque": False,  # bloque : rien à faire sans passer par les Réglages
+        }
+        refusal = key_refused(conn) if name == "garmin" else withings_vue.refused(conn)
+        if demo:
+            item.update(etat="ok", texte="Mode démo : données fictives, pas de synchro.")
+        elif name == "garmin" and not vault.has_key():
+            item.update(etat="ko", texte="Aucune clé API Garmin : la synchro est en pause.", bloque=True)
+        elif refusal:
+            text = ("Garmin refuse ta clé API : la synchro est en pause." if name == "garmin"
+                    else "Withings n'accepte plus l'accès de Foulée : reconnecte ton compte.")
+            item.update(etat="ko", texte=text, depuis=refusal.get("depuis"), bloque=True)
+        elif last is None:
+            item.update(etat="attente", texte="Pas encore synchronisé.")
+        elif last[1].get("erreur"):
+            item.update(etat="ko", texte="La dernière synchro n'a pas abouti.", erreur=str(last[1]["erreur"])[:300])
+        else:
+            item.update(etat="ok", texte="Connexion OK.", alertes=len(last[1].get("erreurs") or []))
+        out.append(item)
+    return out
 
 
 def last_sync_info(conn) -> dict:

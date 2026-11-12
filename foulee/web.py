@@ -278,6 +278,7 @@ def create_app() -> FastAPI:
                 "profil": {**(settings.get("profil") or {}), "prenom_affiche": profile.first_name(conn, settings),
                            **profile.info(), "garmin": profile.garmin_identity(conn)["photo_url"] is not None},
                 "synchro": sync_module.last_sync_info(conn), "cle": vault.has_key() or config.is_demo(),
+                "connexions": sync_module.connections(conn),
                 "dossier_donnees": str(config.data_dir()),
                 "machine": "pc" if sys.platform == "win32" else "serveur",
                 "acces": "local" if request.state.local else "reseau",
@@ -739,6 +740,7 @@ def create_app() -> FastAPI:
     def sync_status() -> dict:
         with db.session(readonly=True) as conn:
             info = sync_module.last_sync_info(conn)
+            info["connexions"] = sync_module.connections(conn)
         return {"job": jobs.get().snapshot(), **info}
 
     # ------------------------------------------------------------------ pages

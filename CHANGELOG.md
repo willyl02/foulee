@@ -4,6 +4,11 @@ Les versions « bêta » (par exemple 0.4.0b1) sont des avant-premières : elles
 sur le canal bêta (Réglages → Mises à jour → « Recevoir les versions bêta »), puis sortent en
 version stable une fois éprouvées.
 
+## 0.6.0b5 — 12 novembre 2026 (bêta)
+
+- **Pastilles de connexion** en haut à droite de chaque vue : une par source branchée sur ton profil (Garmin, Withings, et les prochaines). Verte : sa dernière synchro a abouti. Rouge : elle n'a pas abouti, ou la clé (l'accès) manque ou est refusée. Grise : pas encore de synchro. Un clic montre le message d'erreur, la dernière synchro réussie, « Réessayer » et le lien vers les Réglages de la source. Pendant une synchro, les pastilles clignotent ; elles se mettent à jour seules après les synchros automatiques. Sur téléphone, elles sont dans la barre du haut, toujours visible.
+- Claude Desktop : l'outil `statut` donne aussi l'état de chaque source et le message de la dernière synchro qui n'a pas abouti.
+
 ## 0.6.0b4 — 12 novembre 2026 (bêta)
 
 - **Renfo** : seules les séances de musculation et de cardio / HIIT comptent. En yoga, Pilates ou mobilité, la montre « devine » des séries (un haussement d'épaules pendant 40 minutes de mobilité…) : elles ne s'ajoutent plus à tes séances de renfo, à tes muscles travaillés ni aux métriques de renfo. Si tu avais installé la 0.6.0b3, la mise à jour les retire toute seule.
