@@ -64,11 +64,11 @@ export function tallyText(t, { short = false } = {}) {
   return parts.join(" · ");
 }
 
+/** Pas de calendrier relié : une ligne et, sur la machine elle-même, le bouton qui mène aux Réglages. */
 function notLinked(body, ctx) {
   const local = ctx.boot.acces === "local";
-  body.innerHTML = `<div class="tile-msg agenda-empty">
-    <p>Aucun calendrier d'entraînement relié.</p>
-    <p class="hint">${local ? "Publie ton calendrier Garmin Connect (ou un agenda iCal), puis colle son lien dans les Réglages : tes séances prévues et tes courses s'affichent ici, face à ce que tu as fait." : "Le lien du calendrier se colle depuis le PC où tourne Foulée, ou par Tailscale."}</p>
+  body.innerHTML = `<div class="agenda-empty">
+    <p>${local ? "Relie ton calendrier Garmin Connect (ou un agenda iCal) : ta prochaine course et tes prochaines séances s'afficheront ici." : "Aucun calendrier d'entraînement relié : son lien se colle depuis le PC où tourne Foulée, ou par Tailscale."}</p>
     ${local ? `<a class="btn" href="#/reglages?section=calendrier">${icon("calendar")}Relier mon calendrier</a>` : ""}
   </div>`;
 }
@@ -93,12 +93,12 @@ export const a_venir = {
     const today = F.isoDate(new Date());
     const days = Number(p.jours) || 14;
     const d = await ctx.get("/api/calendrier", { start: today, end: F.isoDate(F.addDays(new Date(), days - 1)) });
+    body.classList.add("upcoming-body");
     if (!d.lie && !d.evenements.length) return notLinked(body, ctx);
     const items = d.evenements.filter((e) => e.type !== "autre" || e.date !== today);
     const race = d.prochaine_course;
     const n = d.bilan.prevues;
     ctx.sub(n ? `${n} prévue${n > 1 ? "s" : ""} sur ${days} jours` : `Rien de prévu sur ${days} jours`);
-    body.classList.add("upcoming-body");
     body.innerHTML = `<div class="upcoming">
       ${race ? `<button type="button" class="up-race" data-plan-day="${F.escape(race.date)}" title="${F.escape(`${race.titre}, ${F.dateLong(race.date, { year: true })}`)}">
           <span class="up-count">${icon("flag")}<b>${countdown(race.dans_jours)}</b></span>
@@ -158,7 +158,8 @@ function dayPanel(iso, d, today) {
   const linked = new Set(plans.map((p) => p.seance_id).filter(Boolean));
   const acts = d.seances.filter((a) => a.date === iso);
   const extra = acts.filter((a) => !linked.has(a.id));
-  const isFuture = iso > today;
+  const none = !d.lie ? (extra.length ? "" : "Aucune séance ce jour-là.")
+    : iso > today ? "Rien de prévu ce jour-là." : iso === today ? "Rien de prévu aujourd'hui." : "Rien n'était prévu ce jour-là.";
   const race = plans.find((p) => p.type === "course" && iso >= today);
   const days = Math.round((F.parseDate(iso) - F.parseDate(today)) / 86400000);
   return `<header class="aday-head"><h3>${F.escape(F.dateLong(iso, { year: F.parseDate(iso).getFullYear() !== new Date().getFullYear() }))}</h3>
@@ -172,7 +173,7 @@ function dayPanel(iso, d, today) {
         ${p.description ? `<p class="aplan-desc">${F.escape(p.description)}</p>` : ""}
         ${done ? `<button type="button" class="aplan-done" data-act="${F.escape(done.id)}">${activityLine(done)}<b>${F.escape(done.nom || done.sport_label)}</b><small>${F.escape(done.duree)}</small>${icon("right")}</button>` : ""}
       </article>`;
-    }).join("") : `<p class="aday-none">${isFuture ? "Rien de prévu ce jour-là." : "Rien n'était prévu ce jour-là."}</p>`}
+    }).join("") : none ? `<p class="aday-none">${none}</p>` : ""}
     ${extra.length ? `<h4 class="aday-sub">${plans.length ? "Fait aussi ce jour-là" : "Fait ce jour-là"}</h4>
       ${extra.map((a) => `<button type="button" class="aplan-done" data-act="${F.escape(a.id)}">${activityLine(a)}<b>${F.escape(a.nom || a.sport_label)}</b><small>${F.escape(a.duree)}</small>${icon("right")}</button>`).join("")}` : ""}`;
 }

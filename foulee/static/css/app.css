@@ -1357,9 +1357,9 @@ a.chip:hover { box-shadow: inset 0 0 0 1px var(--base); }
 .up-item.is-course { border: 1px solid var(--gr-red); }
 .up-item.is-course .up-name svg { color: var(--gr-red); }
 .up-none { margin: auto 0; color: var(--muted); font-size: 14px; }
-.agenda-empty { gap: 4px; align-content: center; }
-.agenda-empty p { margin: 0; max-width: 60ch; }
-.agenda-empty .btn { margin-top: 8px; }
+.agenda-empty { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 16px; width: 100%;
+  padding: 4px 8px; color: var(--ink-2); font-size: 14px; text-align: center; }
+.agenda-empty p { margin: 0; max-width: 70ch; }
 
 /* Le mois : une case par jour (deux lignes au plus, « +n » ensuite), le détail du jour choisi à côté */
 .tile-body.agenda-body { container-type: inline-size; }
