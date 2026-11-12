@@ -127,6 +127,16 @@ def _withings_state(conn) -> dict[str, Any]:
             "acces_refuse_depuis": (info["refus"] or {}).get("depuis"), "du": first["a"], "au": first["b"]}
 
 
+def _strava_state() -> dict[str, Any]:
+    """Strava est-il branché ? Ses séances ne sont jamais transmises à Claude par Foulée."""
+    from .strava import client as strava_client
+
+    return {"connecte": strava_client.connected(),
+            "note": "Foulée ne transmet aucune donnée Strava à Claude : l'API de Strava l'interdit (API Policy, § 5.3). "
+                    "Les séances Strava s'affichent dans l'interface de Foulée ; pour en parler avec Claude, "
+                    "l'utilisateur peut brancher le connecteur Strava officiel dans Claude."}
+
+
 @mcp.tool(annotations=READ)
 def statut() -> dict[str, Any]:
     """État du hub : dernière synchro, période couverte, volumes, réglages utiles (VMA, objectif, FC)."""
@@ -140,6 +150,7 @@ def statut() -> dict[str, Any]:
             "mode_demo": config.is_demo(),
             "cle_api_garmin": "présente" if vault.has_key() else "absente",
             "withings": _withings_state(conn),
+            "strava": _strava_state(),
             "synchro": sync_module.last_sync_info(conn),
             # état de chaque source (ok, ko, attente) avec le message de la dernière synchro qui n'a pas abouti
             "connexions": [{k: c.get(k) for k in ("nom", "etat", "texte", "erreur", "derniere_reussie")}
@@ -162,10 +173,12 @@ def synchroniser(depuis: str | None = None) -> dict[str, Any]:
     if not vault.has_key():
         return {"statut": "erreur", "message": "Aucune clé API Garmin : l'utilisateur doit l'ajouter dans Foulée (Réglages → Clé API Garmin)."}
     box: dict[str, Any] = {}
+    # Strava n'est jamais synchronisé depuis Claude : ses données ne sont pas pour l'IA (règles de Strava)
+    sources = [s for s in sync_module.active_sources() if s != "strava"]
 
     def work() -> None:
         try:
-            box["resultat"] = sync_module.run(since=analysis.to_date(depuis) if depuis else None)
+            box["resultat"] = sync_module.run(since=analysis.to_date(depuis) if depuis else None, sources=sources)
         except Exception as exc:
             box["erreur"] = str(exc)
 
@@ -530,6 +543,9 @@ def requete_sql(sql: str, limite: int = 200) -> dict[str, Any]:
     if not config.db_path().exists():
         return {"erreur": "Base absente."}
     conn = db.connect(readonly=True)
+    # Jamais d'autre base que celle de Foulée (le cache Strava n'est pas pour Claude : règles de Strava)
+    conn.set_authorizer(lambda action, *args: sqlite3.SQLITE_DENY if action == sqlite3.SQLITE_ATTACH
+                        else sqlite3.SQLITE_OK)
     try:
         conn.execute("PRAGMA query_only = ON")
         cursor = conn.execute(text)

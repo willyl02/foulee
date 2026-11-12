@@ -229,6 +229,7 @@ def test_one_source_failing_makes_a_partial_sync(withings, monkeypatch):
     http = TestClient(web.create_app())
     authorize(http, withings)
     wait_for_sync(http)
+    vault.set_key("cle-de-test")
     monkeypatch.setitem(sync.SOURCES, "garmin", lambda conn, **kw: {"erreurs": []})  # Garmin sans souci
     withings.revoked = True
     withings.expire_access()

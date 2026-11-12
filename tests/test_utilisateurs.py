@@ -186,7 +186,7 @@ def test_sync_command_goes_through_every_profile(monkeypatch, capsys):
     assert cli.main(["sync"]) == 0
     assert seen == ["p0", lea["id"]]
     out = capsys.readouterr().out
-    assert "Ruben : pas de clé API Garmin" in out
+    assert "Ruben : ni clé API Garmin, ni Withings, ni Strava" in out
     seen.clear()
     assert cli.main(["sync", "--profil", "léa"]) == 0 and seen == [lea["id"]]
     with pytest.raises(SystemExit, match="Profil inconnu"):

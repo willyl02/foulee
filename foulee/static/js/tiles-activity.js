@@ -4,6 +4,7 @@ import * as api from "./api.js";
 import * as C from "./charts.js";
 import * as F from "./format.js";
 import { icon } from "./icons.js";
+import { sourceText } from "./sources.js";
 import { message } from "./tiles-data.js";
 
 const FOOT_SPORTS = ["course", "trail", "marche", "rando"];
@@ -65,12 +66,22 @@ function traceSVG(streams, p) {
     <circle cx="${ex}" cy="${ey}" r="3.5" fill="${p.ink}" stroke="${p.surface}" stroke-width="1.5"/></svg>`;
 }
 
+/** « Garmin », « Strava (Wahoo ELEMNT BOLT) », « Strava · Garmin Forerunner 965 » : d'où vient la séance. */
+function sessionSource(a) {
+  return sourceText([{ cle: a.source, nom: { garmin: "Garmin", strava: "Strava" }[a.source] || a.source, appareils: a.appareil ? [a.appareil] : [] }]);
+}
+
+/** Le lien « View on Strava » (texte exigé par Strava, en gras et en orange Strava). */
+function stravaLink(url) {
+  return `<a class="strava-link" href="${F.escape(url)}" target="_blank" rel="noopener">View on Strava${icon("external")}</a>`;
+}
+
 // ------------------------------------------------------------- liste
 // Colonnes de la liste. « has » : une colonne vide pour toutes les séances affichées ne s'affiche pas
 // (pas de distance ni d'allure pour une liste de renfo). « renfo » : seulement si toutes sont du renfo.
 const LIST_COLUMNS = [
   { head: "Date", cell: (a) => F.escape(F.dateShort(a.date)) },
-  { head: "Séance", cls: "name", cell: (a) => `${F.escape(a.name || a.sport_label)} <span class="sport-tag">${F.escape(a.sport_label)}</span>` },
+  { head: "Séance", cls: "name", cell: (a) => `${F.escape(a.name || a.sport_label)} <span class="sport-tag">${F.escape(a.sport_label)}</span>${a.source === "strava" ? ` <span class="src-tag" title="${F.escape(sessionSource(a))}">Strava</span>` : ""}` },
   { head: "Distance", num: true, has: (a) => a.distance_m > 0, cell: (a) => (a.distance_m ? `${F.dec1(a.distance_m / 1000)} km` : "–") },
   { head: "Durée", num: true, cell: (a) => F.escape(a.duree) },
   { head: "Allure / vitesse", num: true, has: (a) => a.avg_speed > 0, cell: (a) => F.escape(speedText(a)) },
@@ -94,7 +105,7 @@ export const activites = {
     let offset = 0;
     let rows = [];
     const load = async () => {
-      const page = await api.get("/api/activities", { start, end, sport: p.sport === "tous" ? "" : p.sport, search: p.recherche, limit, offset });
+      const page = await ctx.get("/api/activities", { start, end, sport: p.sport === "tous" ? "" : p.sport, search: p.recherche, limit, offset });
       rows = rows.concat(page);
       offset += page.length;
       draw(page.length === limit);
@@ -129,11 +140,11 @@ export const activites = {
 export const derniere_seance = {
   title: (p, ctx) => (p.sport && p.sport !== "tous" ? `Dernière séance (${ctx.sportLabel(p.sport).toLowerCase()})` : "Dernière séance"),
   async render(body, p, ctx) {
-    const [a] = await api.get("/api/activities", { limit: 1, sport: p.sport === "tous" ? "" : p.sport });
+    const [a] = await ctx.get("/api/activities", { limit: 1, sport: p.sport === "tous" ? "" : p.sport });
     if (!a) return message(body, "Aucune séance pour l'instant : lance une synchro.");
     let trace = "";
     if (a.has_streams === 1) {
-      try { trace = traceSVG(await api.get(`/api/activities/${encodeURIComponent(a.id)}/streams`, { max_points: 400 }), ctx.palette); } catch (e) { trace = ""; }
+      try { trace = traceSVG(await ctx.get(`/api/activities/${encodeURIComponent(a.id)}/streams`, { max_points: 400 }), ctx.palette); } catch (e) { trace = ""; }
     }
     body.innerHTML = `<div class="act-card">
       <div style="min-width:0;display:flex;flex-direction:column">
@@ -152,16 +163,25 @@ export const derniere_seance = {
 // ------------------------------------------------------------- séance : résumé
 export const seance_resume = {
   ownHead: true,
+  ownSource: true,  // la source de la séance est sous son titre
   title: () => "Séance",
   async render(body, p, ctx) {
     const a = await ctx.activityDetail();
     if (!a) return message(body, "Choisis une séance en haut de la vue.");
+    const st = a.strava;
+    const kudos = F.isNum(st?.kudos) && st.kudos > 0 ? ` · ${F.int(st.kudos)} kudo${st.kudos > 1 ? "s" : ""}` : "";
+    // Séance Garmin que Strava a aussi : son titre Strava (s'il diffère), ses kudos et sa description
+    const copy = st && !st.seance_strava;
+    const strava = st ? `${copy ? ` · aussi sur Strava${st.nom && st.nom !== a.name ? ` (« ${F.escape(st.nom)} »)` : ""}` : ""}${kudos} ${stravaLink(st.url)}` : "";
+    const notes = [a.description, copy && st.description !== a.description ? st.description : null].filter(Boolean).join("\n");
     body.innerHTML = `<div class="summary">
       <div class="summary-title">
         <h2 class="act-name" style="font-size:24px">${F.escape(a.name || a.sport_label)}</h2>
         <div class="act-when">${F.escape(F.whenActivity(a.start_local))}, ${F.escape(a.sport_label.toLowerCase())}</div>
-        ${a.description ? `<div class="act-desc" title="${F.escape(a.description)}">${F.escape(a.description)}</div>` : ""}
+        <div class="act-src">${F.escape(sessionSource(a))}${strava}</div>
+        ${notes ? `<div class="act-desc" title="${F.escape(notes)}">${F.escape(notes)}</div>` : ""}
         ${a.telechargement && a.telechargement !== "ok" ? `<div class="act-desc">Fichier FIT : ${F.escape(a.telechargement)}</div>` : ""}
+        ${a.strava_message ? `<div class="act-desc">Strava : ${F.escape(a.strava_message)}</div>` : ""}
       </div>
       <div class="figures">${keyFigures(a, { extra: true })}</div>
     </div>`;

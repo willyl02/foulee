@@ -93,14 +93,14 @@ def erase_everything() -> list[str]:
         for entry in utilisateurs.profiles():
             if not entry.get("principal"):
                 with config.using_profile(entry):
-                    for name in ("garmin", "withings"):
+                    for name in ("garmin", "withings", "strava"):
                         if vault.delete_secret(name):
                             removed.append(f"secret « {name} » du profil {entry['id']}")
     config.set_demo(demo)
     folders = [config.root_dir(), config.default_data_dir()]
     for folder in dict.fromkeys(Path(f) for f in folders):
         removed += erase_data_folder(folder)
-    for name in ("garmin", "withings", "github"):
+    for name in ("garmin", "withings", "strava", "strava-appli", "github"):
         if vault.delete_secret(name):
             removed.append(f"secret « {name} »")
     for base in dict.fromkeys([config.user_config_dir(), config.secrets_dir()]):

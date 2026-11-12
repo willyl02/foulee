@@ -90,6 +90,7 @@ CATEGORIES: dict[str, tuple[str, dict[str, float]]] = {
     "suspension": ("Sangles de suspension", {}),
     "tire": ("Pneu", {"quadriceps": P, "fessiers": P, "lombaires": S, "epaules": S}),
     "unknown": ("Exercice non précisé", {}),
+    "texte": ("Noté dans la description Strava", {}),  # séance Strava : l'exercice tel qu'il est écrit
 }
 # Échauffement, étirements, mobilité : pas du renforcement, ils comptent au plus pour ½ série
 LIGHT = {"warm_up", "move", "pose", "cardio_sensors"}
@@ -447,8 +448,11 @@ def _humanize(name: str) -> str:
 
 
 def exercise_name(category: str | None, name: str | None) -> str:
-    """Nom français d'un exercice ; à défaut, la catégorie suivie du nom de Garmin."""
+    """Nom français d'un exercice ; à défaut, la catégorie suivie du nom de Garmin.
+    Un exercice lu dans une description Strava garde le nom écrit (le plus souvent l'anglais des salles)."""
     category = (category or "unknown").lower()
+    if category == "texte" and name:
+        return name
     label = CATEGORIES.get(category, (_humanize(category).capitalize(), {}))[0]
     if not name:
         return label
@@ -463,6 +467,8 @@ def exercise_muscles(category: str | None, name: str | None) -> dict[str, float]
     """Muscles travaillés : 1 = principal, 0,5 = secondaire."""
     category = (category or "unknown").lower()
     name = (name or "").lower()
+    if category == "texte":
+        return text_muscles(name)
     muscles: dict[str, float] | None = None
     for cat, pattern, values in OVERRIDES:
         if (cat == "*" or cat == category) and name and re.search(pattern, name):
@@ -478,6 +484,52 @@ def exercise_muscles(category: str | None, name: str | None) -> dict[str, float]
     if category in LIGHT:
         muscles = {m: min(w, S) for m, w in muscles.items()}
     return dict(muscles)
+
+
+# Exercice écrit en toutes lettres (description Strava) : mots-clés anglais et français → catégorie de Garmin,
+# pour la carte des muscles. Le premier qui correspond l'emporte (« leg curl » avant « curl »).
+TEXT_CATEGORIES: list[tuple[str, str]] = [
+    (r"leg curl|hamstring curl|nordic|leg curl|curl (?:des )?ischio", "leg_curl"),
+    (r"leg extension|extension (?:des )?quadri|leg press|presse à cuisses", "squat"),
+    (r"calf|mollet", "calf_raise"),
+    (r"bench|chest press|développé couché|developpe couche|dips?\b", "bench_press"),
+    (r"incline press|développé incliné", "bench_press"),
+    (r"overhead press|shoulder press|military|développé (?:militaire|épaules?|assis)|arnold", "shoulder_press"),
+    (r"lateral raise|élévations? latérales?|front raise|élévations? frontales?", "lateral_raise"),
+    (r"deadlift|soulevé de terre|souleve de terre|rdl|romanian", "deadlift"),
+    (r"hip thrust|glute bridge|pont fessier|pont\b|bridge", "hip_raise"),
+    (r"swing", "hip_swing"),
+    (r"lunge|fente|split squat|bulgarian|step.?up", "lunge"),
+    (r"squat|goblet|pistol", "squat"),
+    (r"pull.?up|chin.?up|traction|lat pull|pulldown|tirage vertical", "pull_up"),
+    (r"row|rowing|tirage", "row"),
+    (r"push.?up|pompe", "push_up"),
+    (r"fly|flye|écarté|ecarte|pec deck", "flye"),
+    (r"skull|tricep|kickback|extension (?:des )?triceps|pushdown", "triceps_extension"),
+    (r"curl", "curl"),
+    (r"shrug|haussement", "shrug"),
+    (r"face pull|band pull|rotation externe|external rotation|y.?raise", "shoulder_stability"),
+    (r"plank|planche|gainage|hollow|dead bug", "plank"),
+    (r"crunch|sit.?up|relevé de buste|abdo", "crunch"),
+    (r"leg raise|relevé de jambes|knee raise", "leg_raise"),
+    (r"russian twist|oblique|woodchop|bûcheron", "chop"),
+    (r"back extension|hyperextension|good morning|lombaire|superman", "hyperextension"),
+    (r"farmer|carry|marche du fermier", "carry"),
+    (r"burpee|jump|saut|box|plyo|bond", "plyo"),
+    (r"clean|snatch|épaulé|arraché|jerk", "olympic_lift"),
+    (r"abduct|clamshell|monster walk|band walk", "hip_stability"),
+    (r"rope|corde", "battle_rope"),
+    (r"rameur|rower|ergo", "indoor_row"),
+]
+
+
+def text_muscles(name: str) -> dict[str, float]:
+    """Muscles d'un exercice écrit en toutes lettres (anglais ou français) ; rien s'il n'est pas reconnu."""
+    low = (name or "").lower()
+    for pattern, category in TEXT_CATEGORIES:
+        if re.search(pattern, low):
+            return dict(CATEGORIES[category][1])
+    return {}
 
 
 # ------------------------------------------------------------------ stockage
@@ -559,7 +611,7 @@ def rebuild(conn: sqlite3.Connection) -> int:
 
 # ------------------------------------------------------------------ lecture
 def _key(category: str, name: str | None) -> str:
-    return f"{category}/{name or ''}"
+    return f"{category}/{(name or '').lower() if category == 'texte' else name or ''}"
 
 
 def _per_set(e: dict) -> dict:

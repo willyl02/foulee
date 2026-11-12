@@ -109,7 +109,7 @@ def test_demo_is_green():
     demo.build(days=40, second_profile=False)
     try:
         c = states()
-        assert {k: v["etat"] for k, v in c.items()} == {"garmin": "ok", "withings": "ok"}
+        assert {k: v["etat"] for k, v in c.items()} == {"garmin": "ok", "withings": "ok", "strava": "ok"}
         assert "démo" in c["garmin"]["texte"]
     finally:
         config.set_demo(False)

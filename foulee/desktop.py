@@ -287,6 +287,9 @@ class AutoSync:
         return result
 
     def _tick_current(self, entry: dict | None) -> dict | None:
+        from .strava import cache as strava_cache
+
+        strava_cache.purge_file()  # rien de Strava au-delà de 48 heures, même sans synchro due
         sources = self.due()
         if not sources:
             return None
@@ -392,13 +395,13 @@ class DesktopApp:
                 LOG.debug("Notification impossible", exc_info=True)
 
     def _ready_profiles(self) -> list[dict]:
-        """Profils qui ont une clé Garmin (et dont aucune synchro ne tourne)."""
-        from . import utilisateurs, vault
+        """Profils qui ont de quoi synchroniser (clé Garmin, Withings ou Strava) et dont aucune synchro ne tourne."""
+        from . import sync, utilisateurs
 
         ready = []
         for entry in utilisateurs.profiles():
             with config.using_profile(entry):
-                if vault.has_key() and not self.jobs.get(entry["id"]).snapshot()["en_cours"]:
+                if sync.can_sync() and not self.jobs.get(entry["id"]).snapshot()["en_cours"]:
                     ready.append(entry)
         return ready
 

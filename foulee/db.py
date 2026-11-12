@@ -198,7 +198,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "vameval": None,           # dernier test VAMEVAL saisi (« 12:40 »), pour la page d'accueil
     "club": None,              # club FFA du profil : numéro, coordonnées, licence (voir club.py)
     # synchro automatique : délai par source, en minutes (de 30 min à 12 h, voir sync.py)
-    "synchro_auto": {"garmin": 180, "withings": 180},
+    "synchro_auto": {"garmin": 180, "withings": 180, "strava": 180},
 }
 
 ZONE_NAMES_PACE = ["Récup / EF", "Endurance active", "Seuil / semi", "Allure 10 km", "VMA"]
@@ -311,8 +311,11 @@ def _mask_key_ids(conn: sqlite3.Connection) -> None:
 
 
 @contextmanager
-def session(*, readonly: bool = False) -> Iterator[sqlite3.Connection]:
-    """Ouvre la base (et la crée si besoin), puis la referme proprement."""
+def session(*, readonly: bool = False, strava: bool = False) -> Iterator[sqlite3.Connection]:
+    """Ouvre la base (et la crée si besoin), puis la referme proprement.
+
+    strava=True (interface seulement, en lecture) : les séances du cache Strava du profil s'ajoutent à celles
+    de la base pour cette connexion (voir strava/cache.py). Jamais pour Claude Desktop : règles de Strava."""
     path = config.db_path()
     if readonly and not path.exists():
         readonly = False
@@ -320,6 +323,10 @@ def session(*, readonly: bool = False) -> Iterator[sqlite3.Connection]:
     try:
         if not readonly:
             init(conn)
+        elif strava:
+            from .strava import cache  # import tardif : le cache importe la configuration
+
+            cache.attach(conn)
         yield conn
         if not readonly:
             conn.commit()

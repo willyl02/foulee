@@ -225,7 +225,7 @@ def cmd_sync(args: argparse.Namespace) -> int:
 
     --auto (minuterie du serveur, toutes les 15 minutes) : seulement les sources dont la synchro est due,
     au rythme choisi dans les Réglages de chaque profil (3 heures par défaut)."""
-    from . import utilisateurs, vault
+    from . import sync, utilisateurs
 
     targets = _profiles_for(getattr(args, "profil", None))
     if getattr(args, "auto", False):
@@ -237,9 +237,9 @@ def cmd_sync(args: argparse.Namespace) -> int:
     for entry in targets:
         with config.using_profile(entry):
             name = utilisateurs.card(entry)["prenom"]
-            if not config.is_demo() and not vault.has_key():
+            if not config.is_demo() and not sync.can_sync():
                 if not args.quiet:
-                    _say(f"\n— {name} : pas de clé API Garmin, profil passé.")
+                    _say(f"\n— {name} : ni clé API Garmin, ni Withings, ni Strava, profil passé.")
                 continue
             if not args.quiet:
                 _say(f"\n— {name}")
@@ -251,9 +251,12 @@ def _sync_due(args: argparse.Namespace, targets: list[dict]) -> int:
     """Synchro automatique : chaque profil, seulement les sources dont le délai est écoulé."""
     from . import db, sync, utilisateurs
 
+    from .strava import cache as strava_cache
+
     worst = 0
     for entry in targets:
         with config.using_profile(entry):
+            strava_cache.purge_file()  # rien de Strava au-delà de 48 heures, même sans synchro due
             if sync.is_running():
                 continue  # une synchro est déjà en cours (« Synchroniser », premier import) : rien à ajouter
             with db.session(readonly=True) as conn:
@@ -405,6 +408,10 @@ def cmd_status(args: argparse.Namespace) -> int:
     _say(f"Foulée {__version__}")
     _say(f"  Dossier de données : {config.root_dir()}")
     _say(f"  Clé API Garmin     : {'enregistrée' if vault.has_key() else 'absente (foulee setup)'}")
+    from .strava import client as strava_client
+
+    if strava_client.has_app():
+        _say(f"  Strava             : {'connecté (lecture seule, cache de 48 heures)' if strava_client.connected() else 'appli enregistrée, compte non connecté'}")
     token = config.token_cache_file()
     if token.exists():
         try:

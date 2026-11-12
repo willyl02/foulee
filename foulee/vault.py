@@ -1,6 +1,7 @@
 """Rangement de tes secrets : la clé API Garmin, l'accès à Withings (ClientID, Secret et jetons
-de ton appli Withings), et le jeton GitHub éventuel (pour chercher les mises à jour tant que le
-dépôt de Foulée est privé).
+de ton appli Withings), l'accès à Strava (Client ID et Client Secret de l'appli Strava de
+l'installation, jetons de chaque profil), et le jeton GitHub éventuel (pour chercher les mises à
+jour tant que le dépôt de Foulée est privé).
 
 - Windows : Gestionnaire d'identification Windows (entrée « Foulee »), chiffré
   avec ta session. Si la clé était trop longue pour lui, repli automatique sur
@@ -36,8 +37,10 @@ SECRETS = {
     "garmin": (USERNAME, "garmin-cle", ENV_VAR),
     "github": ("github-jeton", "github-jeton", "FOULEE_GITHUB_TOKEN"),  # dépôt privé : vérifier les mises à jour
     "withings": ("withings-acces", "withings-acces", None),  # ClientID, Secret et jetons de l'appli Withings
+    "strava-appli": ("strava-appli", "strava-appli", None),  # Client ID et Client Secret de l'appli Strava
+    "strava": ("strava-acces", "strava-acces", None),        # jetons Strava du profil
 }
-PER_PROFILE = {"garmin", "withings"}  # un exemplaire par profil
+PER_PROFILE = {"garmin", "withings", "strava"}  # un exemplaire par profil (l'appli Strava : un pour l'installation)
 
 
 def _entry(name: str) -> tuple[str, str, str | None]:

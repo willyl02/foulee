@@ -95,7 +95,7 @@ export const withings = {
   ownHead: true,
   title: () => "Withings",
   async render(body, p, ctx) {
-    const d = await api.get("/api/withings/resume");
+    const d = await ctx.get("/api/withings/resume");
     const st = d.etat || {};
     const cards = [d.corps && bodyCard(d.corps, ctx), d.tension && pressureCard(d.tension), d.sommeil && sleepCard(d.sommeil, ctx),
       d.activite && activityCard(d.activite, ctx)].filter(Boolean);

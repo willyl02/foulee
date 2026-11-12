@@ -126,6 +126,19 @@ export const FAQ = [
     ],
   },
   {
+    id: "strava", titre: "Strava", icone: "activity",
+    questions: [
+      { id: "pourquoi", q: "À quoi sert Strava dans Foulée ?", r: () => `<p>À ajouter les séances qui ne passent pas par Garmin : une montre Coros, Suunto, Polar ou Apple, un compteur de vélo, une séance de musculation notée sur Strava. Elles rejoignent tes séances partout (listes, volumes, charge, renfo). Avec une montre Garmin, Strava apporte aussi le titre, la description et les kudos de tes séances, affichés sur la séance Garmin.</p>` },
+      { id: "relier", q: "Comment relier mon compte Strava ?", r: () => `<p>${reglages("strava", "Réglages → Strava")} te guide : l'utilisateur principal crée une fois l'« appli » Strava de Foulée sur strava.com/settings/api (avec un abonnement Strava : c'est la règle de Strava depuis juin 2026) et colle son Client ID et son Client Secret ; puis chaque profil clique sur « Connecter mon compte Strava » et « Autoriser ». Pour plusieurs profils, l'appli doit passer à 10 athlètes, dans les mêmes réglages de Strava.</p>` },
+      { id: "lecture", q: "Foulée peut-il modifier mon compte Strava ?", r: () => `<p>Non. Foulée ne demande que les droits de lecture (« read » et « activity:read_all ») : Strava lui-même l'empêche de publier, modifier ou effacer quoi que ce soit. Tu peux retirer l'accès à tout moment, dans Foulée (« Déconnecter Strava ») ou dans « Mes applis » sur Strava.</p>` },
+      { id: "doublons", q: "Une séance de ma Garmin aussi envoyée sur Strava compte-t-elle deux fois ?", r: () => `<p>Non. Foulée reconnaît la copie Strava d'une séance Garmin (Strava indique qu'elle vient de Garmin Connect, ou les deux se recouvrent dans le temps) et ne garde que la séance Garmin, plus riche. Le titre, la description et les kudos de Strava s'affichent dessus, avec le lien « View on Strava ».</p>` },
+      { id: "48h", q: "Pourquoi mes séances Strava disparaissent-elles parfois ?", r: () => `<p>Strava interdit de garder ses données : au plus quelques jours en cache, et une séance effacée sur Strava doit disparaître sous 48 heures. Foulée relit donc la liste de tes séances à chaque synchro et oublie ce qu'il n'a pas pu relire depuis 48 heures (PC éteint, pas d'Internet). Elles reviennent avec la synchro suivante.</p>` },
+      { id: "claude", q: "Claude voit-il mes séances Strava ?", r: () => `<p>Non : les règles de Strava interdisent de confier ses données à une IA. Claude Desktop ne voit que tes données Garmin et Withings dans Foulée. Pour parler de tes séances Strava avec Claude, branche le connecteur Strava officiel dans Claude (il demande un abonnement Strava).</p>` },
+      { id: "muscu", q: "Et les exercices de mes séances de musculation Strava ?", r: () => `<p>Strava les garde pour son appli : son API ne les donne pas. Foulée lit ceux que la description énumère, comme le font les applis de musculation (Hevy, Strong…) ou une note écrite à la main (« Squat 4x10 @ 60 kg »). Leurs noms restent tels qu'écrits, le plus souvent en anglais, comme on les dit à la salle ; les muscles travaillés suivent pour les exercices courants.</p>` },
+      { id: "sources", q: "Que veut dire « Garmin · Strava » à côté du titre des tuiles ?", r: () => `<p>C'est l'origine des chiffres de la tuile : Garmin, Strava (avec l'appareil d'origine), Withings. Garmin demande que ses données soient citées ainsi, et Strava qu'une séance enregistrée par une montre Garmin le soit aussi.</p>` },
+    ],
+  },
+  {
     id: "horaires", titre: "Horaires de travail", icone: "briefcase",
     questions: [
       { id: "pourquoi", q: "À quoi servent les horaires de travail ?", r: () => `<p>À comparer ta récupération d'un poste à l'autre (tuile « Comparaison par poste »), à colorer le fond des courbes selon le poste et à afficher ton poste du jour sur l'accueil.</p>` },

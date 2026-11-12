@@ -335,6 +335,13 @@ def delete(profile_id: str) -> dict:
         name = card(entry)["prenom"]
         vault.delete_key()  # sa clé Garmin et son jeton temporaire
         vault.delete_secret("withings")  # son appli et ses jetons Withings
+        try:  # son accès Strava : retiré chez Strava, puis oublié (le cache part avec son dossier)
+            from .strava import client as strava_client
+
+            strava_client.revoke()
+        except Exception:  # Strava injoignable : l'accès s'éteindra de lui-même, les jetons sont oubliés
+            pass
+        vault.delete_secret("strava")
         folder = config.data_dir()
     with _lock:
         data = load()

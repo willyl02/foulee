@@ -251,15 +251,16 @@ function rhythmSelect(name, label, minutes) {
     `<option value="${v}" ${v === chosen ? "selected" : ""}>${cap(every(v))}${v === DEFAULT_RHYTHM ? " (conseillé)" : ""}</option>`).join("")}</select></label>`;
 }
 
-/** Un délai par source branchée (Garmin toujours, Withings s'il est connecté), avec le conseil des 3 heures. */
+/** Un délai par source branchée (Garmin, Withings, Strava), avec le conseil des 3 heures. */
 function syncRhythm(s, boot) {
   const chosen = s.synchro_auto || {};
   const where = boot.machine === "serveur" ? "sur le serveur, jour et nuit" : "sur ce PC, tant que Foulée est ouvert (son icône près de l'horloge)";
   return `<h3>Synchro automatique</h3>
     <p class="intro">Foulée récupère tout seul tes nouvelles données, au rythme choisi pour chaque source : ${where}.</p>
     <div class="form-grid rhythm-grid">
-      ${rhythmSelect("synchro_garmin", "Garmin", chosen.garmin)}
+      ${boot.cle || !(boot.withings?.connecte || boot.strava?.connecte) ? rhythmSelect("synchro_garmin", "Garmin", chosen.garmin) : ""}
       ${boot.withings?.connecte ? rhythmSelect("synchro_withings", "Withings", chosen.withings) : ""}
+      ${boot.strava?.connecte && !boot.demo ? rhythmSelect("synchro_strava", "Strava", chosen.strava) : ""}
     </div>
     <p class="computed info">${icon("info")}<span><b>3 heures, c'est un bon compromis</b> : tes séances, tes nuits et tes pesées arrivent dans la journée sans solliciter Garmin et Withings pour rien. Plus rapproché, Foulée redemande sans cesse des données qui n'ont pas bougé. Besoin d'une donnée tout de suite (la séance de ce matin) ? «&nbsp;Synchroniser&nbsp;», dans la colonne de gauche, la récupère à l'instant.</span></p>
     <p class="computed" data-rhythm-note hidden></p>`;
@@ -267,7 +268,7 @@ function syncRhythm(s, boot) {
 
 function syncRhythmValue(form, s) {
   const out = { ...(s.synchro_auto || {}) };
-  for (const name of ["garmin", "withings"]) {
+  for (const name of ["garmin", "withings", "strava"]) {
     const value = form.elements[`synchro_${name}`]?.value;
     if (value) out[name] = Number(value);
   }
@@ -315,7 +316,7 @@ function keepInView(page, target) {
 
 // =============================================================== sommaire
 const JUMPS = [["profil", "Profil"], ["utilisateurs", "Utilisateurs"], ["club", "Club"], ["coureur", "Coureur"], ["objectif", "Objectif"], ["horaires", "Horaires"],
-  ["zones-fc", "Zones FC"], ["zones", "Allures"], ["synchro", "Synchro"], ["sauvegarde", "Sauvegarde"], ["cle", "Clé Garmin"], ["withings", "Withings"],
+  ["zones-fc", "Zones FC"], ["zones", "Allures"], ["synchro", "Synchro"], ["sauvegarde", "Sauvegarde"], ["cle", "Clé Garmin"], ["withings", "Withings"], ["strava", "Strava"],
   ["dossier", "Données"], ["claude", "Claude"], ["app", "Application"], ["lan", "Réseau local"], ["maj", "Mises à jour"],
   ["installation", "Installation"], ["apropos", "À propos"]];
 

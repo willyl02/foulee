@@ -3,9 +3,9 @@
 Une seule synchro à la fois (verrou), quelle que soit son origine : bouton de
 l'interface, tâche planifiée Windows ou demande à Claude.
 
-Les sources sont déclarées dans ``SOURCES`` (Garmin, Withings ; Strava plus tard : une
-entrée ici et un module à côté de ``garmin/``). Garmin est toujours de la partie ; Withings
-seulement quand le compte est connecté (Réglages → Withings).
+Les sources sont déclarées dans ``SOURCES`` (Garmin, Withings, Strava : une entrée ici et un
+module à côté de ``garmin/``). Garmin est de la partie dès qu'une clé est enregistrée (ou quand
+rien d'autre n'est branché) ; Withings et Strava quand leur compte est connecté (Réglages).
 """
 
 from __future__ import annotations
@@ -20,6 +20,8 @@ from typing import Callable
 
 from . import config, db, vault
 from .garmin import sync as garmin_sync
+from .strava import client as strava_client
+from .strava import sync as strava_sync
 from .withings import client as withings_client
 from .withings import sync as withings_sync
 
@@ -29,9 +31,10 @@ Progress = Callable[[str, float | None], None]
 SOURCES = {
     "garmin": garmin_sync.run,
     "withings": withings_sync.run,
+    "strava": strava_sync.run,
 }
-LABELS = {"garmin": "Garmin", "withings": "Withings"}
-SETTINGS_SECTIONS = {"garmin": "cle", "withings": "withings"}  # où la réparer dans les Réglages
+LABELS = {"garmin": "Garmin", "withings": "Withings", "strava": "Strava"}
+SETTINGS_SECTIONS = {"garmin": "cle", "withings": "withings", "strava": "strava"}  # où la réparer dans les Réglages
 
 # Synchro automatique (Réglages → Synchro et calculs) : un délai par source, en minutes. 3 heures est un bon
 # compromis ; en dessous de 30 minutes on solliciterait Garmin et Withings pour rien, au-delà de 12 heures
@@ -42,11 +45,19 @@ RETRY_AFTER_FAILURE = 30 * 60  # après un échec, pas plus d'un essai par demi-
 
 
 def active_sources() -> list[str]:
-    """Les sources de la synchro du profil courant : Garmin, plus Withings si son compte est connecté."""
-    names = ["garmin"]
+    """Les sources de la synchro du profil courant : Garmin s'il a une clé, Withings et Strava si leur compte est
+    connecté. Sans rien de tout cela, Garmin quand même : sa synchro dit qu'il manque la clé."""
+    names = ["garmin"] if vault.has_key() else []
     if withings_client.connected():
         names.append("withings")
-    return names
+    if strava_client.connected():
+        names.append("strava")
+    return names or ["garmin"]
+
+
+def can_sync() -> bool:
+    """Le profil courant a-t-il de quoi synchroniser : une clé Garmin, ou un compte Withings ou Strava connecté ?"""
+    return bool(vault.has_key() or withings_client.connected() or strava_client.connected())
 
 
 class SyncBusy(Exception):
@@ -158,6 +169,8 @@ def run(*, since: date | None = None, fit_days: int | None = None, with_fit: boo
                         db.delete_meta(conn, KEY_REFUSED)
                     if name == "withings":
                         db.delete_meta(conn, withings_sync.REFUSED)
+                    if name == "strava":
+                        db.delete_meta(conn, strava_sync.REFUSED)
                 except Exception as exc:  # on note l'échec d'une source sans bloquer les autres
                     LOG.exception("Synchro %s en échec", name)
                     results[name] = {"erreur": str(exc)}
@@ -168,6 +181,8 @@ def run(*, since: date | None = None, fit_days: int | None = None, with_fit: boo
                     if name == "withings" and getattr(exc, "access_refused", False):
                         # « Withings n'accepte plus l'accès de Foulée : reconnecte ton compte »
                         _note_refusal(conn, withings_sync.REFUSED, exc)
+                    if name == "strava" and getattr(exc, "access_refused", False):
+                        _note_refusal(conn, strava_sync.REFUSED, exc)  # (son cache est déjà effacé)
             # Échec si rien n'a marché ; partiel si une source (ou un de ses flux) a échoué
             status = "echec" if names and failed == len(names) else "partiel" if failed or partial else "ok"
             finished = db.now_iso()
@@ -229,9 +244,10 @@ def due_sources(conn, now: float | None = None) -> list[str]:
 
     Rien avant le premier import (il se décide sur la page d'accueil), rien pour une clé ou un accès refusés
     (il faut passer par les Réglages), et pas plus d'un essai par demi-heure après un échec."""
+    from .strava import vue as strava_vue
     from .withings import vue as withings_vue  # (import tardif : withings.vue importe les vues)
 
-    if config.is_demo() or not vault.has_key():
+    if config.is_demo() or not can_sync():
         return []
     last_sync = db.get_meta(conn, "last_sync")
     if last_sync is None:
@@ -241,7 +257,8 @@ def due_sources(conn, now: float | None = None) -> list[str]:
     history = _history(conn)
     due = []
     for name in active_sources():
-        if (key_refused(conn) if name == "garmin" else withings_vue.refused(conn) if name == "withings" else None):
+        refusal = {"garmin": key_refused, "withings": withings_vue.refused, "strava": strava_vue.refused}.get(name)
+        if name == "garmin" and not vault.has_key() or (refusal and refusal(conn)):
             continue
         runs = [(when, res[name]) for when, res in history if isinstance(res.get(name), dict)]
         ok = next((when for when, res in runs if not res.get("erreur")), None)
@@ -271,18 +288,25 @@ def _history(conn, limit: int = 120) -> list[tuple[str, dict]]:
 
 
 def connections(conn) -> list[dict]:
-    """Pastilles de l'en-tête : une par source branchée sur le profil (Garmin toujours, Withings s'il est
-    connecté ; une autre source plus tard : une entrée de plus dans ``SOURCES`` et ``LABELS``).
+    """Pastilles de l'en-tête : une par source branchée sur le profil (Garmin dès qu'il a une clé, ou quand rien
+    d'autre n'est branché ; Withings et Strava quand leur compte est connecté ; une autre source plus tard : une
+    entrée de plus dans ``SOURCES`` et ``LABELS``).
 
     État « ok » : la dernière synchro de la source a abouti (même avec des alertes dans le journal) ;
     « ko » : elle n'a pas abouti, ou la clé (l'accès) manque ou est refusée ; « attente » : pas encore
     de synchro. Jamais de clé ni de jeton dans la réponse : seulement l'état et le message d'erreur."""
+    from .strava import cache as strava_cache
+    from .strava import vue as strava_vue
     from .withings import vue as withings_vue  # (import tardif : withings.vue importe les vues)
 
     demo = config.is_demo()
-    names = ["garmin"]
+    names = []
     if withings_vue.families(conn) if demo else (withings_client.connected() or withings_vue.refused(conn)):
         names.append("withings")
+    if strava_cache.path().exists() if demo else (strava_client.connected() or strava_vue.refused(conn)):
+        names.append("strava")
+    if demo or vault.has_key() or key_refused(conn) or not names:
+        names.insert(0, "garmin")
     history = [] if demo else _history(conn)
     out = []
     for name in names:
@@ -294,14 +318,15 @@ def connections(conn) -> list[dict]:
             "derniere_reussie": next((when for when, res in runs if not res.get("erreur")), None),
             "erreur": None, "alertes": 0, "bloque": False,  # bloque : rien à faire sans passer par les Réglages
         }
-        refusal = key_refused(conn) if name == "garmin" else withings_vue.refused(conn)
+        refusal = {"garmin": key_refused, "withings": withings_vue.refused, "strava": strava_vue.refused}[name](conn)
         if demo:
             item.update(etat="ok", texte="Mode démo : données fictives, pas de synchro.")
         elif name == "garmin" and not vault.has_key():
             item.update(etat="ko", texte="Aucune clé API Garmin : la synchro est en pause.", bloque=True)
         elif refusal:
-            text = ("Garmin refuse ta clé API : la synchro est en pause." if name == "garmin"
-                    else "Withings n'accepte plus l'accès de Foulée : reconnecte ton compte.")
+            text = {"garmin": "Garmin refuse ta clé API : la synchro est en pause.",
+                    "withings": "Withings n'accepte plus l'accès de Foulée : reconnecte ton compte.",
+                    "strava": "Strava n'accepte plus l'accès de Foulée : reconnecte ton compte."}[name]
             item.update(etat="ko", texte=text, depuis=refusal.get("depuis"), bloque=True)
         elif last is None:
             item.update(etat="attente", texte="Pas encore synchronisé.")

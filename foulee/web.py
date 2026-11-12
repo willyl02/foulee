@@ -29,7 +29,7 @@ import secrets
 import sys
 import threading
 import time
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -61,6 +61,11 @@ from . import (
 from . import sync as sync_module
 from .garmin import intraday
 from .garmin.client import KEY_PAGE, GarminError, check_key
+from .strava import cache as strava_cache
+from .strava import client as strava_client
+from .strava import sync as strava_sync
+from .strava import vue as strava_vue
+from .strava.client import StravaError
 from .withings import client as withings_client
 from .withings import vue as withings_vue
 from .withings.client import WithingsError
@@ -286,6 +291,9 @@ def create_app() -> FastAPI:
                 "application": app.state.quit is not None,
                 "cle_refusee": sync_module.key_refused(conn),
                 "withings": {"connecte": withings_client.connected(), "refus": withings_vue.refused(conn)},
+                "strava": {"connecte": strava_client.connected() or (config.is_demo() and strava_cache.path().exists()),
+                           "appli": strava_client.has_app(), "refus": strava_vue.refused(conn),
+                           "seances": strava_sync.counts()["seules"] if strava_cache.path().exists() else 0},
                 "demarre_le": STARTED_AT,
                 "maj": update_dir() is not None,
                 "volumes": db.table_counts(conn),
@@ -302,59 +310,77 @@ def create_app() -> FastAPI:
     def get_series(metric: str, start: str | None = None, end: str | None = None, agg: str = "jour",
                    fn: str | None = None, sport: str | None = None, smooth: int = 0) -> dict:
         a, b = _period(start, end)
-        with db.session(readonly=True) as conn:
-            return analysis.series(conn, _metric(metric), a, b, agg, None if fn in (None, "", "auto") else fn,
-                                   None if sport in (None, "", "tous") else sport, smooth)
+        sport = None if sport in (None, "", "tous") else sport
+        with db.session(readonly=True, strava=True) as conn:
+            data = analysis.series(conn, _metric(metric), a, b, agg, None if fn in (None, "", "auto") else fn,
+                                   sport, smooth)
+            data["sources"] = analysis.sources_for(conn, [metric], a, b, sport)
+            return data
 
     @app.get("/api/kpi")
     def get_kpi(metric: str, as_of: str | None = None, baseline: int = 30, window: str | None = None) -> dict:
-        with db.session(readonly=True) as conn:
-            return analysis.kpi(conn, _metric(metric), analysis.to_date(as_of) if as_of else None, baseline,
-                                None if window in (None, "", "auto") else window)
+        day = analysis.to_date(as_of) if as_of else None
+        with db.session(readonly=True, strava=True) as conn:
+            data = analysis.kpi(conn, _metric(metric), day, baseline, None if window in (None, "", "auto") else window)
+            end = day or date.today()
+            data["sources"] = analysis.sources_for(conn, [metric], end - timedelta(days=max(7, baseline)), end)
+            return data
 
     @app.get("/api/load")
     def get_load(start: str | None = None, end: str | None = None) -> dict:
         a, b = _period(start, end)
-        with db.session(readonly=True) as conn:
-            return {key: analysis.series(conn, key, a, b)["points"] for key in ("ctl", "atl", "tsb", "acwr", "load_day")}
+        with db.session(readonly=True, strava=True) as conn:
+            data: dict[str, Any] = {key: analysis.series(conn, key, a, b)["points"]
+                                    for key in ("ctl", "atl", "tsb", "acwr", "load_day")}
+            data["sources"] = analysis.sources_for(conn, ["ctl"], a, b)
+            return data
 
     @app.get("/api/zones")
     def get_zones(kind: str = "fc", start: str | None = None, end: str | None = None, group: str = "semaine",
                   sport: str | None = None) -> dict:
         a, b = _period(start, end)
-        with db.session(readonly=True) as conn:
+        sport = None if sport in (None, "", "tous") else sport
+        with db.session(readonly=True, strava=True) as conn:
             settings = db.get_settings(conn)
-            return analysis.zones(conn, kind, a, b, group, None if sport in (None, "", "tous") else sport, settings)
+            data = analysis.zones(conn, kind, a, b, group, sport, settings)
+            data["sources"] = analysis.sources_for(conn, [], a, b, sport, activities=True)
+            return data
 
     @app.get("/api/calendar")
     def get_calendar(metric: str, start: str | None = None, end: str | None = None) -> dict:
         a, b = _period(start, end, 180)
-        with db.session(readonly=True) as conn:
+        with db.session(readonly=True, strava=True) as conn:
             values = analysis.daily_values(conn, _metric(metric), a, b)
+            sources = analysis.sources_for(conn, [metric], a, b)
         meta = metrics.get(metric)
         return {"metric": metric, "label": meta.label, "fmt": meta.fmt, "unit": meta.unit, "better": meta.better,
-                "start": a.isoformat(), "end": b.isoformat(), "points": sorted(values.items())}
+                "start": a.isoformat(), "end": b.isoformat(), "points": sorted(values.items()), "sources": sources}
 
     @app.get("/api/scatter")
     def get_scatter(x: str, y: str, start: str | None = None, end: str | None = None, lag: int = 0) -> dict:
         a, b = _period(start, end)
-        with db.session(readonly=True) as conn:
-            return analysis.scatter(conn, _metric(x), _metric(y), a, b, db.get_settings(conn), lag)
+        with db.session(readonly=True, strava=True) as conn:
+            data = analysis.scatter(conn, _metric(x), _metric(y), a, b, db.get_settings(conn), lag)
+            data["sources"] = analysis.sources_for(conn, [x, y], a, b)
+            return data
 
     @app.get("/api/shifts")
     def get_shifts(metrics_list: str = "", start: str | None = None, end: str | None = None,
                    weekdays: int = 1) -> dict:
         keys = [_metric(k) for k in metrics_list.split(",") if k]
         a, b = _period(start, end, 180)
-        with db.session(readonly=True) as conn:
-            return analysis.shift_compare(conn, keys, a, b, db.get_settings(conn), bool(weekdays))
+        with db.session(readonly=True, strava=True) as conn:
+            data = analysis.shift_compare(conn, keys, a, b, db.get_settings(conn), bool(weekdays))
+            data["sources"] = analysis.sources_for(conn, keys, a, b)
+            return data
 
     @app.get("/api/fast-laps")
     def get_fast_laps(start: str | None = None, end: str | None = None) -> dict:
         a, b = _period(start, end, 120)
-        with db.session(readonly=True) as conn:
+        with db.session(readonly=True, strava=True) as conn:
             settings = db.get_settings(conn)
             data = analysis.fast_laps(conn, a, b, settings)
+            data["sources"] = analysis.sources_for(conn, [], a, b, "pied", activities=True)
         data["objectif"] = analysis.objective(settings)
         return data
 
@@ -366,13 +392,22 @@ def create_app() -> FastAPI:
     # -------------------------------------------------------------- accueil
     @app.get("/api/forme")
     def get_form(day: str | None = None) -> dict:
-        with db.session(readonly=True) as conn:
-            return analysis.day_form(conn, _day(day), db.get_settings(conn))
+        when = _day(day) or date.today()
+        with db.session(readonly=True, strava=True) as conn:
+            data = analysis.day_form(conn, when, db.get_settings(conn))
+            keys = [i.get("metric") for i in data.get("items") or data.get("signaux") or [] if isinstance(i, dict)]
+            data["sources"] = analysis.sources_for(conn, [k for k in keys if k], when - timedelta(days=30), when)
+            return data
 
     @app.get("/api/semaine")
     def get_week(day: str | None = None) -> dict:
-        with db.session(readonly=True) as conn:
-            return analysis.week_summary(conn, _day(day), db.get_settings(conn))
+        when = _day(day) or date.today()
+        with db.session(readonly=True, strava=True) as conn:
+            data = analysis.week_summary(conn, when, db.get_settings(conn))
+            monday = when - timedelta(days=when.weekday())
+            data["sources"] = analysis.sources_for(conn, [], monday - timedelta(days=7), monday + timedelta(days=6),
+                                                   activities=True)
+            return data
 
     @app.get("/api/allures")
     def get_paces(comparer: float | None = None, test: str | None = None) -> dict:
@@ -385,22 +420,28 @@ def create_app() -> FastAPI:
 
     @app.get("/api/records")
     def get_records(start: str | None = None, end: str | None = None, sport: str | None = "pied") -> dict:
-        with db.session(readonly=True) as conn:
-            return analysis.records(conn, _day(start), _day(end), None if sport in (None, "", "tous") else sport)
+        with db.session(readonly=True) as conn:  # records : ceux que Garmin a mesurés
+            data = analysis.records(conn, _day(start), _day(end), None if sport in (None, "", "tous") else sport)
+        data["sources"] = [{"cle": "garmin", "nom": "Garmin", "appareils": []}]
+        return data
 
     @app.get("/api/renfo")
     def get_renfo(start: str | None = None, end: str | None = None, semaines: int = 12) -> dict:
         """Bilan du renfo sur la période : séances, muscles travaillés, exercices et leur progression."""
         a, b = _period(start, end, 30)
-        with db.session(readonly=True) as conn:
-            return renfo.period(conn, a, b, max(4, min(int(semaines), 52)))
+        with db.session(readonly=True, strava=True) as conn:
+            data = renfo.period(conn, a, b, max(4, min(int(semaines), 52)))
+            data["sources"] = analysis.sources_for(conn, [], a, b, ",".join(renfo.SPORTS), activities=True)
+            return data
 
     @app.get("/api/journee")
     def get_day_detail(donnee: str = "body_battery", day: str | None = None) -> dict:
         if donnee not in intraday.KINDS:
             raise HTTPException(400, f"Donnée inconnue : {donnee}")
         with db.session() as conn:  # écriture : la réponse de Garmin est gardée pour la prochaine fois
-            return intraday.day_detail(conn, donnee, _day(day) or date.today())
+            data = intraday.day_detail(conn, donnee, _day(day) or date.today())
+        data["sources"] = [{"cle": "garmin", "nom": "Garmin", "appareils": []}]
+        return data
 
     # ------------------------------------------------------------- profils
     def remember(response: Response, entry: dict) -> Response:
@@ -625,32 +666,47 @@ def create_app() -> FastAPI:
                        search: str | None = None, limit: int = 50, offset: int = 0) -> list[dict]:
         a = analysis.to_date(start) if start else None
         b = analysis.to_date(end) if end else None
-        with db.session(readonly=True) as conn:
+        with db.session(readonly=True, strava=True) as conn:
             return analysis.activities_list(conn, a, b, None if sport in (None, "", "tous") else sport, search,
                                             min(limit, 500), offset)
 
     @app.get("/api/activities/{activity_id}")
     def get_activity(activity_id: str, fetch: int = 1) -> dict:
-        status = None
-        with db.session() as conn:
-            row = conn.execute("SELECT has_streams FROM activities WHERE id = ?", (activity_id,)).fetchone()
-            if not row:
-                raise HTTPException(404, "Séance introuvable")
-            if fetch and row["has_streams"] == 0 and vault.has_key() and not config.is_demo():
-                from .garmin.sync import ensure_streams
+        status = strava_status = None
+        if activity_id.startswith("strava:"):
+            # Séance Strava : son détail et ses courbes, demandés à Strava s'ils manquent (gardés 48 heures)
+            strava_status = strava_sync.ensure_detail(activity_id) if fetch else None
+        else:
+            with db.session() as conn:
+                row = conn.execute("SELECT has_streams FROM activities WHERE id = ?", (activity_id,)).fetchone()
+                if not row:
+                    raise HTTPException(404, "Séance introuvable")
+                if fetch and row["has_streams"] == 0 and vault.has_key() and not config.is_demo():
+                    from .garmin.sync import ensure_streams
 
-                try:
-                    status = ensure_streams(conn, activity_id)
-                except GarminError as exc:
-                    status = f"téléchargement impossible : {exc}"
+                    try:
+                        status = ensure_streams(conn, activity_id)
+                    except GarminError as exc:
+                        status = f"téléchargement impossible : {exc}"
+        with db.session(readonly=True, strava=True) as conn:
             detail = analysis.activity_detail(conn, activity_id, db.get_settings(conn))
+            if detail is None:
+                raise HTTPException(404, "Séance introuvable (une séance Strava n'est gardée que 48 heures après "
+                                         "sa dernière synchro)." if activity_id.startswith("strava:") else
+                                    "Séance introuvable")
+            strava_vue.annotate(conn, detail)
+            detail["sources"] = [{"cle": detail["source"], "nom": analysis.SOURCE_NAMES.get(detail["source"], ""),
+                                  "appareils": [detail["appareil"]] if detail.get("appareil") else []}]
         detail["telechargement"] = status
+        detail["strava_message"] = strava_status
         return detail
 
     @app.get("/api/activities/{activity_id}/streams")
     def get_streams(activity_id: str, max_points: int = 1500) -> dict:
-        with db.session(readonly=True) as conn:
+        with db.session(readonly=True, strava=True) as conn:
             data = analysis.activity_streams(conn, activity_id, max(100, min(max_points, 6000)))
+        if data is None and activity_id.startswith("strava:"):
+            data = strava_sync.polyline_streams(activity_id)  # le tracé résumé de Strava, sans aucun appel
         if data is None:
             raise HTTPException(404, "Pas de courbes pour cette séance")
         return data
@@ -723,8 +779,9 @@ def create_app() -> FastAPI:
     def start_sync(payload: dict = Body(default={})) -> dict:
         if config.is_demo():
             return {"lance": False, "message": "Mode démo : les données sont fictives, pas de synchro."}
-        if not vault.has_key():
-            return {"lance": False, "message": "Aucune clé API : ajoute-la dans les Réglages (Clé API Garmin)."}
+        if not sync_module.can_sync():
+            return {"lance": False, "message": "Aucune clé API : ajoute-la dans les Réglages (Clé API Garmin), ou "
+                                               "connecte Strava (Réglages → Strava)."}
         since = None
         if payload.get("depuis"):
             try:
@@ -997,7 +1054,9 @@ def create_app() -> FastAPI:
     @app.get("/api/withings/resume")
     def withings_summary() -> dict:
         with db.session(readonly=True) as conn:
-            return withings_vue.summary(conn)
+            data = withings_vue.summary(conn)
+        data["sources"] = [{"cle": "withings", "nom": "Withings", "appareils": []}]
+        return data
 
     @app.put("/api/withings/appli")
     def withings_app(request: Request, payload: dict = Body(...)) -> dict:
@@ -1098,6 +1157,155 @@ def create_app() -> FastAPI:
                 db.delete_meta(conn, key)
             conn.commit()
         return withings_info(request)
+
+    # ------------------------------------------------------------------ Strava
+    try:  # au démarrage : rien de Strava au-delà de 48 heures (voir strava/cache.py)
+        strava_cache.purge_all()
+    except Exception:  # jamais de quoi empêcher l'interface de démarrer
+        pass
+    # L'appli Strava (Client ID, Client Secret) sert à toute l'installation : le profil principal l'enregistre
+    # depuis la machine elle-même ou Tailscale. Chaque profil y connecte ensuite son propre compte Strava.
+    strava_pending: dict[str, dict] = {}
+    strava_notes: dict[str, dict] = {}  # profil → résultat de la dernière connexion, affiché une fois
+    strava_lock = threading.Lock()
+
+    def strava_note(profile_id: str, statut: str, message: str) -> None:
+        with strava_lock:
+            strava_notes[profile_id] = {"statut": statut, "message": message, "le": time.time()}
+
+    def strava_info(request: Request) -> dict:
+        with db.session(readonly=True) as conn:
+            info = strava_vue.status(conn)
+        with strava_lock:
+            note = strava_notes.pop((request.state.profil or {}).get("id"), None) or \
+                strava_notes.pop(unknown_profile, None)
+        if note and time.time() - note["le"] < pending_lifetime:
+            info["note"] = note
+        host = str(request.headers.get("host") or "").lower()
+        info["domaine_rappel"] = host.split("]")[0] + "]" if host.startswith("[") else host.rsplit(":", 1)[0]
+        info["local"] = bool(request.state.local)
+        info["principal"] = utilisateurs.is_principal(request.state.profil)
+        head = utilisateurs.principal()
+        info["prenom_principal"] = utilisateurs.card(head)["prenom"] if head else ""
+        info["synchro"] = jobs.get().snapshot()
+        return info
+
+    @app.get("/api/strava")
+    def strava_status(request: Request) -> dict:
+        return strava_info(request)
+
+    @app.put("/api/strava/appli")
+    def strava_app(request: Request, payload: dict = Body(...)) -> dict:
+        # Le Client Secret ne transite que par la machine elle-même ou par Tailscale (chiffré)
+        require_local(request)
+        require_principal(request)
+        if config.is_demo():
+            raise HTTPException(400, "Inutile en mode démo : les données sont fictives.")
+        try:
+            client_id = strava_client.clean_client_id(payload.get("client_id"))
+            secret = strava_client.clean_client_secret(payload.get("client_secret"))
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        where = strava_client.set_app(client_id, secret)
+        return {**strava_info(request), "emplacement": where}
+
+    @app.delete("/api/strava/appli")
+    def strava_forget_app(request: Request) -> dict:
+        """Oublie l'appli Strava de l'installation (la connexion du profil courant est retirée chez Strava)."""
+        require_local(request)
+        require_principal(request)
+        strava_client.revoke()
+        strava_client.forget_tokens()
+        strava_cache.forget()
+        strava_client.forget_app()
+        with db.session() as conn:
+            for key in ("strava_connecte_le", strava_vue.REFUSED):
+                db.delete_meta(conn, key)
+            conn.commit()
+        return strava_info(request)
+
+    @app.post("/api/strava/connexion")
+    def strava_connect(request: Request, payload: dict = Body(default={})) -> dict:
+        """Prépare l'autorisation chez Strava : renvoie l'adresse de sa page « Autoriser »."""
+        require_local(request)
+        if config.is_demo():
+            raise HTTPException(400, "Inutile en mode démo : les données sont fictives.")
+        app_data = strava_client.load_app()
+        if not (app_data.get("client_id") and app_data.get("client_secret")):
+            raise HTTPException(400, "L'appli Strava n'est pas encore enregistrée : c'est l'étape 2, depuis le profil "
+                                     "principal.")
+        origin = str(payload.get("origine") or "").rstrip("/")
+        problem = strava_client.origin_problem(origin, request.headers.get("host"))
+        if problem:
+            raise HTTPException(400, f"Connexion impossible depuis cette adresse : {problem}.")
+        nonce = secrets.token_urlsafe(18)
+        now = time.time()
+        with strava_lock:
+            for key in [k for k, v in strava_pending.items() if now - v["le"] > pending_lifetime]:
+                del strava_pending[key]
+            strava_pending[nonce] = {"profil": request.state.profil["id"], "le": now}
+        return {"url": strava_client.authorize_url(app_data["client_id"], origin, nonce),
+                "domaine": strava_client.callback_domain(origin), "libre": strava_client.callback_free(origin)}
+
+    @app.get("/strava/retour")
+    def strava_return(code: str = "", state: str = "", scope: str = "", error: str = "") -> RedirectResponse:
+        """Retour de Strava après « Autoriser » : échange du code, puis retour aux Réglages.
+
+        Le navigateur arrive de strava.com : il n'envoie pas le cookie du profil (SameSite=Strict). Le profil est
+        celui qui a lancé la connexion, retrouvé grâce au « state » : un jeton à usage unique."""
+
+        def back(statut: str, message: str, profile_id: str = unknown_profile) -> RedirectResponse:
+            strava_note(profile_id, statut, message)  # affiché par le panneau Strava des Réglages
+            return RedirectResponse(f"/#/reglages?section=strava&strava={statut}", status_code=303)
+
+        with strava_lock:
+            pending = strava_pending.pop(state, None)
+        if not pending or time.time() - pending["le"] > pending_lifetime:
+            return back("erreur", "Cette demande de connexion a expiré ou a déjà servi : relance la connexion.")
+        profile = utilisateurs.get(pending["profil"])
+        if not profile:
+            return back("erreur", "Le profil qui a lancé la connexion n'existe plus.")
+        mine = profile["id"]
+        if error:
+            return back("refus", "Strava n'a pas donné l'accès (« Autoriser » non cliqué, ou demande annulée) : rien "
+                                 "n'a changé. Tu peux relancer la connexion quand tu veux.", mine)
+        if not code:
+            return back("erreur", "Strava n'a pas renvoyé de code d'autorisation : relance la connexion.", mine)
+        with config.using_profile(profile):  # jetons, base, cache et synchro de ce profil
+            try:
+                tokens = strava_client.exchange_code(code)
+            except StravaError as exc:
+                return back("erreur", str(exc), mine)
+            readable, everything = strava_client.granted(tokens.get("scope") or scope)
+            if not readable:
+                strava_client.revoke()
+                strava_client.forget_tokens()
+                return back("erreur", "Sur la page de Strava, la case « Voir les données de tes activités » doit rester "
+                                      "cochée : sans elle, Foulée ne voit aucune séance. Relance la connexion.", mine)
+            with db.session() as conn:
+                db.set_meta(conn, "strava_connecte_le", db.now_iso())
+                db.delete_meta(conn, strava_vue.REFUSED)
+                conn.commit()
+            started = jobs.get(mine).start(sources=["strava"])
+        message = "Compte Strava connecté. " + (
+            "Premier import en cours : tes séances Strava arrivent dans un instant." if started else
+            "Une synchro est déjà en cours : tes séances Strava arriveront avec la suivante.")
+        if not everything:
+            message += " Tes séances « Moi uniquement » restent invisibles (case décochée chez Strava)."
+        return back("connecte", message, mine)
+
+    @app.delete("/api/strava")
+    def strava_disconnect(request: Request) -> dict:
+        """Déconnecte Strava pour ce profil : accès retiré chez Strava, jetons et cache effacés."""
+        require_local(request)
+        revoked = strava_client.revoke()
+        strava_client.forget_tokens()
+        strava_cache.forget()
+        with db.session() as conn:
+            for key in ("strava_connecte_le", strava_vue.REFUSED):
+                db.delete_meta(conn, key)
+            conn.commit()
+        return {**strava_info(request), "revoque": revoked}
 
     # -------------------------------------------------- dossier des données
     @app.get("/api/dossier")

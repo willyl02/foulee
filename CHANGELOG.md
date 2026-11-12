@@ -4,6 +4,15 @@ Les versions « bêta » (par exemple 0.4.0b1) sont des avant-premières : elles
 sur le canal bêta (Réglages → Mises à jour → « Recevoir les versions bêta »), puis sortent en
 version stable une fois éprouvées.
 
+## 0.7.0b1 — 12 novembre 2026 (bêta)
+
+- **Strava, en lecture seule** (Réglages → Strava) : les séances d'une montre Coros, Suunto, Polar ou Apple, d'un compteur de vélo, ou notées sur Strava, rejoignent les tiennes dans toutes les vues : listes, volumes, charge et forme, renfo. Foulée fonctionne aussi avec Strava seul, sans montre Garmin.
+- **Pas de doublons** : une séance que Garmin a déjà donnée ne compte qu'une fois (Strava indique qu'elle vient de Garmin Connect, ou les deux se recouvrent dans le temps). La séance Garmin affiche ses kudos et sa description Strava, avec le lien « View on Strava ».
+- **Renfo noté sur Strava** : l'API de Strava ne donne pas les exercices d'une séance de musculation ; Foulée lit ceux que la description énumère (Hevy, Strong, ou une note « Squat 4x10 @ 60 kg ») et garde leurs noms tels qu'écrits, souvent en anglais.
+- **D'où viennent les chiffres** : chaque tuile le dit à côté de son titre (Garmin, Strava avec l'appareil d'origine, Withings), comme Garmin le demande.
+- **Les règles de Strava, appliquées** : rien de Strava n'est gardé plus de 48 heures (relu à chaque synchro, oublié sinon) ; Claude Desktop ne voit aucune donnée Strava (pour cela, le connecteur Strava officiel de Claude) ; Strava demande un abonnement au compte qui crée l'appli Strava de Foulée. Une pastille « Strava » rejoint celles de Garmin et Withings, et son rythme de synchro se règle comme les autres.
+- Téléphone : à partir de trois sources, les pastilles de connexion n'affichent que leur point (le nom est dans le détail).
+
 ## 0.6.0b7 — 12 novembre 2026 (bêta)
 
 - **Rythme de la synchro automatique**, dans Réglages → Synchro et calculs : un délai pour Garmin et un pour Withings, de 30 minutes à 12 heures (3 heures par défaut). 3 heures est un bon compromis : séances, nuits et pesées arrivent dans la journée sans solliciter Garmin et Withings pour rien. En dessous, Foulée prévient qu'il redemanderait sans cesse des données qui n'ont pas bougé ; pour une donnée tout de suite, « Synchroniser » reste là. Claude Desktop peut aussi changer ce réglage.

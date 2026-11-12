@@ -11,6 +11,7 @@ import { startUpdateAlert } from "./maj.js";
 import { renderSettings } from "./settings.js";
 import { renderChooser, whoButton, wireWho } from "./users.js";
 import { renderWelcome } from "./welcome.js";
+import { mergeSources, rowSources, sourceText } from "./sources.js";
 import { connPills, wireConn } from "./connections.js";
 import * as A from "./tiles-activity.js";
 import * as R from "./tiles-renfo.js";
@@ -92,7 +93,7 @@ async function start() {
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") refreshConn(); });
 }
 
-function noData() { return !state.boot.volumes.daily && !state.boot.volumes.activities; }
+function noData() { return !state.boot.volumes.daily && !state.boot.volumes.activities && !state.boot.strava?.seances; }
 
 function needsWelcome() {
   const b = state.boot;
@@ -433,11 +434,34 @@ function renderTile(view, tile, index, ctx) {
   }
   const title = tile.titre || renderer.title(tile.params, ctx);
   el.setAttribute("aria-label", title);
-  el.innerHTML = `${renderer.ownHead ? "" : `<div class="tile-head"><h2 class="tile-title" title="${F.escape(title)}">${F.escape(title)}</h2><span class="tile-sub"></span></div>`}
+  el.innerHTML = `${renderer.ownHead ? "" : `<div class="tile-head"><h2 class="tile-title" title="${F.escape(title)}">${F.escape(title)}</h2><span class="tile-src" hidden></span><span class="tile-sub"></span></div>`}
     <div class="tile-body"></div>${state.editing ? tileTools() : ""}`;
   const body = el.querySelector(".tile-body");
+  // Sources des chiffres (Garmin, Strava, Withings), d'après les réponses de chaque requête de la tuile
+  let sources = [];
+  const paintSources = () => {
+    const text = sourceText(sources);
+    if (!text || renderer.ownSource) return;
+    let src = el.querySelector(".tile-src");
+    if (!src) {  // tuile qui dessine son propre en-tête (chiffre clé…) : la source en haut à droite
+      src = document.createElement("span");
+      src.className = "tile-src tile-src-corner";
+      el.appendChild(src);
+    }
+    src.textContent = text;
+    src.title = `Données : ${text}`;
+    src.hidden = false;
+  };
+  const noteSources = (list) => { sources = mergeSources(sources, list); paintSources(); };
   const tileCtx = {
     ...ctx,
+    /** api.get, en notant d'où viennent les données reçues (mention à côté du titre). */
+    get: (path, params, options) => api.get(path, params, options).then((res) => {
+      if (Array.isArray(res)) noteSources(rowSources(res));
+      else if (res?.sources) noteSources(res.sources);
+      return res;
+    }),
+    noteSources,
     sub: (text) => { const s = el.querySelector(".tile-sub"); if (s) { s.textContent = text; s.title = text; } },
     /** La tuile n'a rien à montrer ici (séance sans renfo…) : elle s'efface, sauf pendant la modification de la vue. */
     hide: () => { if (!state.editing) el.hidden = true; },
@@ -449,6 +473,7 @@ function renderTile(view, tile, index, ctx) {
   };
   Promise.resolve()
     .then(() => renderer.render(body, tile.params, tileCtx, tile, keep))
+    .then(paintSources)  // l'en-tête propre à la tuile vient d'être dessiné : la source y trouve sa place
     .catch((err) => D.message(body, `Impossible d'afficher cette tuile : ${err.message}`));
   if (state.editing) wireTileTools(view, el, index);
   return el;

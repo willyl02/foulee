@@ -79,7 +79,7 @@ export const renfo = {
   title: () => "Renfo : muscles travaillés",
   async render(body, p, ctx) {
     const { start, end, days } = ctx.period(p);
-    const d = await api.get("/api/renfo", { start, end });
+    const d = await ctx.get("/api/renfo", { start, end });
     ctx.sub(`${days} derniers jours`);
     if (!d.nb_seances && !d.semaines.some((w) => w.seances)) return message(body, NO_SESSION);
     const goal = Number(p.objectif) || 0;
@@ -136,7 +136,7 @@ export const renfo_exercices = {
   title: () => "Renfo : exercices et progression",
   async render(body, p, ctx) {
     const { start, end, days } = ctx.period(p);
-    const d = await api.get("/api/renfo", { start, end });
+    const d = await ctx.get("/api/renfo", { start, end });
     ctx.sub(`${days} derniers jours`);
     if (!d.exercices.length) return message(body, d.nb_seances ? NO_DETAIL : NO_SESSION);
     body.classList.add("scroll");

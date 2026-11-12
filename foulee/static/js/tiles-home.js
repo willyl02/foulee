@@ -67,7 +67,7 @@ export const profil = {
 export const forme = {
   title: () => "Forme du jour",
   async render(body, p, ctx) {
-    const d = await api.get("/api/forme");
+    const d = await ctx.get("/api/forme");
     if (!d.signaux.length) return message(body, d.resume);
     const today = F.isoDate(new Date());
     ctx.sub(`${d.verdict === "bon" ? "Feu vert" : d.verdict === "moyen" ? "À surveiller" : d.verdict === "alerte" ? "Prudence" : ""} · indicatif`);
@@ -123,7 +123,7 @@ export const allures = {
     const title = tile.titre || "Allures selon ta VMA";
 
     const load = async () => {
-      data = await api.get("/api/allures", { comparer: compare || "", test: test || "" }, { fresh: true });
+      data = await ctx.get("/api/allures", { comparer: compare || "", test: test || "" }, { fresh: true });
     };
 
     const vamevalPanel = () => {
@@ -206,7 +206,7 @@ const SPORT_ICON = { course: "run", trail: "run", velo: "activity", natation: "w
 export const semaine = {
   title: () => "Ta semaine",
   async render(body, p, ctx) {
-    const d = await api.get("/api/semaine");
+    const d = await ctx.get("/api/semaine");
     const today = F.isoDate(new Date());
     ctx.sub(`Semaine ${d.semaine_iso}`);
     const t = d.totaux;
@@ -242,7 +242,7 @@ export const records = {
   title: () => "Records",
   async render(body, p, ctx) {
     const { start, end, days } = ctx.period(p);
-    const d = await api.get("/api/records", { start, end, sport: p.sport });
+    const d = await ctx.get("/api/records", { start, end, sport: p.sport });
     if (!d.records.length) return message(body, "Pas encore de meilleurs temps : Garmin les calcule pour chaque sortie de course.");
     ctx.sub(`Sur ${days >= 365 ? `${Math.round(days / 365)} an${days >= 730 ? "s" : ""}` : `${days} jours`}, face à tes records`);
     body.classList.add("scroll");
@@ -340,7 +340,7 @@ export const journee = {
       chart = null;
       const iso = F.isoDate(day);
       const isToday = iso === F.isoDate(new Date());
-      body.innerHTML = `<div class="tile-head tile-head-tools"><h2 class="tile-title">${F.escape(title())}</h2><span class="tile-sub" data-sub></span>
+      body.innerHTML = `<div class="tile-head tile-head-tools"><h2 class="tile-title">${F.escape(title())}</h2><span class="tile-src" hidden></span><span class="tile-sub" data-sub></span>
           <div class="day-nav">
             <select data-kind aria-label="Donnée affichée">${DAY_KINDS.map(([k, l]) => `<option value="${k}" ${k === kind ? "selected" : ""}>${l}</option>`).join("")}</select>
             <button class="btn btn-ghost icon-btn" type="button" data-day="-1" aria-label="Jour précédent">${icon("left")}</button>
@@ -353,7 +353,7 @@ export const journee = {
       const inner = body.querySelector(".tile-body-inner");
       let d;
       try {
-        d = await api.get("/api/journee", { donnee: kind, day: iso }, { fresh: isToday });
+        d = await ctx.get("/api/journee", { donnee: kind, day: iso }, { fresh: isToday });
       } catch (err) {
         inner.innerHTML = `<div class="tile-msg">${F.escape(err.message)}</div>`;
         return;

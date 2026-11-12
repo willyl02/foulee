@@ -369,27 +369,37 @@ def refresh_all_activities(conn: sqlite3.Connection, settings: dict) -> int:
     return len(ids)
 
 
-def recompute_daily_calc(conn: sqlite3.Connection) -> None:
-    """Charge du jour, chronique (42 j), aiguë (7 j), fraîcheur et ratio, + VO2max par jour."""
-    conn.execute("DELETE FROM daily WHERE source = 'calc'")
+def daily_calc_values(conn: sqlite3.Connection) -> dict[str, dict[str, float]]:
+    """Charge du jour, chronique (42 j), aiguë (7 j), fraîcheur et ratio, jour par jour, d'après les séances que
+    voit la connexion (celles de la base ; avec les séances Strava quand l'interface branche leur cache)."""
     rows = conn.execute(
         "SELECT date, SUM(COALESCE(load, 0)) AS load FROM activities GROUP BY date ORDER BY date"
     ).fetchall()
-    if rows:
-        loads = {r["date"]: r["load"] for r in rows}
-        start = to_date(rows[0]["date"])
-        k_ctl, k_atl = 1 - math.exp(-1 / 42), 1 - math.exp(-1 / 7)
-        ctl = atl = 0.0
-        for day in days_between(start, date.today()):
-            key = iso(day)
-            load = loads.get(key, 0.0) or 0.0
-            tsb = ctl - atl
-            ctl += (load - ctl) * k_ctl
-            atl += (load - atl) * k_atl
-            values = {"load_day": load, "ctl": round(ctl, 1), "atl": round(atl, 1), "tsb": round(tsb, 1)}
-            if ctl >= 5:
-                values["acwr"] = round(atl / ctl, 2)
-            db.put_daily(conn, key, values, source="calc")
+    out: dict[str, dict[str, float]] = {}
+    if not rows:
+        return out
+    loads = {r["date"]: r["load"] for r in rows}
+    start = to_date(rows[0]["date"])
+    k_ctl, k_atl = 1 - math.exp(-1 / 42), 1 - math.exp(-1 / 7)
+    ctl = atl = 0.0
+    for day in days_between(start, date.today()):
+        key = iso(day)
+        load = loads.get(key, 0.0) or 0.0
+        tsb = ctl - atl
+        ctl += (load - ctl) * k_ctl
+        atl += (load - atl) * k_atl
+        values = {"load_day": load, "ctl": round(ctl, 1), "atl": round(atl, 1), "tsb": round(tsb, 1)}
+        if ctl >= 5:
+            values["acwr"] = round(atl / ctl, 2)
+        out[key] = values
+    return out
+
+
+def recompute_daily_calc(conn: sqlite3.Connection) -> None:
+    """Charge du jour, chronique (42 j), aiguë (7 j), fraîcheur et ratio, + VO2max par jour."""
+    conn.execute("DELETE FROM daily WHERE source = 'calc'")
+    for key, values in daily_calc_values(conn).items():
+        db.put_daily(conn, key, values, source="calc")
     for r in conn.execute(
         "SELECT date, MAX(vo2max) AS v FROM activities WHERE vo2max IS NOT NULL GROUP BY date"
     ).fetchall():
@@ -608,6 +618,60 @@ def daily_values(conn: sqlite3.Connection, key: str, start: date, end: date) -> 
             (key, iso(start), iso(end)),
         )
     }
+
+
+# ======================================================================
+#  Sources des données (mention sur chaque tuile)
+# ======================================================================
+
+SOURCE_NAMES = {"garmin": "Garmin", "strava": "Strava", "withings": "Withings"}
+CALC_LOOKBACK = 42  # la charge chronique tient compte des six semaines d'avant
+
+
+def _source_of(row: sqlite3.Row, found: dict[str, set]) -> None:
+    devices = found.setdefault(row["source"], set())
+    appareil = _extra(row).get("appareil")
+    if appareil and row["source"] != "garmin":
+        devices.add(str(appareil))
+
+
+def sources_for(conn: sqlite3.Connection, keys: Iterable[str], start: date, end: date,
+                sport: str | None = None, activities: bool = False) -> list[dict]:
+    """D'où viennent les valeurs d'une tuile : [{"cle": "garmin", "nom": "Garmin", "appareils": [...]}, ...].
+
+    Une métrique de séance compte les sources des séances qui lui donnent une valeur (une sortie vélo ne
+    compte pas pour le tonnage) ; une valeur calculée par Foulée (charge, forme) celles des séances qui l'ont
+    nourrie ; une valeur quotidienne sa source (Garmin, Withings). ``activities`` : toutes les séances."""
+    found: dict[str, set] = {}
+    act_keys: list[str] = []
+    calc = False
+    for key in dict.fromkeys(keys):
+        try:
+            metric = metrics.get(key)
+        except KeyError:
+            continue
+        if metric.kind == "raw":
+            found.setdefault("garmin", set())
+        elif metric.kind == "activity":
+            act_keys.append(key)
+        else:
+            for row in conn.execute("SELECT DISTINCT source FROM daily WHERE metric = ? AND date BETWEEN ? AND ?",
+                                    (key, iso(start), iso(end))):
+                if row["source"] == "calc":
+                    calc = True
+                else:
+                    found.setdefault(row["source"], set())
+    if activities or act_keys:
+        for row in fetch_activities(conn, start, end, sport):
+            if activities or any(_activity_value(k, [row]) not in (None, 0, 0.0) for k in act_keys):
+                _source_of(row, found)
+    if calc:
+        for row in fetch_activities(conn, start - timedelta(days=CALC_LOOKBACK), end):
+            if (row["load"] or 0) > 0:
+                _source_of(row, found)
+    order = list(SOURCE_NAMES)
+    return [{"cle": name, "nom": SOURCE_NAMES.get(name, name.capitalize()), "appareils": sorted(found[name])}
+            for name in sorted(found, key=lambda n: order.index(n) if n in order else len(order))]
 
 
 # ======================================================================
@@ -894,6 +958,7 @@ def activity_public(row: sqlite3.Row) -> dict:
     for key in ("hr_zones", "pace_zones", "hr_zones_garmin"):
         data[key] = json.loads(data[key]) if data.get(key) else None
     data["extra"] = _extra(row)
+    data["appareil"] = data["extra"].get("appareil")  # séances Strava : la montre ou le compteur d'origine
     speed = row["avg_speed"]
     data["allure"] = metrics.fmt_pace(speed) if row["sport"] in metrics.RUNNING_SPORTS + ("marche", "rando") else None
     data["vitesse_kmh"] = round(speed * 3.6, 1) if speed else None

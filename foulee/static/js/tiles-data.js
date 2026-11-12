@@ -25,7 +25,7 @@ export const kpi = {
   title: (p, ctx) => ctx.meta(p.metrique)?.label || "Chiffre clé",
   async render(body, p, ctx, tile) {
     const meta = ctx.meta(p.metrique);
-    const d = await api.get("/api/kpi", {
+    const d = await ctx.get("/api/kpi", {
       metric: p.metrique, baseline: p.reference_jours, window: p.fenetre === "auto" ? "" : p.fenetre,
     });
     const label = tile.titre || meta.label;
@@ -111,7 +111,7 @@ export const serie = {
   async render(body, p, ctx, tile, cleanup) {
     const { start, end } = ctx.period(p);
     const metas = p.metriques.map((k) => ctx.meta(k)).filter(Boolean);
-    const results = await Promise.all(metas.map((m) => api.get("/api/series", {
+    const results = await Promise.all(metas.map((m) => ctx.get("/api/series", {
       metric: m.key, start, end, agg: p.agregation, fn: p.fonction === "auto" ? "" : p.fonction,
       sport: p.sport === "tous" ? "" : p.sport, smooth: p.lissage || 0,
     })));
@@ -178,7 +178,7 @@ export const charge = {
   title: () => "Forme et fatigue",
   async render(body, p, ctx, tile, cleanup) {
     const { start, end } = ctx.period(p);
-    const d = await api.get("/api/load", { start, end });
+    const d = await ctx.get("/api/load", { start, end });
     if (!d.ctl.some((pt) => F.isNum(pt[1]) && pt[1] > 0)) return message(body, "Pas encore de séances pour calculer la charge.");
     const P = ctx.palette;
     const dates = d.ctl.map((pt) => pt[0]);
@@ -234,7 +234,7 @@ export const zones = {
   title: (p) => (p.zones === "allure" ? "Temps par zone d'allure" : "Temps par zone de FC"),
   async render(body, p, ctx, tile, cleanup) {
     const { start, end } = ctx.period(p);
-    const d = await api.get("/api/zones", {
+    const d = await ctx.get("/api/zones", {
       kind: p.zones, start, end, group: p.groupe, sport: p.sport === "tous" ? (p.zones === "allure" ? "pied" : "") : p.sport,
     });
     if (!d.seances) {
@@ -297,7 +297,7 @@ export const calendrier = {
     const months = Number(p.mois) || 6;
     const end = new Date();
     const start = new Date(end.getFullYear(), end.getMonth() - months + 1, 1);
-    const d = await api.get("/api/calendar", { metric: p.metrique, start: F.isoDate(start), end: F.isoDate(end) });
+    const d = await ctx.get("/api/calendar", { metric: p.metrique, start: F.isoDate(start), end: F.isoDate(end) });
     const values = d.points.map((pt) => pt[1]).filter(F.isNum);
     if (!values.length) return message(body, "Pas de données sur cette période.");
     const P = ctx.palette;
@@ -336,7 +336,7 @@ export const nuage = {
     const { start, end } = ctx.period(p);
     const mx = ctx.meta(p.x);
     const my = ctx.meta(p.y);
-    const d = await api.get("/api/scatter", { x: p.x, y: p.y, start, end, lag: p.decalage });
+    const d = await ctx.get("/api/scatter", { x: p.x, y: p.y, start, end, lag: p.decalage });
     if (d.n < 5) return message(body, "Pas assez de jours avec les deux mesures sur cette période.");
     ctx.sub(F.isNum(d.r) ? `r = ${F.dec2(d.r)} sur ${d.n} jours` : `${d.n} jours`);
     const P = ctx.palette;
@@ -388,7 +388,7 @@ export const postes = {
     const { start, end } = ctx.period(p);
     const h = ctx.settings.horaires || {};
     if (h.actif === false) return message(body, "Les horaires de travail sont désactivés dans les réglages.");
-    const d = await api.get("/api/shifts", { metrics_list: p.metriques.join(","), start, end, weekdays: p.jours_ouvres ? 1 : 0 });
+    const d = await ctx.get("/api/shifts", { metrics_list: p.metriques.join(","), start, end, weekdays: p.jours_ouvres ? 1 : 0 });
     const P = ctx.palette;
     const groups = (d.groupes || []).filter((g) => d.jours[g.id]);
     if (groups.length < 2) return message(body, "Il faut au moins deux postes différents sur la période pour comparer.");
@@ -440,7 +440,7 @@ export const postes = {
 export const objectif = {
   title: () => "Objectif",
   async render(body, p, ctx) {
-    const o = await api.get("/api/objective");
+    const o = await ctx.get("/api/objective");
     if (!o.date) return message(body, "Définis ton objectif dans les réglages.");
     const left = o.jours_restants;
     const counter = left > 0 ? `${left}<small>jour${left > 1 ? "s" : ""}</small>` : left === 0 ? "Jour J" : "Passé";
@@ -465,7 +465,7 @@ export const fractions = {
   title: () => "Fractions rapides face à l'allure cible",
   async render(body, p, ctx, tile, cleanup) {
     const { start, end } = ctx.period(p);
-    const d = await api.get("/api/fast-laps", { start, end });
+    const d = await ctx.get("/api/fast-laps", { start, end });
     ctx.sub(`Tours plus rapides que ${d.seuil_allure} (${d.seuil_pct_vma} % de VMA)`);
     if (!d.seances.length) return message(body, "Aucun tour rapide sur la période. Les tours viennent des fichiers FIT, téléchargés à la synchro.");
     const P = ctx.palette;

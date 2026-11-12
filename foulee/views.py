@@ -617,12 +617,13 @@ def renfo_view() -> dict:
     ]}}
 
 
-def sync_renfo_view(conn: sqlite3.Connection) -> bool:
+def sync_renfo_view(conn: sqlite3.Connection, present: bool | None = None) -> bool:
     """La vue « Renfo » arrive une fois, avec les premiers exercices de renfo (après « Entraînement »).
-    Si on la supprime, elle ne revient pas : « renfo_vue » le retient."""
+    Si on la supprime, elle ne revient pas : « renfo_vue » le retient. ``present`` : des exercices venus
+    d'ailleurs que la base (description d'une séance Strava)."""
     from . import renfo  # import local : renfo ne dépend pas des vues
 
-    if db.get_meta(conn, "renfo_vue") or not renfo.has_any(conn):
+    if db.get_meta(conn, "renfo_vue") or not (present if present is not None else renfo.has_any(conn)):
         return False
     if not conn.execute("SELECT 1 FROM views WHERE id = ?", (RENFO_VIEW,)).fetchone():
         view = renfo_view()

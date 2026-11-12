@@ -25,7 +25,8 @@ export function renderWelcome(page, boot, { toast, onImport, onDone }) {
       <ol class="welcome-steps">
         <li class="step" data-step="cle">
           <div class="step-num" aria-hidden="true">1</div>
-          <div class="step-body"><h2>${icon("key")}Ta clé API Garmin</h2><div data-key></div></div>
+          <div class="step-body"><h2>${icon("key")}Ta clé API Garmin</h2><div data-key></div>
+            ${local && !boot.demo ? `<p class="hint welcome-strava">${icon("activity")}<span>Pas de montre Garmin (Coros, Suunto, Polar, Apple…) ? Tes séances peuvent venir de Strava, en lecture seule : <a href="#/reglages?section=strava">Réglages → Strava</a>. Ensuite, ouvre simplement ton tableau de bord.</span></p>` : ""}</div>
         </li>
         <li class="step" data-step="import">
           <div class="step-num" aria-hidden="true">2</div>

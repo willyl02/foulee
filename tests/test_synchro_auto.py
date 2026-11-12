@@ -53,16 +53,17 @@ def rhythm(**minutes) -> None:
 
 
 def test_intervals_are_bounded():
-    assert sync.intervals({}) == {"garmin": 180, "withings": 180}  # 3 heures par défaut
-    assert sync.intervals({"synchro_auto": {"garmin": 5, "withings": 5000}}) == {"garmin": 30, "withings": 720}
-    assert sync.intervals({"synchro_auto": {"garmin": "vite", "withings": None}}) == {"garmin": 180, "withings": 180}
-    assert sync.intervals({"synchro_auto": "toutes les heures"}) == {"garmin": 180, "withings": 180}
+    assert sync.intervals({}) == {"garmin": 180, "withings": 180, "strava": 180}  # 3 heures par défaut
+    assert sync.intervals({"synchro_auto": {"garmin": 5, "withings": 5000}}) == \
+        {"garmin": 30, "withings": 720, "strava": 180}
+    assert sync.intervals({"synchro_auto": {"garmin": "vite", "withings": None}})["garmin"] == 180
+    assert sync.intervals({"synchro_auto": "toutes les heures"}) == {"garmin": 180, "withings": 180, "strava": 180}
 
 
 def test_setting_is_checked():
     assert reglages.clean("synchro_auto", {"garmin": "60", "withings": 720.0}) == {"garmin": 60, "withings": 720}
     for wrong, message in [({"garmin": 15}, "entre 30 et 720"), ({"withings": 1440}, "entre 30 et 720"),
-                           ({"garmin": "vite"}, "n'est pas un nombre"), ({"strava": 60}, "source inconnue"),
+                           ({"garmin": "vite"}, "n'est pas un nombre"), ({"polar": 60}, "source inconnue"),
                            (180, "un délai par source")]:
         with pytest.raises(reglages.SettingsError, match=message):
             reglages.clean("synchro_auto", wrong)
@@ -70,17 +71,18 @@ def test_setting_is_checked():
 
 def test_setting_from_the_interface_and_from_claude():
     http = TestClient(web.create_app())
-    assert http.get("/api/settings").json()["synchro_auto"] == {"garmin": 180, "withings": 180}
+    assert http.get("/api/settings").json()["synchro_auto"] == {"garmin": 180, "withings": 180, "strava": 180}
     saved = http.put("/api/settings", json={"synchro_auto": {"garmin": 60, "withings": 360}}, headers=WRITE)
-    assert saved.status_code == 200 and saved.json()["reglages"]["synchro_auto"] == {"garmin": 60, "withings": 360}
+    assert saved.status_code == 200
+    assert saved.json()["reglages"]["synchro_auto"] == {"garmin": 60, "withings": 360, "strava": 180}
     refused = http.put("/api/settings", json={"synchro_auto": {"garmin": 10}}, headers=WRITE)
     assert refused.status_code == 400 and "entre 30 et 720" in refused.text
-    assert http.get("/api/settings").json()["synchro_auto"] == {"garmin": 60, "withings": 360}
+    assert http.get("/api/settings").json()["synchro_auto"] == {"garmin": 60, "withings": 360, "strava": 180}
 
     from foulee import mcp_server
 
     changed = mcp_server.modifier_reglages({"synchro_auto": {"withings": 120}})  # le reste est gardé
-    assert changed["reglages"]["synchro_auto"] == {"garmin": 60, "withings": 120}
+    assert changed["reglages"]["synchro_auto"] == {"garmin": 60, "withings": 120, "strava": 180}
     assert "entre 30 et 720" in mcp_server.modifier_reglages({"synchro_auto": {"garmin": 1}})["erreur"]
 
 

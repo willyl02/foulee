@@ -212,6 +212,7 @@ def build(days: int = 430, seed: int = 7, *, second_profile: bool = True) -> dic
     with config.using_profile(utilisateurs.principal()):
         counts = _build_profile(days, seed)
         _build_withings(days, seed)
+        _build_strava(seed)
     if second_profile:
         for entry in utilisateurs.profiles():  # on repart d'un second profil neuf
             if not entry.get("principal") and entry.get("prenom") == SECOND_PROFILE:
@@ -472,6 +473,188 @@ def _build_withings(days: int, seed: int) -> None:
 # ------------------------------------------------- valeurs « à la Garmin »
 TE_LABELS = {"easy": "BASE", "long": "BASE", "tempo": "TEMPO", "vma": "VO2MAX", "hills": "ANAEROBIC_CAPACITY",
              "race": "LACTATE_THRESHOLD"}
+
+
+STRAVA_NOTES = ["Bonnes jambes ce matin, allure facile tenue sans forcer.", "Un peu de vent sur le retour.",
+                "Séance cochée, ressenti 6/10.", "Fractions propres, dernière répétition la plus rapide.",
+                "Jambes lourdes après la journée de boulot.", "Belle lumière en forêt, sortie tranquille."]
+HEVY_SESSIONS = [
+    ("Haut du corps", [("Bench Press (Barbell)", 50.0, 10, 4), ("Pull Up", 0.0, 7, 3), ("Overhead Press (Dumbbell)",
+                                                                                         14.0, 10, 3),
+                       ("Plank", 0.0, 0, 3)]),
+    ("Bas du corps", [("Squat (Barbell)", 60.0, 8, 4), ("Romanian Deadlift (Barbell)", 50.0, 10, 3),
+                      ("Walking Lunge (Dumbbell)", 12.0, 12, 3), ("Standing Calf Raise", 20.0, 15, 3)]),
+]
+
+
+def _hevy_text(title: str, exercises: list, progress: float) -> str:
+    lines = [title]
+    for name, kg, reps, sets in exercises:
+        lines.append("")
+        lines.append(name)
+        for index in range(sets):
+            if name == "Plank":
+                lines.append(f"Set {index + 1}: {45 + 15 * round(progress * 2)}s")
+            elif kg:
+                lines.append(f"Set {index + 1}: {kg + 2.5 * round(progress * 4):g} kg x {reps}")
+            else:
+                lines.append(f"Set {index + 1}: {reps + round(progress * 3)} reps")
+    lines += ["", "Logged with Hevy"]
+    return "\n".join(lines)
+
+
+def _ride_track(rng: random.Random, km: float) -> tuple[list[tuple[float, float]], dict]:
+    """Boucle à vélo autour de la forêt : tracé et courbes (toutes les 10 secondes)."""
+    lat, lon = BASE_LAT + rng.uniform(-0.03, 0.03), BASE_LON + rng.uniform(-0.04, 0.04)
+    speed = rng.uniform(7.0, 8.2)  # m/s
+    seconds = int(km * 1000 / speed)
+    streams: dict[str, list] = {k: [] for k in ("t", "hr", "spd", "alt", "dist", "lat", "lon", "cad")}
+    track, distance, heading = [], 0.0, rng.uniform(0, 2 * math.pi)
+    for t in range(0, seconds, 10):
+        phase = t / seconds
+        heading += 2 * math.pi * 10 / seconds + 0.012 * math.sin(t / 420) + rng.gauss(0, 0.01)
+        v = speed * (1 + 0.12 * math.sin(t / 300)) + rng.gauss(0, 0.25)
+        lat += v * 10 * math.cos(heading) / 111_320
+        lon += v * 10 * math.sin(heading) / (111_320 * math.cos(math.radians(lat)))
+        distance += v * 10
+        track.append((lat, lon))
+        streams["t"].append(float(t))
+        streams["hr"].append(round(122 + 18 * math.sin(phase * math.pi) + rng.gauss(0, 2)))
+        streams["spd"].append(round(v, 2))
+        streams["alt"].append(round(85 + 25 * math.sin(phase * 3 * math.pi), 1))
+        streams["dist"].append(round(distance, 1))
+        streams["lat"].append(round(lat, 6))
+        streams["lon"].append(round(lon, 6))
+        streams["cad"].append(round(84 + rng.gauss(0, 3)))
+    return track, streams
+
+
+def _encode_polyline(points: list[tuple[float, float]]) -> str:
+    out, last = [], (0, 0)
+    for lat, lon in points:
+        current = (round(lat * 1e5), round(lon * 1e5))
+        for delta in (current[0] - last[0], current[1] - last[1]):
+            value = ~(delta << 1) if delta < 0 else delta << 1
+            while value >= 0x20:
+                out.append(chr((0x20 | (value & 0x1F)) + 63))
+                value >>= 5
+            out.append(chr(value + 63))
+        last = current
+    return "".join(out)
+
+
+def _build_strava(seed: int) -> None:
+    """Strava fictif : copies Strava de séances Garmin (titres, ressentis, kudos), sorties vélo d'un compteur
+    Wahoo et séances de musculation notées avec Hevy, que Foulée lit seulement chez Strava."""
+    from . import fitfile
+    from .strava import cache as strava_cache
+    from .strava import parse as strava_parse
+
+    rng = random.Random(seed + 23)
+    path = strava_cache.path()
+    for suffix in ("", "-wal", "-shm"):
+        candidate = path.with_name(path.name + suffix)
+        if candidate.exists():
+            candidate.unlink()
+    today = date.today()
+    now = strava_cache.now_iso()
+    with db.session() as conn:
+        settings = db.get_settings(conn)
+        hrp = analysis.hr_profile(conn, settings)
+        garmin = conn.execute("SELECT * FROM activities WHERE date >= ? ORDER BY start_local",
+                              ((today - timedelta(days=45)).isoformat(),)).fetchall()
+        busy = conn.execute("SELECT start_local, COALESCE(elapsed_s, duration_s, 0) AS d FROM activities "
+                            "WHERE date >= ?", ((today - timedelta(days=130)).isoformat(),)).fetchall()
+    coef = analysis.trimp_coef(settings)
+    next_id = 19_000_000_000 + rng.randint(0, 9_000_000)
+    rows: list[tuple[dict, dict | None, list[dict]]] = []
+
+    def base(strava_id: int, start: datetime, sport_type: str, name: str, seconds: float, **values) -> dict:
+        family = strava_parse.sport_family(sport_type)
+        row = {"id": f"strava:{strava_id}", "source": "strava", "source_id": str(strava_id),
+               "start_local": start.isoformat(sep=" "), "start_utc": None, "date": start.date().isoformat(),
+               "sport": family, "type_key": sport_type, "name": name, "duration_s": seconds, "moving_s": seconds,
+               "elapsed_s": seconds, "strava_id": strava_id, "confirmed_at": now, "detail_at": now, "updated_at": now}
+        row.update(values)
+        return row
+
+    # Copies Strava des séances Garmin récentes (téléversées par Garmin Connect)
+    for g in garmin:
+        next_id += rng.randint(3_000, 90_000)
+        note = rng.choice(STRAVA_NOTES) if rng.random() < 0.55 else None
+        extra = {"strava_id": next_id, "appareil": "Garmin Forerunner 965", "kudos": rng.randint(0, 14)}
+        rows.append((base(next_id, datetime.fromisoformat(g["start_local"]), "Run" if g["sport"] in ("course", "trail")
+                          else "WeightTraining" if g["sport"] == "renfo" else "Workout", g["name"],
+                          g["elapsed_s"] or g["duration_s"] or 0, distance_m=g["distance_m"], avg_hr=g["avg_hr"],
+                          description=note, garmin_id=g["source_id"], external_id=f"garmin_push_{g['source_id']}",
+                          device_name="Garmin Forerunner 965", extra=json.dumps(extra)), None, []))
+
+    def free(start: datetime, seconds: float) -> bool:
+        for other in busy:
+            begin = datetime.fromisoformat(other["start_local"])
+            if begin < start + timedelta(seconds=seconds) and start < begin + timedelta(seconds=other["d"] or 0):
+                return False
+        return True
+
+    # Séances faites sans la montre Garmin : vélo (compteur Wahoo) et musculation (Hevy)
+    for back in range(118, 0, -1):
+        day = today - timedelta(days=back)
+        if day.weekday() == 6 and rng.random() < 0.8:
+            km = round(rng.uniform(38, 72), 1)
+            track, streams = _ride_track(rng, km)
+            seconds = streams["t"][-1] + 10
+            start = datetime.combine(day, datetime.min.time()) + timedelta(hours=16, minutes=rng.randint(0, 50))
+            if not free(start, seconds):
+                continue
+            next_id += rng.randint(3_000, 90_000)
+            avg_hr = round(sum(streams["hr"]) / len(streams["hr"]))
+            trimp = analysis.trimp_from_streams(streams, hrp["rest"], hrp["max"], coef)
+            zones = analysis.hr_zone_seconds(streams, hrp["floors"])
+            extra = {"strava_id": next_id, "appareil": "Wahoo ELEMNT BOLT", "kudos": rng.randint(2, 11)}
+            row = base(next_id, start, "Ride", rng.choice(["Sortie vélo du dimanche", "Boucle des Trois Pignons",
+                                                            "Vélo tranquille"]), seconds,
+                       distance_m=streams["dist"][-1], elev_gain_m=round(rng.uniform(180, 520)), avg_hr=avg_hr,
+                       max_hr=max(streams["hr"]), avg_speed=round(streams["dist"][-1] / seconds, 3),
+                       max_speed=round(max(streams["spd"]) + 2.5, 2), avg_cadence=84, trimp=trimp, load=trimp,
+                       hr_zones=json.dumps(zones) if zones else None, calories=round(seconds / 60 * 9.5),
+                       device_name="Wahoo ELEMNT BOLT", polyline=_encode_polyline(track[::3]), has_streams=1,
+                       streams_at=now, description="Sortie vélo pour faire du foncier sans taper dans les jambes.",
+                       extra=json.dumps(extra))
+            rows.append((row, streams, []))
+        if day.weekday() in (1, 4) and rng.random() < 0.7:
+            title, plan = HEVY_SESSIONS[day.weekday() == 4]
+            progress = 1 - back / 118
+            text = _hevy_text(title, plan, progress)
+            exercises = strava_parse.exercises_from_text(text)
+            seconds = 60 * rng.randint(48, 62)
+            start = datetime.combine(day, datetime.min.time()) + timedelta(hours=12, minutes=rng.randint(0, 20))
+            if not free(start, seconds):
+                continue
+            next_id += rng.randint(3_000, 90_000)
+            avg_hr = rng.randint(98, 112)
+            trimp = analysis.trimp_from_summary(seconds, avg_hr, hrp["rest"], hrp["max"], coef)
+            extra = {"strava_id": next_id, "kudos": rng.randint(0, 6), "sets": sum(e["sets"] for e in exercises),
+                     "reps": sum(e["reps"] for e in exercises), "volume": round(sum(e["volume_kg"] for e in exercises), 1),
+                     "type_strava": "WeightTraining"}
+            row = base(next_id, start, "WeightTraining", f"Muscu : {title.lower()}", seconds, avg_hr=avg_hr,
+                       max_hr=avg_hr + 28, trimp=trimp, load=trimp, calories=round(seconds / 60 * 6),
+                       description=text, extra=json.dumps(extra))
+            rows.append((row, None, exercises))
+
+    with strava_cache.session() as cconn:
+        for row, streams, exercises in rows:
+            columns = list(row)
+            cconn.execute(f"INSERT INTO activities({', '.join(columns)}) VALUES ({', '.join('?' for _ in columns)})",
+                          [row[c] for c in columns])
+            if streams:
+                cconn.execute("INSERT INTO streams(activity_id, payload) VALUES (?, ?)",
+                              (row["id"], fitfile.pack_streams(streams)))
+            for e in exercises:
+                cconn.execute("INSERT INTO exercises(activity_id, idx, category, name, sets, reps, duration_s, max_kg, "
+                              "volume_kg) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                              (row["id"], e["idx"], e["category"], e["name"], e["sets"], e["reps"], e["duration_s"],
+                               e["max_kg"], e["volume_kg"]))
+        strava_cache.set_meta(cconn, "liste_complete_le", now)
 
 
 def activity_extra(sim: dict, trimp: float, rng: random.Random) -> dict:

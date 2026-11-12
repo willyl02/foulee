@@ -138,6 +138,62 @@ Withings, ou connexion expirée), un bandeau te propose de reconnecter le compte
 **Déconnecter Withings** arrête la synchro de tes mesures et retire la vue ; les
 mesures déjà importées restent.
 
+### Relier ton compte Strava (facultatif, en lecture seule)
+
+Une montre Coros, Suunto, Polar ou Apple, un compteur de vélo, une séance de
+musculation notée sur Strava : ces séances rejoignent les tiennes dans toutes les vues
+(listes, volumes, charge, renfo). Avec une montre Garmin, Strava apporte aussi le titre,
+la description et les kudos de tes séances, affichés sur la séance Garmin. Sans montre
+Garmin, Foulée fonctionne avec Strava seul.
+
+**Ce que Strava impose** (son accord et sa politique d'API du 1er juin 2026), et que
+Foulée applique :
+
+- **Lecture seule** : Foulée ne demande que les droits `read` et `activity:read_all`.
+  Strava lui-même l'empêche alors de publier, modifier ou effacer quoi que ce soit. Les
+  seuls envois servent à l'autorisation (obtenir, renouveler et retirer l'accès).
+- **Un cache de 48 heures, pas une archive** : Strava interdit de garder ses données
+  (7 jours au plus, et une séance effacée sur Strava doit disparaître sous 48 heures).
+  Elles vont dans un fichier à part (`strava-cache.db`, dans le dossier du profil), relu
+  à chaque synchro ; ce qui n'a pas été relu depuis 48 heures n'est plus montré, puis
+  effacé. PC éteint deux jours : tes séances Strava reviennent avec la synchro suivante.
+- **Pas pour l'IA** : Strava interdit de confier ses données à une IA. Claude Desktop ne
+  voit donc aucune donnée Strava dans Foulée (le connecteur ne lit pas ce fichier, et ne
+  lance jamais de synchro Strava). Pour parler de tes séances Strava avec Claude, branche
+  le connecteur Strava officiel dans Claude.
+- **Un abonnement Strava pour créer l'appli** : depuis juin 2026, l'API de Strava est
+  réservée à ses abonnés. Le profil principal crée une appli pour toute l'installation ;
+  les autres profils s'y connectent sans abonnement, une fois l'appli passée à
+  10 athlètes dans les réglages API de Strava.
+
+**Réglages → Strava** guide pas à pas :
+
+1. **Crée l'appli Strava de Foulée** dans les
+   [réglages API de Strava](https://www.strava.com/settings/api) : un nom **sans le mot
+   « Strava »** (Strava le refuse), la catégorie *Visualizer*, et dans **Authorization
+   Callback Domain** l'adresse de ton Foulée sans le port (`127.0.0.1` sur le PC, le nom
+   Tailscale du serveur ; bouton « Copier » dans Foulée). Strava demande ensuite une
+   image : prends l'icône de Foulée, jamais le logo de Strava.
+2. **Colle le Client ID et le Client Secret** dans Foulée : ils vont dans le coffre,
+   comme la clé Garmin, depuis la machine elle-même ou par Tailscale seulement.
+3. **Connecter mon compte Strava**, puis **Autoriser** chez Strava : tu reviens dans les
+   Réglages et le premier import démarre.
+
+**Doublons** : une séance que Garmin a déjà donnée ne compte qu'une fois. Foulée
+reconnaît la copie Strava (Strava indique qu'elle vient de Garmin Connect, ou les deux
+se recouvrent au moins de moitié dans le temps) et garde la séance Garmin, plus riche.
+
+**Renfo noté sur Strava** : l'API de Strava ne donne pas les exercices d'une séance de
+musculation (elle sait seulement les recevoir). Foulée lit ceux que la description
+énumère, comme le font Hevy ou Strong, ou une note à la main (« Squat 4x10 @ 60 kg ») ;
+leurs noms restent tels qu'écrits, souvent en anglais, comme on les dit à la salle.
+
+**Sources** : chaque tuile dit d'où viennent ses chiffres, à côté de son titre
+(« Garmin · Strava (Wahoo ELEMNT BOLT) », « Withings »), comme Garmin le demande ; une
+séance Strava propose le lien **View on Strava**. Quotas : Strava limite les appels
+(100 par quart d'heure, 1 000 par jour pour une appli à un athlète) ; Foulée garde de la
+marge et complète le détail des séances au fil des synchros.
+
 ## 3. Utiliser l'interface
 
 | Vue | Contenu |
