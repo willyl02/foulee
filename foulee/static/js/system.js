@@ -4,6 +4,7 @@ import * as api from "./api.js";
 import * as F from "./format.js";
 import { icon } from "./icons.js";
 import { installUpdate, noAnswer as noUpdateAnswer, refreshUpdateAlert, waitFor } from "./maj.js";
+import { calendarPanel } from "./settings-calendrier.js";
 import { stravaPanel } from "./settings-strava.js";
 import { withingsPanel } from "./settings-withings.js";
 
@@ -29,6 +30,7 @@ export function systemSections(boot) {
   }
   parts.push(section("withings", "Withings", `Balance, tensiomètre, Sleep Analyzer, montre : relie ton compte Withings et tes mesures arrivent dans Foulée avec la synchro, dans une vue « Withings » qui s'ajoute toute seule${(boot.utilisateurs || []).length > 1 ? ". Chaque profil relie son propre compte" : ""}.`));
   parts.push(section("strava", "Strava", `Une montre Coros, Suunto, Polar ou Apple, un compteur de vélo, une séance de musculation notée sur Strava : relie ton compte Strava, en lecture seule, et ces séances rejoignent les tiennes. Celles que Garmin donne déjà ne comptent qu'une fois${(boot.utilisateurs || []).length > 1 ? ". Chaque profil relie son propre compte" : ""}.`));
+  parts.push(section("calendrier", "Calendrier d'entraînement", `Tes séances prévues et tes courses, depuis ton calendrier Garmin Connect (ou un agenda Google, celui du club…) : colle son lien de publication, et Foulée ajoute une vue «&nbsp;Calendrier&nbsp;» à la colonne et tes séances prévues dans «&nbsp;Ta semaine&nbsp;», face à ce que tu as fait${(boot.utilisateurs || []).length > 1 ? ". Chaque profil relie son propre calendrier" : ""}.`));
   if (boot.utilisateur && !boot.utilisateur.principal) {
     // Le reste concerne toute l'installation : c'est l'affaire de l'utilisateur principal
     const head = (boot.utilisateurs || []).find((u) => u.principal);
@@ -66,6 +68,7 @@ export function wireSystem(root, boot, ctx) {
   if (find("cle")) keyPanel(find("cle"), boot, ctx);
   if (find("withings")) withingsPanel(find("withings"), boot, { toast: ctx.toast, startSync: ctx.startSync, onChange: ctx.onWithings });
   if (find("strava")) stravaPanel(find("strava"), boot, { toast: ctx.toast, startSync: ctx.startSync, onChange: ctx.onWithings });
+  if (find("calendrier")) calendarPanel(find("calendrier"), boot, { toast: ctx.toast, onChange: ctx.onWithings });
   if (find("dossier")) folderPanel(find("dossier"), boot, ctx);
   if (find("claude")) claudePanel(find("claude"), ctx);
   if (find("app")) appPanel(find("app"), ctx);

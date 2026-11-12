@@ -1410,11 +1410,15 @@ def day_form(conn: sqlite3.Connection, day: date | None, settings: dict) -> dict
 
 
 def week_summary(conn: sqlite3.Connection, day: date | None, settings: dict) -> dict:
-    """Semaine en cours (lundi → dimanche) : séances, volume et charge face aux 4 semaines précédentes."""
+    """Semaine en cours (lundi → dimanche) : séances, volume et charge face aux 4 semaines précédentes, et les
+    séances prévues par le calendrier d'entraînement (faites, manquées, à venir) s'il est relié."""
+    from . import calendrier  # import tardif : le calendrier importe les métriques
+
     day = day or date.today()
     monday = day - timedelta(days=day.weekday())
     plan = schedule.Schedule.of(settings)
     rows = fetch_activities(conn, monday, monday + timedelta(days=6))
+    planned = calendrier.plan(conn, monday, monday + timedelta(days=6), activities=rows)
     days = []
     for offset in range(7):
         current = monday + timedelta(days=offset)
@@ -1426,6 +1430,7 @@ def week_summary(conn: sqlite3.Connection, day: date | None, settings: dict) -> 
                          "nom": r["name"], "distance_km": round((r["distance_m"] or 0) / 1000, 1),
                          "duree": metrics.fmt_duration(r["duration_s"]), "charge": round(r["load"] or 0)}
                         for r in items],
+            "prevu": [p for p in planned if p["date"] == iso(current)],
         })
 
     def totals(items: list) -> dict:
@@ -1443,7 +1448,7 @@ def week_summary(conn: sqlite3.Connection, day: date | None, settings: dict) -> 
     now["duree"] = metrics.fmt_duration(now["duree_s"])
     average["duree"] = metrics.fmt_duration(average["duree_s"])
     return {"lundi": iso(monday), "semaine_iso": monday.isocalendar()[1], "jours": days, "totaux": now,
-            "moyenne_4_semaines": average}
+            "moyenne_4_semaines": average, "plan": calendrier.tally(planned) if planned else None}
 
 
 # ======================================================================

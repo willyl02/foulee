@@ -4,6 +4,17 @@ Les versions « bêta » (par exemple 0.4.0b1) sont des avant-premières : elles
 sur le canal bêta (Réglages → Mises à jour → « Recevoir les versions bêta »), puis sortent en
 version stable une fois éprouvées.
 
+## 0.7.0b2 — 12 novembre 2026 (bêta)
+
+- **Calendrier d'entraînement** (Réglages → Calendrier) : colle le lien de ton calendrier Garmin Connect publié (calendrier → trois points → « Publier le calendrier »), ou celui d'un agenda Google ou du club, et tes séances prévues et tes courses arrivent dans Foulée, face à ce que tu as réellement fait.
+- **Une vue « Calendrier »** s'ajoute juste après l'Accueil : ta prochaine course avec son compte à rebours et tes prochaines séances, puis le mois jour par jour. Un clic sur un jour donne le détail (consigne de la séance, heure et lieu d'une course, séance faite à ouvrir d'un clic) ; les flèches du clavier passent d'un jour à l'autre ; sur téléphone, des pastilles remplacent les titres. Elle s'en va si tu retires le lien.
+- **« Ta semaine »** (Accueil) montre les séances prévues de chaque jour : cochées quand elles sont faites, barrées quand elles sont manquées, en pointillé quand elles sont à venir, et un drapeau rouge pour une course. Le bilan de la semaine s'y ajoute (« Prévues 4/6 faites »). Un clic mène au jour dans la vue Calendrier.
+- **Fait ou manqué** : une séance du même sport le même jour rend une séance prévue « faite » ; un jour passé sans rien de tel la rend « manquée ». Le calendrier publié par Garmin ne contient que l'avenir : Foulée garde lui-même ce qu'il a lu, jour après jour.
+- **Une pastille « Calendrier »** rejoint celles de Garmin, Withings et Strava : verte quand la dernière lecture a réussi, rouge sinon. Si la publication est annulée (le lien ne répond plus), la lecture se met en pause et la pastille t'envoie coller le nouveau lien ; les séances déjà lues restent. Le calendrier est relu avec la synchro automatique, à son propre rythme (3 heures par défaut), ou tout de suite avec « Actualiser ».
+- **Le lien reste secret** : il donne ton calendrier à quiconque le connaît. Il va dans le coffre, comme la clé Garmin, ne se colle que depuis la machine elle-même ou par Tailscale, et ne s'affiche plus qu'abrégé ; ni la sauvegarde des réglages, ni le journal, ni les messages d'erreur, ni Claude ne le voient.
+- **Claude Desktop** voit tes séances prévues et leur état : nouvel outil `calendrier`, et les séances prévues de chaque jour dans `semaine`.
+- Aide : nouveau thème « Calendrier d'entraînement ». Mode démo : un plan de préparation au semi, avec un 10 km.
+
 ## 0.7.0b1 — 12 novembre 2026 (bêta)
 
 - **Strava, en lecture seule** (Réglages → Strava) : les séances d'une montre Coros, Suunto, Polar ou Apple, d'un compteur de vélo, ou notées sur Strava, rejoignent les tiennes dans toutes les vues : listes, volumes, charge et forme, renfo. Foulée fonctionne aussi avec Strava seul, sans montre Garmin.

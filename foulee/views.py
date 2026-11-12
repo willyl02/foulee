@@ -58,8 +58,25 @@ TILE_TYPES: list[dict[str, Any]] = [
     },
     {
         "type": "semaine", "label": "Ta semaine", "icone": "calendar", "categorie": "Accueil",
-        "description": "Les 7 jours de la semaine : postes, séances, volume et charge face aux 4 semaines d'avant.",
+        "description": "Les 7 jours de la semaine : postes, séances faites et prévues (calendrier d'entraînement), "
+                       "volume et charge face aux 4 semaines d'avant.",
         "taille": {"w": 12, "h": 2}, "params": [],
+    },
+    {
+        "type": "a_venir", "label": "Prochaines séances", "icone": "flag", "categorie": "Entraînement",
+        "description": "Ta prochaine course (compte à rebours) et tes prochaines séances prévues, d'après ton "
+                       "calendrier d'entraînement (Réglages → Calendrier).",
+        "taille": {"w": 12, "h": 1},
+        "params": [
+            {"key": "jours", "label": "Séances des N prochains jours", "kind": "select", "options": ["7", "14", "28"],
+             "default": "14"},
+        ],
+    },
+    {
+        "type": "agenda", "label": "Calendrier d'entraînement", "icone": "calendar", "categorie": "Entraînement",
+        "description": "Le mois en un coup d'œil : séances prévues et courses de ton calendrier (Garmin Connect ou "
+                       "agenda iCal) face à ce que tu as fait, jour par jour. Un clic sur un jour donne le détail.",
+        "taille": {"w": 12, "h": 3}, "params": [],
     },
     {
         "type": "kpi", "label": "Chiffre clé", "icone": "gauge", "categorie": "Chiffres et courbes",
@@ -269,6 +286,7 @@ ICONS = ["home", "sun", "activity", "map", "moon", "flag", "heart", "chart", "ca
 CLUB_VIEW = "club"
 WITHINGS_VIEW = "withings"
 RENFO_VIEW = "renfo"
+CALENDAR_VIEW = "calendrier"
 
 
 def _tile(kind: str, w: int | None = None, h: int | None = None, titre: str | None = None, **params: Any) -> dict:
@@ -602,6 +620,42 @@ def sync_withings_view(conn: sqlite3.Connection, enabled: bool, families: list[s
             (view["id"], view["name"], view["icon"], position, spec, db.now_iso()),
         )
     db.set_meta(conn, "withings_vue_auto", spec)
+
+
+def calendar_view(view_id: str = CALENDAR_VIEW) -> dict:
+    """La vue « Calendrier » : la prochaine course et les prochaines séances, puis le mois en entier."""
+    return {"id": view_id, "name": "Calendrier", "icon": "calendar", "spec": {"tuiles": [
+        _tile("a_venir", 12, 1),
+        _tile("agenda", 12, 3),
+    ]}}
+
+
+def sync_calendar_view(conn: sqlite3.Connection, enabled: bool) -> str | None:
+    """La vue « Calendrier » arrive avec le lien du calendrier (juste après l'Accueil) et repart avec lui. Son
+    identifiant est retenu (« calendrier_vue ») : une vue que tu aurais appelée « Calendrier » toi-même n'est
+    jamais touchée. Renvoie l'identifiant de la vue (None quand elle s'en va)."""
+    mine = db.get_meta(conn, "calendrier_vue")
+    exists = mine and conn.execute("SELECT 1 FROM views WHERE id = ?", (mine,)).fetchone()
+    if not enabled:
+        if exists:
+            conn.execute("DELETE FROM views WHERE id = ?", (mine,))
+        db.delete_meta(conn, "calendrier_vue")
+        return None
+    if exists:
+        return mine
+    view_id, n = CALENDAR_VIEW, 2
+    while conn.execute("SELECT 1 FROM views WHERE id = ?", (view_id,)).fetchone():
+        view_id, n = f"{CALENDAR_VIEW}-{n}", n + 1
+    view = calendar_view(view_id)
+    home = conn.execute("SELECT position FROM views WHERE id = 'accueil'").fetchone()
+    position = (home["position"] + 1) if home else 0
+    conn.execute("UPDATE views SET position = position + 1 WHERE position >= ?", (position,))
+    conn.execute(
+        "INSERT INTO views(id, name, icon, position, spec, builtin, updated_at) VALUES (?, ?, ?, ?, ?, 0, ?)",
+        (view["id"], view["name"], view["icon"], position, json.dumps(view["spec"], ensure_ascii=False), db.now_iso()),
+    )
+    db.set_meta(conn, "calendrier_vue", view_id)
+    return view_id
 
 
 def renfo_view() -> dict:

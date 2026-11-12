@@ -26,6 +26,7 @@ import json
 import mimetypes
 import os
 import secrets
+import sqlite3
 import sys
 import threading
 import time
@@ -41,6 +42,7 @@ from . import (
     __version__,
     access,
     analysis,
+    calendrier,
     club,
     claude_desktop,
     config,
@@ -294,6 +296,7 @@ def create_app() -> FastAPI:
                 "strava": {"connecte": strava_client.connected() or (config.is_demo() and strava_cache.path().exists()),
                            "appli": strava_client.has_app(), "refus": strava_vue.refused(conn),
                            "seances": strava_sync.counts()["seules"] if strava_cache.path().exists() else 0},
+                "calendrier": calendrier.status(conn),  # jamais le lien (secret), même masqué
                 "demarre_le": STARTED_AT,
                 "maj": update_dir() is not None,
                 "volumes": db.table_counts(conn),
@@ -407,6 +410,32 @@ def create_app() -> FastAPI:
             monday = when - timedelta(days=when.weekday())
             data["sources"] = analysis.sources_for(conn, [], monday - timedelta(days=7), monday + timedelta(days=6),
                                                    activities=True)
+            if data.get("plan"):
+                data["sources"].append(calendrier.source(conn))
+            return data
+
+    @app.get("/api/calendrier")
+    def get_planned(start: str | None = None, end: str | None = None) -> dict:
+        """Calendrier d'entraînement sur une période : séances prévues et courses (avec leur état : fait, manqué,
+        à venir), séances faites, bilan et prochaine course."""
+        a, b = _period(start, end, 42)
+        if (b - a).days > 400:
+            raise HTTPException(400, "Période trop longue pour le calendrier (400 jours au plus).")
+        with db.session(readonly=True, strava=True) as conn:
+            rows = analysis.fetch_activities(conn, a, b)
+            planned = calendrier.plan(conn, a, b, activities=rows)
+            data = {
+                **calendrier.status(conn), "debut": analysis.iso(a), "fin": analysis.iso(b),
+                "evenements": planned, "bilan": calendrier.tally(planned),
+                "seances": [{"id": r["id"], "date": r["date"], "heure": (r["start_local"] or "")[11:16] or None,
+                             "sport": r["sport"], "sport_label": metrics.SPORTS.get(r["sport"], r["sport"]),
+                             "nom": r["name"], "distance_km": round((r["distance_m"] or 0) / 1000, 1),
+                             "duree": metrics.fmt_duration(r["duration_s"]), "d_plus": round(r["elev_gain_m"] or 0),
+                             "source": r["source"]} for r in rows],
+                "sources": analysis.sources_for(conn, [], a, b, activities=True),
+            }
+            if planned or data["lie"]:
+                data["sources"].append(calendrier.source(conn))
             return data
 
     @app.get("/api/allures")
@@ -790,7 +819,13 @@ def create_app() -> FastAPI:
                 raise HTTPException(400, "Date de début illisible (AAAA-MM-JJ).") from exc
             if since > date.today():
                 raise HTTPException(400, "La date de début est dans le futur.")
-        started = jobs.get().start(since)
+        sources = None
+        if payload.get("sources") is not None:  # une seule source (pastille du calendrier : « Actualiser »)
+            wanted = payload["sources"] if isinstance(payload["sources"], list) else [payload["sources"]]
+            sources = [s for s in sync_module.active_sources() if s in wanted]
+            if not sources:
+                return {"lance": False, "message": "Cette source n'est pas branchée sur ton profil."}
+        started = jobs.get().start(since, sources)
         return {"lance": started, "message": "Synchro lancée" if started else "Une synchro est déjà en cours"}
 
     @app.get("/api/sync")
@@ -1306,6 +1341,82 @@ def create_app() -> FastAPI:
                 db.delete_meta(conn, key)
             conn.commit()
         return {**strava_info(request), "revoque": revoked}
+
+    # -------------------------------------------------------------- calendrier
+    # Le lien de publication du calendrier donne celui-ci à quiconque le connaît : il arrive par la machine
+    # elle-même ou par Tailscale (chiffré), va dans le coffre, et ne repart jamais (au plus sa version masquée).
+    busy_db = "La base est occupée par une synchro en cours : réessaie dans un instant."
+
+    def calendar_info(request: Request) -> dict:
+        with db.session(readonly=True) as conn:
+            info = calendrier.status(conn, with_link=True)
+            mine = db.get_meta(conn, "calendrier_vue")
+            info["vue"] = mine if mine and conn.execute("SELECT 1 FROM views WHERE id = ?", (mine,)).fetchone() \
+                else None
+            info["lie_le"] = db.get_meta(conn, "calendrier_lie_le")
+        info["local"] = bool(request.state.local)
+        return info
+
+    @app.get("/api/calendrier/statut")
+    def calendar_status(request: Request) -> dict:
+        return calendar_info(request)
+
+    @app.put("/api/calendrier")
+    def calendar_link(request: Request, payload: dict = Body(...)) -> dict:
+        """Lit le calendrier une première fois, puis range son lien et ajoute la vue « Calendrier »."""
+        require_local(request)
+        if config.is_demo():
+            raise HTTPException(400, "Inutile en mode démo : les données sont fictives.")
+        try:
+            url = calendrier.clean_url(payload.get("lien"))
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from None
+        try:
+            feed = calendrier.parse_feed(calendrier.fetch(url))
+        except calendrier.CalendarError as exc:
+            raise HTTPException(400, str(exc)) from None
+        where = calendrier.save_url(url)
+        try:
+            with db.session() as conn:
+                db.set_meta(conn, "calendrier_lie_le", db.now_iso())
+                views.sync_calendar_view(conn, True)
+                conn.commit()
+                result = sync_module.refresh_calendar(conn, feed)
+        except sqlite3.OperationalError:
+            raise HTTPException(503, f"Lien enregistré, mais {busy_db[0].lower()}{busy_db[1:]}") from None
+        return {**calendar_info(request), "emplacement": where, "lu": result}
+
+    @app.post("/api/calendrier/actualiser")
+    def calendar_refresh(request: Request) -> dict:
+        """Relit le calendrier tout de suite (sans attendre la synchro automatique)."""
+        if config.is_demo():
+            raise HTTPException(400, "Mode démo : le calendrier est fictif, rien à relire.")
+        if not calendrier.linked():
+            raise HTTPException(400, "Aucun calendrier relié : colle d'abord son lien (Réglages → Calendrier).")
+        try:
+            with db.session() as conn:
+                result = sync_module.refresh_calendar(conn)
+        except calendrier.CalendarError as exc:
+            raise HTTPException(502, str(exc)) from None
+        except sqlite3.OperationalError:
+            raise HTTPException(503, busy_db) from None
+        return {**calendar_info(request), "lu": result}
+
+    @app.delete("/api/calendrier")
+    def calendar_unlink(request: Request) -> dict:
+        """Oublie le lien du calendrier : la vue « Calendrier » et les séances prévues s'en vont (les séances faites
+        restent, bien sûr)."""
+        require_local(request)
+        if config.is_demo():
+            raise HTTPException(400, "Inutile en mode démo : les données sont fictives.")
+        try:
+            with db.session() as conn:
+                calendrier.forget(conn)
+                views.sync_calendar_view(conn, False)
+                conn.commit()
+        except sqlite3.OperationalError:
+            raise HTTPException(503, busy_db) from None
+        return calendar_info(request)
 
     # -------------------------------------------------- dossier des données
     @app.get("/api/dossier")

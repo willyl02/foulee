@@ -16,13 +16,14 @@ from __future__ import annotations
 import re
 import sqlite3
 import threading
-from datetime import date
+from datetime import date, timedelta
 from typing import Any
 
 from mcp.server.mcpserver import MCPServer
 from mcp_types import ToolAnnotations
 
-from . import __version__, analysis, club, config, db, metrics, reglages, renfo, schedule, utilisateurs, vault, views
+from . import (__version__, analysis, calendrier, club, config, db, metrics, reglages, renfo, schedule, utilisateurs,
+               vault, views)
 from . import sync as sync_module
 from .garmin import intraday
 
@@ -66,6 +67,12 @@ Repères :
   exercices et leur progression, muscles travaillés, régularité) ; detail_seance → renfo pour une
   séance. Muscles : 1 série compte pour 1 sur un muscle principal, ½ sur un secondaire. Métriques
   act.sets (séries), act.reps, act.volume (tonnage en kg), act.sets_effort (temps d'effort).
+- Calendrier d'entraînement (si l'utilisateur a relié son calendrier : statut → calendrier) : les séances
+  prévues et les courses de son calendrier Garmin Connect (ou d'un agenda iCal). Outil calendrier pour
+  une période (passée ou à venir), chaque séance prévue avec son état : fait (une séance du même sport
+  ce jour-là, seance_id), manque, aujourdhui, a_venir. semaine les donne aussi jour par jour (prevu).
+  Le calendrier publié par Garmin ne contient que l'avenir : Foulée garde les jours passés tels qu'il
+  les a lus.
 """
 
 READ = ToolAnnotations(readOnlyHint=True, openWorldHint=False)
@@ -151,6 +158,8 @@ def statut() -> dict[str, Any]:
             "cle_api_garmin": "présente" if vault.has_key() else "absente",
             "withings": _withings_state(conn),
             "strava": _strava_state(),
+            # relié ou non, dernière lecture, ce qui vient (jamais le lien du calendrier : il est secret)
+            "calendrier": calendrier.status(conn),
             "synchro": sync_module.last_sync_info(conn),
             # état de chaque source (ok, ko, attente) avec le message de la dernière synchro qui n'a pas abouti
             "connexions": [{k: c.get(k) for k in ("nom", "etat", "texte", "erreur", "derniere_reussie")}
@@ -475,6 +484,35 @@ def semaine(date_jour: str | None = None) -> dict[str, Any]:
         return analysis.week_summary(conn, analysis.to_date(date_jour) if date_jour else None, db.get_settings(conn))
 
 
+@mcp.tool(name="calendrier", annotations=READ)
+def calendrier_entrainement(debut: str | None = None, fin: str | None = None) -> dict[str, Any]:
+    """Calendrier d'entraînement (lien iCal relié dans les Réglages : calendrier Garmin Connect ou autre agenda) :
+    séances prévues et courses de la période, chacune avec son état (fait + seance_id, manque, aujourdhui,
+    a_venir), le bilan (prévues, faites, manquées), la prochaine course. Sans dates : les 7 derniers jours et
+    les 28 prochains."""
+    today = date.today()
+    a = analysis.to_date(debut) if debut else today - timedelta(days=7)
+    b = analysis.to_date(fin) if fin else today + timedelta(days=28)
+    if b < a:
+        a, b = b, a
+    if (b - a).days > 400:
+        return {"erreur": "Période trop longue : 400 jours au plus."}
+    with db.session(readonly=True) as conn:
+        state = calendrier.status(conn)
+        if not state["lie"] and not calendrier.plan(conn, a, b):
+            return {"lie": False, "message": "Aucun calendrier d'entraînement relié : l'utilisateur peut coller le lien "
+                                             "de son calendrier Garmin Connect publié dans Foulée (Réglages → "
+                                             "Calendrier)."}
+        items = calendrier.plan(conn, a, b)
+    out = {"du": a.isoformat(), "au": b.isoformat(), "evenements": items, "bilan": calendrier.tally(items),
+           "prochaine_course": state["prochaine_course"], "derniere_lecture": state["lu_le"],
+           "nom_du_calendrier": state["nom"]}
+    if _strava_state()["connecte"]:
+        out["note"] = ("« fait » ne tient compte que des séances de la base Garmin : celles venues de Strava ne sont "
+                       "jamais transmises à Claude (règles de Strava).")
+    return out
+
+
 @mcp.tool(annotations=READ)
 def records(debut: str | None = None, fin: str | None = None, sport: str = "pied") -> dict[str, Any]:
     """Meilleurs temps sur 1 km, 1 mile, 5 km, 10 km, semi… (calculés par Garmin pour chaque sortie) dans la
@@ -520,6 +558,9 @@ SCHEMA_HELP = {
             "avg_speed, avg_cadence, elev_gain_m, intensity (warmup, active, rest, cooldown).",
     "views": "Vues de l'interface (spec JSON).",
     "settings": "Réglages (valeurs JSON).",
+    "calendar_events": "Calendrier d'entraînement relié (séances prévues et courses) : date, start_local (vide : "
+                       "journée entière), end_local, title, description, location, kind (seance, course, autre), "
+                       "sport (famille devinée du titre). L'outil calendrier y ajoute l'état fait / manqué.",
 }
 
 
@@ -620,7 +661,8 @@ def modifier_reglages(changements: dict[str, Any]) -> dict[str, Any]:
     Club FFA : {"club": {"actif": true, "numero": "012345", "nom": "…"}} ajoute la vue « Mon club » (numéro de
     club de la licence, 6 chiffres) ; {"club": {"actif": false}} la retire en gardant les informations.
     Synchro automatique : {"synchro_auto": {"garmin": 180, "withings": 180}}, un délai par source en minutes, de 30 à
-    720 ; 3 heures est le bon compromis (plus rapproché, Foulée sollicite Garmin et Withings pour rien).
+    720 (sources : garmin, withings, strava, calendrier) ; 3 heures est le bon compromis (plus rapproché, Foulée
+    sollicite Garmin et Withings pour rien).
     Les calculs dépendants (zones, TRIMP, charge) sont refaits aussitôt.
     """
     with db.session() as conn:

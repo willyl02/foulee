@@ -213,6 +213,7 @@ def build(days: int = 430, seed: int = 7, *, second_profile: bool = True) -> dic
         counts = _build_profile(days, seed)
         _build_withings(days, seed)
         _build_strava(seed)
+        _build_calendar(seed)
     if second_profile:
         for entry in utilisateurs.profiles():  # on repart d'un second profil neuf
             if not entry.get("principal") and entry.get("prenom") == SECOND_PROFILE:
@@ -467,6 +468,87 @@ def _build_withings(days: int, seed: int) -> None:
             db.put_daily(conn, key, values, source="withings")
         db.set_meta(conn, "withings_connecte_le", f"{start.isoformat()} 08:00:00")
         views.sync_withings_view(conn, True, withings_vue.families(conn))
+        conn.commit()
+
+
+# ------------------------------------------------- calendrier d'entraînement
+# Plan de préparation du semi, tel qu'un calendrier Garmin Connect publié le donnerait : une séance prévue par
+# journée entière (titre et consigne), et une course avec son heure et son lieu.
+PLAN_WEEK = {
+    0: ("Renforcement : gainage et PPG", "renfo", "30 min : gainage (planche, latéral), squats, fentes, montées "
+                                                   "sur banc, mollets. 3 tours, 40 s d'effort, 20 s de récup."),
+    1: (["Fractionné 10 × 400 m", "VMA 6 × 800 m", "Côtes 8 × 1 min"], "course",
+        "Échauffement 20 min en endurance + 3 accélérations. Corps de séance à 95-100 % de VMA, récupération en "
+        "trottinant la moitié du temps d'effort. Retour au calme 10 min."),
+    2: ("Footing 50 min", "course", "Endurance fondamentale, en aisance respiratoire (on peut parler)."),
+    3: (["Seuil 3 × 3 km", "Seuil 2 × 4 km", "Allure semi 3 × 2 km"], "course",
+        "Échauffement 20 min. Fractions à 85-88 % de VMA, 2 min 30 de récupération trottinée. Retour au calme."),
+    5: ("Footing souple 40 min", "course", None),
+    6: (["Sortie longue 1 h 30", "Sortie longue 1 h 45 avec 3 × 10 min allure semi", "Sortie longue 1 h 20"],
+        "course", "Allure facile ; boire toutes les 20 min."),
+}
+
+
+def _planned(day: date, week_index: int) -> tuple[str, str, str | None] | None:
+    entry = PLAN_WEEK.get(day.weekday())
+    if not entry:
+        return None
+    title, sport, note = entry
+    return (title[week_index % len(title)] if isinstance(title, list) else title), sport, note
+
+
+def _build_calendar(seed: int) -> None:
+    """Le calendrier Garmin Connect fictif du coureur de la démo : les deux semaines passées (séances faites, et
+    deux manquées), puis quatre semaines de préparation, avec un 10 km le dernier dimanche."""
+    from . import calendrier
+
+    rng = random.Random(seed + 23)
+    today = date.today()
+    fetched = db.now_iso()
+    with db.session() as conn:
+        conn.execute("DELETE FROM calendar_events")
+
+        def add(day: date, title: str, sport: str, kind: str = "seance", note: str | None = None,
+                at: str | None = None, place: str | None = None) -> None:
+            conn.execute(calendrier.INSERT, (
+                day.isoformat(), f"{day.isoformat()} {at}:00" if at else None, None, 0 if at else 1, title, note,
+                place, kind, sport, f"demo-{day.isoformat()}-{title[:12]}", fetched))
+
+        # Le passé : ce qui était prévu, d'après ce qui a été fait (le calendrier publié ne garde pas le passé :
+        # c'est Foulée qui l'a gardé, lecture après lecture)
+        done = conn.execute("SELECT date, sport, name FROM activities WHERE date BETWEEN ? AND ? ORDER BY start_local",
+                            ((today - timedelta(days=14)).isoformat(), (today - timedelta(days=1)).isoformat()))
+        seen: set[str] = set()
+        for row in done.fetchall():
+            if row["date"] in seen or row["sport"] not in ("course", "trail", "renfo", "velo"):
+                continue
+            seen.add(row["date"])
+            title = "Renforcement : gainage et PPG" if row["sport"] == "renfo" else row["name"]
+            add(date.fromisoformat(row["date"]), title, row["sport"] if row["sport"] != "trail" else "course")
+        busy = {r["date"] for r in conn.execute("SELECT DISTINCT date FROM activities WHERE date >= ?",
+                                                ((today - timedelta(days=14)).isoformat(),))}
+        free = [d for d in (today - timedelta(days=k) for k in range(2, 14))
+                if d.isoformat() not in busy and d.weekday() in (1, 3, 4)]
+        for day in free[:2]:  # deux séances prévues restées sans suite
+            add(day, "Footing 45 min", "course", note="Endurance fondamentale.")
+
+        # Aujourd'hui et les quatre semaines à venir
+        race = today + timedelta(days=(6 - today.weekday()) % 7 + 21)  # le dimanche dans trois semaines et plus
+        for offset in range(0, (race - today).days + 1):
+            day = today + timedelta(days=offset)
+            if day == race:
+                add(day, "10 km de la forêt (démo)", "course", kind="course", at="09:30", place="Fontainebleau",
+                    note="Course de préparation au semi : objectif 38 min 30, soit 3 min 51 au km.")
+                continue
+            if (race - day).days <= 6 and day.weekday() not in (1, 3):  # semaine de la course : allégée
+                continue
+            planned = _planned(day, (day - today).days // 7 + rng.randint(0, 2))
+            if planned:
+                add(day, planned[0], planned[1], note=planned[2])
+        db.set_meta(conn, "calendrier_info", json.dumps({"nom": "Calendrier Garmin Connect (démo)", "garmin": True}))
+        db.set_meta(conn, "calendrier_lu_le", fetched)
+        db.set_meta(conn, "calendrier_lie_le", fetched)
+        views.sync_calendar_view(conn, True)
         conn.commit()
 
 

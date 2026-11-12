@@ -239,7 +239,7 @@ def cmd_sync(args: argparse.Namespace) -> int:
             name = utilisateurs.card(entry)["prenom"]
             if not config.is_demo() and not sync.can_sync():
                 if not args.quiet:
-                    _say(f"\n— {name} : ni clé API Garmin, ni Withings, ni Strava, profil passé.")
+                    _say(f"\n— {name} : ni clé API Garmin, ni Withings, ni Strava, ni calendrier, profil passé.")
                 continue
             if not args.quiet:
                 _say(f"\n— {name}")
@@ -299,6 +299,10 @@ def _sync_profile(args: argparse.Namespace, sources: list[str] | None = None) ->
     if garmin is None and withings is not None and "erreur" in withings:  # synchro de Withings seul
         _say(f"✗ Withings : {withings['erreur']}")
         return 2
+    calendar = result["sources"].get("calendrier")
+    if result.get("statut") == "echec" and calendar is not None and set(result["sources"]) == {"calendrier"}:
+        _say(f"✗ Calendrier : {calendar['erreur']}")  # (message sans le lien : il est secret)
+        return 2
     calls = f" ({garmin.get('appels', 0)} appels à Garmin)" if garmin is not None else ""
     _say(f"\n✓ Synchro {result['statut']} en {round(time.monotonic() - started)} s{calls}")
     if garmin is not None:
@@ -315,6 +319,11 @@ def _sync_profile(args: argparse.Namespace, sources: list[str] | None = None) ->
             _say(f"   Withings             {withings.get('mesures', 0)} mesure(s), {withings.get('nuits', 0)} nuit(s)")
             for error in withings.get("erreurs", []):
                 _say(f"   ! Withings : {error}")
+    if calendar is not None:
+        if "erreur" in calendar:
+            _say(f"   ! Calendrier : {calendar['erreur']}")
+        else:
+            _say(f"   calendrier           {calendar.get('a_venir', 0)} séance(s) ou course(s) à venir")
     return 0
 
 
@@ -412,6 +421,10 @@ def cmd_status(args: argparse.Namespace) -> int:
 
     if strava_client.has_app():
         _say(f"  Strava             : {'connecté (lecture seule, cache de 48 heures)' if strava_client.connected() else 'appli enregistrée, compte non connecté'}")
+    from . import calendrier
+
+    if calendrier.linked():  # jamais le lien lui-même : il est secret
+        _say("  Calendrier         : relié (lien rangé dans le coffre)")
     token = config.token_cache_file()
     if token.exists():
         try:

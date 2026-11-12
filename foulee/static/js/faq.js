@@ -139,6 +139,17 @@ export const FAQ = [
     ],
   },
   {
+    id: "calendrier", titre: "Calendrier d'entraînement", icone: "calendar",
+    questions: [
+      { id: "pourquoi", q: "À quoi sert le calendrier d'entraînement ?", r: () => `<p>À voir dans Foulée tes séances prévues et tes courses (un plan Garmin Coach, des entraînements programmés, les événements de ton calendrier Garmin Connect), face à ce que tu as réellement fait : une vue «&nbsp;Calendrier&nbsp;» (le mois jour par jour, les prochaines séances, le compte à rebours de ta prochaine course) et les séances prévues dans «&nbsp;Ta semaine&nbsp;», sur l'accueil.</p>` },
+      { id: "relier", q: "Comment relier mon calendrier Garmin Connect ?", r: () => `<p>Sur connect.garmin.com (depuis un ordinateur), ouvre le calendrier, clique sur les trois points en haut à droite puis «&nbsp;Publier le calendrier&nbsp;», et copie le lien. Colle-le dans ${reglages("calendrier", "Réglages → Calendrier")} : Foulée le lit une première fois, puis ajoute la vue «&nbsp;Calendrier&nbsp;» à la colonne. Un agenda Google (adresse secrète au format iCal) ou celui du club marche aussi.</p>` },
+      { id: "fait", q: "Comment Foulée sait-il qu'une séance prévue est faite ?", r: () => `<p>Une séance du même sport le même jour (une course à pied ou un trail pour un footing, du renfo pour le renfo…) la rend «&nbsp;faite&nbsp;», avec un lien vers elle. Un jour passé sans rien de tel la rend «&nbsp;manquée&nbsp;». Une course passe avant les autres séances du jour. Les séances faites sans être prévues apparaissent à part («&nbsp;hors plan&nbsp;»).</p>` },
+      { id: "passe", q: "Pourquoi le calendrier publié par Garmin n'a-t-il pas mon passé ?", r: () => `<p>Garmin ne publie que ce qui vient. Foulée garde donc lui-même ce qu'il a lu, jour après jour : à partir du moment où tu relies le calendrier, il peut dire ce qui a été fait ou manqué. Ce qui précède ce jour-là reste vide.</p>` },
+      { id: "pastille", q: "Que veut dire la pastille « Calendrier » ?", r: () => `<p>Verte : la dernière lecture du calendrier a réussi (il est relu avec la synchro automatique, au rythme choisi dans ${reglages("synchro", "Réglages → Synchro et calculs")}). Rouge : la lecture a échoué. Si le lien ne répond plus du tout (publication annulée dans Garmin Connect), la lecture se met en pause : publie de nouveau le calendrier et colle le nouveau lien. Les séances déjà lues restent.</p>` },
+      { id: "secret", q: "Le lien de mon calendrier est-il protégé ?", r: () => `<p>Ce lien donne ton calendrier à quiconque le connaît. Foulée le range dans le coffre, comme ta clé Garmin : il ne s'affiche plus jamais en entier (seulement son début et ses quatre derniers caractères), ne figure pas dans la sauvegarde des réglages, ni dans le journal, et n'est jamais transmis à Claude. Il ne se colle que depuis la machine elle-même ou par Tailscale. Pour le rendre inutilisable : annule la publication dans Garmin Connect.</p>` },
+    ],
+  },
+  {
     id: "horaires", titre: "Horaires de travail", icone: "briefcase",
     questions: [
       { id: "pourquoi", q: "À quoi servent les horaires de travail ?", r: () => `<p>À comparer ta récupération d'un poste à l'autre (tuile « Comparaison par poste »), à colorer le fond des courbes selon le poste et à afficher ton poste du jour sur l'accueil.</p>` },
@@ -183,9 +194,9 @@ export const FAQ = [
   {
     id: "vie-privee", titre: "Vie privée et sécurité", icone: "eye",
     questions: [
-      { id: "internet", q: "Mes données partent-elles sur Internet ?", r: () => `<p>Elles restent sur ta machine. Foulée ne contacte que Garmin (pour les récupérer), GitHub (pour les mises à jour) et le fond de carte choisi (OpenStreetMap ou IGN, à couper dans ${reglages("synchro", "Réglages → Synchro et calculs")}). Un signalement de bug ne part que si tu cliques pour l'envoyer.</p>` },
+      { id: "internet", q: "Mes données partent-elles sur Internet ?", r: () => `<p>Elles restent sur ta machine. Foulée ne contacte que Garmin (pour les récupérer), Withings, Strava et le serveur de ton calendrier si tu les relies (pour lire, jamais pour envoyer), GitHub (pour les mises à jour) et le fond de carte choisi (OpenStreetMap ou IGN, à couper dans ${reglages("synchro", "Réglages → Synchro et calculs")}). Un signalement de bug ne part que si tu cliques pour l'envoyer.</p>` },
       { id: "acces", q: "Qui peut ouvrir mon Foulée ?", r: () => `<p>Sur le PC, seulement ceux qui utilisent ce PC : l'interface n'écoute que la machine elle-même. Sur un serveur, tes appareils reliés par Tailscale, et ceux de la maison s'ils connaissent le mot de passe du réseau local. Avec plusieurs profils, un code à 4 chiffres protège celui qui le souhaite.</p>` },
-      { id: "export", q: "Que contient un export de réglages ?", r: () => `<p>Tes réglages (VMA, FC, objectif, horaires, zones…), tes vues et ta photo si tu la joins. Jamais ta clé Garmin, ni ton mot de passe, ni ton jeton GitHub.</p>` },
+      { id: "export", q: "Que contient un export de réglages ?", r: () => `<p>Tes réglages (VMA, FC, objectif, horaires, zones…), tes vues et ta photo si tu la joins. Jamais ta clé Garmin, ni ton mot de passe, ni ton jeton GitHub, ni le lien de ton calendrier.</p>` },
       { id: "signalement", q: "Que contient un signalement de bug ?", r: () => `<p>Ce que tu écris, tes captures, et si tu le laisses coché, quelques informations techniques (version de Foulée, système, navigateur, page affichée). Tu vois le texte exact avant de l'envoyer.</p>` },
     ],
   },

@@ -5,6 +5,7 @@ import * as C from "./charts.js";
 import * as F from "./format.js";
 import { icon } from "./icons.js";
 import { brandMark } from "./logos.js";
+import { SPORT_ICON, weekPlanChip } from "./tiles-agenda.js";
 import { message } from "./tiles-data.js";
 
 const STATE_ICON = { bon: "check", moyen: "flat", alerte: "warning" };
@@ -201,8 +202,6 @@ export const allures = {
 };
 
 // ---------------------------------------------------------------- semaine
-const SPORT_ICON = { course: "run", trail: "run", velo: "activity", natation: "wave", marche: "map", rando: "map" };
-
 export const semaine = {
   title: () => "Ta semaine",
   async render(body, p, ctx) {
@@ -212,15 +211,18 @@ export const semaine = {
     const t = d.totaux;
     const m = d.moyenne_4_semaines;
     const compare = (now, avg, fmt = F.dec1) => `<b>${fmt(now)}</b><small> / moy. ${fmt(avg)}</small>`;
+    const plan = d.plan;  // séances prévues par le calendrier d'entraînement relié (Réglages → Calendrier)
     body.classList.add("scroll");
     body.innerHTML = `<div class="week">
       <div class="week-days">${d.jours.map((day) => {
-        const plan = day.planning;
-        const color = F.shiftColor(plan.poste, ctx.settings, ctx.palette);
-        const label = plan.actif ? (plan.poste ? `${plan.nom} ${plan.debut}` : plan.nom) : "";
-        return `<div class="wday${day.date === today ? " today" : ""}${day.passe ? "" : " future"}">
+        const shift = day.planning;
+        const color = F.shiftColor(shift.poste, ctx.settings, ctx.palette);
+        const label = shift.actif ? (shift.poste ? `${shift.nom} ${shift.debut}` : shift.nom) : "";
+        const planned = day.prevu || [];
+        return `<div class="wday${day.date === today ? " today" : ""}${day.passe ? "" : " future"}${planned.some((x) => x.type === "course") ? " race" : ""}">
           <div class="wday-head"><b>${F.escape(day.jour.slice(0, 3))}.</b><span>${F.parseDate(day.date).getDate()}</span></div>
           ${label ? `<div class="wday-shift" style="--c:${color}">${F.escape(label)}</div>` : ""}
+          ${planned.map(weekPlanChip).join("")}
           ${day.seances.map((s) => `<button type="button" class="wday-act" data-act="${F.escape(s.id)}" title="${F.escape(`${s.nom || s.sport_label} : ${s.duree}`)}">
             ${icon(SPORT_ICON[s.sport] || "activity")}<span>${s.distance_km ? `${F.dec1(s.distance_km)} km` : F.escape(s.duree)}</span></button>`).join("")}
         </div>`;
@@ -231,9 +233,11 @@ export const semaine = {
         <span>Durée <b>${F.escape(t.duree)}</b><small> / moy. ${F.escape(m.duree)}</small></span>
         <span>D+ ${compare(t.d_plus, m.d_plus, F.int)} m</span>
         <span>Charge ${compare(t.charge, m.charge, F.int)}</span>
+        ${plan?.prevues ? `<span class="week-plan" title="D'après ton calendrier d'entraînement">${icon("calendar")}Prévues <b>${F.int(plan.faites)}/${F.int(plan.prevues)}</b><small> faite${plan.faites > 1 ? "s" : ""}${plan.manquees ? ` · ${plan.manquees} manquée${plan.manquees > 1 ? "s" : ""}` : ""}${plan.a_venir ? ` · ${plan.a_venir} à venir` : ""}</small></span>` : ""}
       </div>
     </div>`;
     body.querySelectorAll("[data-act]").forEach((b) => b.addEventListener("click", () => ctx.openActivity(b.dataset.act)));
+    body.querySelectorAll("[data-plan-day]").forEach((b) => b.addEventListener("click", () => ctx.openDay(b.dataset.planDay)));
   },
 };
 

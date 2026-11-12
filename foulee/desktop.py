@@ -293,11 +293,12 @@ class AutoSync:
         sources = self.due()
         if not sources:
             return None
-        from . import db, sync, utilisateurs
+        from . import calendrier, db, sync, utilisateurs
         from .withings import vue as withings_vue
 
         with db.session(readonly=True) as conn:
             withings_refused = withings_vue.refused(conn) is not None
+            calendar_refused = calendrier.refused(conn) is not None
         if not self.start(sources):
             return None
         key = self._profile_key()
@@ -320,6 +321,11 @@ class AutoSync:
             if not withings_refused and withings_vue.refused(conn) is not None:
                 whose = f"de {name}" if name else "de ton compte"
                 self.notify(f"Withings n'accepte plus l'accès {whose} : reconnecte-le dans Réglages → Withings.")
+            # Le lien du calendrier vient de cesser de répondre (publication annulée) : un seul avertissement
+            if not calendar_refused and calendrier.refused(conn) is not None:
+                whose = f"de {name} " if name else ""
+                self.notify(f"Le lien du calendrier {whose}ne répond plus (publication annulée ?) : colle le nouveau "
+                            "lien dans Réglages → Calendrier.")
         return state
 
     def _loop(self) -> None:

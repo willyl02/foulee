@@ -37,7 +37,9 @@ function detail(c, { busy, demo, local }) {
   }
   if (c.alertes) lines.push(`<p class="conn-note">${c.alertes} alerte${c.alertes > 1 ? "s" : ""} dans le journal de la dernière synchro (le reste est à jour).</p>`);
   const actions = [];
-  if (!demo && !c.bloque) actions.push(`<button class="btn" type="button" data-conn-sync${busy ? " disabled" : ""}>${icon("sync")}${c.etat === "ko" ? "Réessayer" : "Synchroniser"}</button>`);
+  // Le calendrier se relit seul (« Actualiser ») ; les autres pastilles lancent toute la synchro
+  const own = c.cle === "calendrier";
+  if (!demo && !c.bloque) actions.push(`<button class="btn" type="button" data-conn-sync="${own ? F.escape(c.cle) : ""}"${busy ? " disabled" : ""}>${icon("sync")}${c.etat === "ko" ? "Réessayer" : own ? "Actualiser" : "Synchroniser"}</button>`);
   if (!demo && c.reglages && (local || c.cle !== "garmin")) {
     actions.push(`<a class="btn btn-ghost" href="#/reglages?section=${F.escape(c.reglages)}">${icon("settings")}Réglages ${F.escape(c.nom)}</a>`);
   }
@@ -72,7 +74,8 @@ export function wireConn(root, getState, { onSync }) {
       pill.setAttribute("aria-expanded", "true");
       return;
     }
-    if (e.target.closest("[data-conn-sync]")) { closeAll(); onSync(); return; }
+    const sync = e.target.closest("[data-conn-sync]");
+    if (sync) { closeAll(); onSync(sync.dataset.connSync ? [sync.dataset.connSync] : null); return; }
     if (e.target.closest(".conn-pop a")) closeAll();
   });
   box.addEventListener("keydown", (e) => {

@@ -261,6 +261,7 @@ function syncRhythm(s, boot) {
       ${boot.cle || !(boot.withings?.connecte || boot.strava?.connecte) ? rhythmSelect("synchro_garmin", "Garmin", chosen.garmin) : ""}
       ${boot.withings?.connecte ? rhythmSelect("synchro_withings", "Withings", chosen.withings) : ""}
       ${boot.strava?.connecte && !boot.demo ? rhythmSelect("synchro_strava", "Strava", chosen.strava) : ""}
+      ${boot.calendrier?.lie && !boot.demo ? rhythmSelect("synchro_calendrier", "Calendrier", chosen.calendrier) : ""}
     </div>
     <p class="computed info">${icon("info")}<span><b>3 heures, c'est un bon compromis</b> : tes séances, tes nuits et tes pesées arrivent dans la journée sans solliciter Garmin et Withings pour rien. Plus rapproché, Foulée redemande sans cesse des données qui n'ont pas bougé. Besoin d'une donnée tout de suite (la séance de ce matin) ? «&nbsp;Synchroniser&nbsp;», dans la colonne de gauche, la récupère à l'instant.</span></p>
     <p class="computed" data-rhythm-note hidden></p>`;
@@ -268,7 +269,7 @@ function syncRhythm(s, boot) {
 
 function syncRhythmValue(form, s) {
   const out = { ...(s.synchro_auto || {}) };
-  for (const name of ["garmin", "withings", "strava"]) {
+  for (const name of ["garmin", "withings", "strava", "calendrier"]) {
     const value = form.elements[`synchro_${name}`]?.value;
     if (value) out[name] = Number(value);
   }
@@ -317,6 +318,7 @@ function keepInView(page, target) {
 // =============================================================== sommaire
 const JUMPS = [["profil", "Profil"], ["utilisateurs", "Utilisateurs"], ["club", "Club"], ["coureur", "Coureur"], ["objectif", "Objectif"], ["horaires", "Horaires"],
   ["zones-fc", "Zones FC"], ["zones", "Allures"], ["synchro", "Synchro"], ["sauvegarde", "Sauvegarde"], ["cle", "Clé Garmin"], ["withings", "Withings"], ["strava", "Strava"],
+  ["calendrier", "Calendrier"],
   ["dossier", "Données"], ["claude", "Claude"], ["app", "Application"], ["lan", "Réseau local"], ["maj", "Mises à jour"],
   ["installation", "Installation"], ["apropos", "À propos"]];
 

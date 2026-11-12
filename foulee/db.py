@@ -163,6 +163,24 @@ CREATE TABLE IF NOT EXISTS settings (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+
+-- Calendrier d'entraînement (lien iCal, voir calendrier.py) : séances prévues et courses. Les jours passés
+-- restent tels que lus (le calendrier Garmin ne publie que ce qui vient), le reste est remplacé à chaque lecture.
+CREATE TABLE IF NOT EXISTS calendar_events (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    date        TEXT NOT NULL,           -- jour local AAAA-MM-JJ
+    start_local TEXT,                    -- heure locale de début (vide : journée entière)
+    end_local   TEXT,
+    all_day     INTEGER NOT NULL DEFAULT 1,
+    title       TEXT NOT NULL,
+    description TEXT,
+    location    TEXT,
+    kind        TEXT NOT NULL,           -- seance | course | autre
+    sport       TEXT,                    -- famille Foulée (course, renfo, velo…) devinée du titre
+    uid         TEXT,
+    fetched_at  TEXT
+);
+CREATE INDEX IF NOT EXISTS calendar_events_date ON calendar_events(date);
 """
 
 # Réglages par défaut. Tous modifiables depuis la page « Réglages » ou par Claude.
@@ -198,7 +216,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "vameval": None,           # dernier test VAMEVAL saisi (« 12:40 »), pour la page d'accueil
     "club": None,              # club FFA du profil : numéro, coordonnées, licence (voir club.py)
     # synchro automatique : délai par source, en minutes (de 30 min à 12 h, voir sync.py)
-    "synchro_auto": {"garmin": 180, "withings": 180, "strava": 180},
+    "synchro_auto": {"garmin": 180, "withings": 180, "strava": 180, "calendrier": 180},
 }
 
 ZONE_NAMES_PACE = ["Récup / EF", "Endurance active", "Seuil / semi", "Allure 10 km", "VMA"]

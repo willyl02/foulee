@@ -194,11 +194,50 @@ séance Strava propose le lien **View on Strava**. Quotas : Strava limite les ap
 (100 par quart d'heure, 1 000 par jour pour une appli à un athlète) ; Foulée garde de la
 marge et complète le détail des séances au fil des synchros.
 
+### Relier ton calendrier d'entraînement (facultatif)
+
+Tes séances prévues (plan Garmin Coach, entraînements programmés) et tes courses, depuis
+ton calendrier Garmin Connect, face à ce que tu as réellement fait :
+
+1. Sur [connect.garmin.com](https://connect.garmin.com/modern/calendar), depuis un
+   ordinateur : ouvre le **calendrier**, clique sur les **trois points** en haut à droite,
+   puis **Publier le calendrier**, et copie le lien proposé. Un agenda Google (« Adresse
+   secrète au format iCal ») ou celui du club (lien `.ics` ou `webcal://`) marche aussi.
+2. Colle-le dans **Réglages → Calendrier** : Foulée le lit une première fois, puis ajoute
+   la vue **Calendrier** juste après l'Accueil.
+
+Ce que tu obtiens :
+
+- **La vue Calendrier** : la prochaine course avec son compte à rebours et les prochaines
+  séances, puis le mois jour par jour (séances prévues, courses, séances faites). Un clic
+  sur un jour donne le détail : la consigne de la séance, l'heure et le lieu d'une course,
+  la séance faite (un clic l'ouvre). Sur téléphone, des pastilles remplacent les titres.
+- **Dans « Ta semaine »** (Accueil) : les séances prévues de chaque jour, cochées quand
+  elles sont faites, barrées quand elles sont manquées, et le bilan de la semaine
+  (« Prévues 4/6 faites »).
+- **Fait ou manqué** : une séance du même sport le même jour rend une séance prévue
+  « faite » (une course à pied ou un trail pour un footing, du renfo pour le renfo) ; un
+  jour passé sans rien de tel la rend « manquée ». Le calendrier publié par Garmin ne
+  contient que l'avenir : Foulée garde lui-même ce qu'il a lu, jour après jour.
+- **Une pastille « Calendrier »** : verte quand la dernière lecture a réussi (le calendrier
+  est relu avec la synchro automatique, toutes les 3 heures par défaut), rouge sinon. Si
+  la publication est annulée (le lien ne répond plus), la lecture se met en pause et la
+  pastille t'envoie coller le nouveau lien ; les séances déjà lues restent.
+- **Claude Desktop** voit tes séances prévues et leur état (outil `calendrier`, et `semaine`).
+
+**Le lien est un secret** : il donne ton calendrier à quiconque le connaît. Foulée le
+range dans le coffre, comme la clé Garmin, depuis la machine elle-même ou par Tailscale
+seulement ; il ne s'affiche plus qu'abrégé (`connect.garmin.com/…a1b2`), ne figure ni
+dans la sauvegarde des réglages, ni dans le journal, ni dans les messages d'erreur, et
+n'est jamais transmis à Claude. Pour le rendre inutilisable : annule la publication dans
+Garmin Connect (une nouvelle publication donne un nouveau lien).
+
 ## 3. Utiliser l'interface
 
 | Vue | Contenu |
 |---|---|
-| Accueil | Bonjour (photo, poste du jour, objectif), forme du jour face à tes habitudes, ta semaine, tes allures selon ta VMA (tableau du club, piste, test VAMEVAL), Body Battery de la journée, records |
+| Accueil | Bonjour (photo, poste du jour, objectif), forme du jour face à tes habitudes, ta semaine (avec les séances prévues si ton calendrier est relié), tes allures selon ta VMA (tableau du club, piste, test VAMEVAL), Body Battery de la journée, records |
+| Calendrier | Si tu as relié ton calendrier d'entraînement : ta prochaine course (compte à rebours) et tes prochaines séances, puis le mois jour par jour, séances prévues face aux séances faites |
 | Aujourd'hui | Nuit, VFC, FC de repos, Body Battery au réveil, stress, km sur 7 jours, fraîcheur, dernière séance |
 | Entraînement | Km par semaine, forme et fatigue (charge chronique, aiguë, fraîcheur, ratio), zones FC et d'allure, liste des séances |
 | Renfo | Dès ta première séance de renfo détaillée : muscles travaillés (carte du corps face et dos, séries par muscle), régularité face à ton objectif, chaque exercice et sa progression, temps, séries et tonnage par semaine, séances |
@@ -227,7 +266,8 @@ Garmin et Withings pour rien ; plus rapproché, Foulée redemande sans cesse des
 n'ont pas bougé. Pour une donnée tout de suite, le bouton **Synchroniser** suffit.
 
 **Pastilles de connexion** : en haut à droite de chaque vue (dans la barre du haut
-sur téléphone), une pastille par source branchée sur le profil, Garmin et Withings :
+sur téléphone), une pastille par source branchée sur le profil (Garmin, Withings, Strava,
+calendrier) :
 verte quand sa dernière synchro a abouti, rouge quand elle n'a pas abouti ou que la
 clé (l'accès) manque ou est refusée, grise avant la première synchro. Un clic montre
 le message d'erreur, la dernière synchro réussie, « Réessayer » et le lien vers les

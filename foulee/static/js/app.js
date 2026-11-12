@@ -14,6 +14,7 @@ import { renderWelcome } from "./welcome.js";
 import { mergeSources, rowSources, sourceText } from "./sources.js";
 import { connPills, wireConn } from "./connections.js";
 import * as A from "./tiles-activity.js";
+import * as G from "./tiles-agenda.js";
 import * as R from "./tiles-renfo.js";
 import * as D from "./tiles-data.js";
 import * as H from "./tiles-home.js";
@@ -27,11 +28,11 @@ const RENDERERS = {
   seance_mesures: A.seance_mesures,
   renfo: R.renfo, renfo_exercices: R.renfo_exercices, seance_renfo: R.seance_renfo,
   profil: H.profil, forme: H.forme, allures: H.allures, semaine: H.semaine, records: H.records, journee: H.journee,
-  club: H.club, withings: W.withings,
+  club: H.club, withings: W.withings, agenda: G.agenda, a_venir: G.a_venir,
 };
 const PERIODS = [[7, "7 j"], [30, "30 j"], [90, "90 j"], [180, "6 mois"], [365, "1 an"], [730, "2 ans"]];
 // Tuiles qui ne dépendent pas de la période : une vue faite seulement de celles-ci se passe du sélecteur
-const TIMELESS = new Set(["profil", "club", "withings"]);
+const TIMELESS = new Set(["profil", "club", "withings", "agenda", "a_venir"]);
 const WIDTHS = [3, 4, 6, 8, 12];
 const THEMES = ["auto", "light", "dark"];
 const THEME_LABELS = { auto: "Thème : automatique", light: "Thème : clair", dark: "Thème : sombre" };
@@ -416,6 +417,17 @@ function makeContext(token) {
       if (!target) { toast("Ajoute une tuile « Séance » à une vue pour ouvrir le détail des séances."); return; }
       location.hash = `#/vue/${encodeURIComponent(target.id)}?seance=${encodeURIComponent(activityId)}`;
     },
+    /** Un jour du calendrier d'entraînement : la vue qui a la tuile « Calendrier d'entraînement », ce jour choisi. */
+    openDay: (day) => {
+      const here = currentView();
+      const target = here?.spec.tuiles.some((t) => t.type === "agenda") ? here
+        : state.views.find((v) => v.spec.tuiles.some((t) => t.type === "agenda"));
+      if (!target) { toast("Ajoute la tuile « Calendrier d'entraînement » à une vue pour voir le détail de chaque jour."); return; }
+      const wanted = `#/vue/${encodeURIComponent(target.id)}?jour=${encodeURIComponent(day)}`;
+      if (location.hash === wanted) renderView(); else location.hash = wanted;
+    },
+    /** Paramètres de l'adresse (« ?jour=… » pour le calendrier). */
+    query: new URLSearchParams(location.hash.split("?")[1] || ""),
     token,
   };
 }
@@ -768,9 +780,11 @@ function renderSyncLine(job) {
   if (s.derniere?.statut === "echec") line.innerHTML += "<br>La dernière tentative a échoué.";
 }
 
-async function startSync() {
+/** Lance la synchro de toutes les sources, ou des seules sources données (pastille du calendrier). */
+async function startSync(sources = null) {
+  const only = Array.isArray(sources) && sources.length ? sources : null;  // (un clic passe un évènement)
   try {
-    const res = await api.post("/api/sync");
+    const res = await api.post("/api/sync", only ? { sources: only } : undefined);
     if (!res.lance) { toast(res.message); return; }
     pollSync();
   } catch (err) {
@@ -835,16 +849,20 @@ async function refreshConn() {
   if (busy) state.connTimer = setTimeout(refreshConn, 15000);
 }
 
-/** Bilan d'une synchro, source par source (Garmin, Withings), dans un seul message. */
+/** Bilan d'une synchro, source par source (Garmin, Withings, Strava, calendrier), dans un seul message. */
 function syncToast(sources) {
-  const { garmin: g, withings: w } = sources;
-  const both = Boolean(g && w);
+  const { garmin: g, withings: w, strava: s, calendrier: c } = sources;
+  const several = [g, w, s, c].filter(Boolean).length > 1;
   const done = [];
   const failed = [];
-  if (g?.erreur) failed.push(both ? `Garmin : ${g.erreur}` : g.erreur);
+  if (g?.erreur) failed.push(several ? `Garmin : ${g.erreur}` : g.erreur);
   else if (g) done.push(`${g.seances_nouvelles || 0} nouvelle(s) séance(s), ${g.fit || 0} fichier(s) FIT${g.erreurs?.length ? `, ${g.erreurs.length} alerte(s) dans le journal` : ""}`);
-  if (w?.erreur) failed.push(both ? `Withings : ${w.erreur}` : w.erreur);
+  if (w?.erreur) failed.push(several ? `Withings : ${w.erreur}` : w.erreur);
   else if (w) done.push(`mesures Withings à jour${w.erreurs?.length ? ` (${w.erreurs.length} alerte(s) dans le journal)` : ""}`);
+  if (s?.erreur) failed.push(several ? `Strava : ${s.erreur}` : s.erreur);
+  else if (s) done.push("séances Strava à jour");
+  if (c?.erreur) failed.push(several ? `Calendrier : ${c.erreur}` : c.erreur);
+  else if (c) done.push(`calendrier à jour (${c.a_venir || 0} séance(s) ou course(s) à venir)`);
   if (!failed.length) toast(`Synchro terminée : ${done.join(" ; ") || "rien de nouveau"}.`);
   else if (!done.length) toast(`Synchro impossible : ${failed.join(" ; ")}`, { error: true });
   else toast(`Synchro partielle : ${done.join(" ; ")}. ${failed.join(" ; ")}`, { error: true });

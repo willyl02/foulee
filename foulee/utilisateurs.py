@@ -342,6 +342,7 @@ def delete(profile_id: str) -> dict:
         except Exception:  # Strava injoignable : l'accès s'éteindra de lui-même, les jetons sont oubliés
             pass
         vault.delete_secret("strava")
+        vault.delete_secret("calendrier")  # le lien de son calendrier d'entraînement
         folder = config.data_dir()
     with _lock:
         data = load()

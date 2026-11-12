@@ -3,9 +3,10 @@
 Une seule synchro à la fois (verrou), quelle que soit son origine : bouton de
 l'interface, tâche planifiée Windows ou demande à Claude.
 
-Les sources sont déclarées dans ``SOURCES`` (Garmin, Withings, Strava : une entrée ici et un
+Les sources sont déclarées dans ``SOURCES`` (Garmin, Withings, Strava, calendrier : une entrée ici et un
 module à côté de ``garmin/``). Garmin est de la partie dès qu'une clé est enregistrée (ou quand
-rien d'autre n'est branché) ; Withings et Strava quand leur compte est connecté (Réglages).
+rien d'autre n'est branché) ; Withings et Strava quand leur compte est connecté (Réglages) ; le
+calendrier d'entraînement quand son lien est enregistré.
 """
 
 from __future__ import annotations
@@ -18,7 +19,7 @@ import time
 from datetime import date, datetime
 from typing import Callable
 
-from . import config, db, vault
+from . import calendrier, config, db, vault
 from .garmin import sync as garmin_sync
 from .strava import client as strava_client
 from .strava import sync as strava_sync
@@ -32,9 +33,12 @@ SOURCES = {
     "garmin": garmin_sync.run,
     "withings": withings_sync.run,
     "strava": strava_sync.run,
+    "calendrier": calendrier.run,
 }
-LABELS = {"garmin": "Garmin", "withings": "Withings", "strava": "Strava"}
-SETTINGS_SECTIONS = {"garmin": "cle", "withings": "withings", "strava": "strava"}  # où la réparer dans les Réglages
+LABELS = {"garmin": "Garmin", "withings": "Withings", "strava": "Strava", "calendrier": "Calendrier"}
+SETTINGS_SECTIONS = {"garmin": "cle", "withings": "withings", "strava": "strava",  # où la réparer dans les Réglages
+                     "calendrier": "calendrier"}
+DATA_SOURCES = ("garmin", "withings", "strava")  # le calendrier ne donne que des séances prévues
 
 # Synchro automatique (Réglages → Synchro et calculs) : un délai par source, en minutes. 3 heures est un bon
 # compromis ; en dessous de 30 minutes on solliciterait Garmin et Withings pour rien, au-delà de 12 heures
@@ -46,18 +50,23 @@ RETRY_AFTER_FAILURE = 30 * 60  # après un échec, pas plus d'un essai par demi-
 
 def active_sources() -> list[str]:
     """Les sources de la synchro du profil courant : Garmin s'il a une clé, Withings et Strava si leur compte est
-    connecté. Sans rien de tout cela, Garmin quand même : sa synchro dit qu'il manque la clé."""
+    connecté, le calendrier si son lien est enregistré. Sans aucune source de données, Garmin quand même : sa
+    synchro dit qu'il manque la clé."""
     names = ["garmin"] if vault.has_key() else []
     if withings_client.connected():
         names.append("withings")
     if strava_client.connected():
         names.append("strava")
-    return names or ["garmin"]
+    names = names or ["garmin"]
+    if calendrier.linked():
+        names.append("calendrier")
+    return names
 
 
 def can_sync() -> bool:
-    """Le profil courant a-t-il de quoi synchroniser : une clé Garmin, ou un compte Withings ou Strava connecté ?"""
-    return bool(vault.has_key() or withings_client.connected() or strava_client.connected())
+    """Le profil courant a-t-il de quoi synchroniser : une clé Garmin, un compte Withings ou Strava connecté, ou le
+    lien d'un calendrier d'entraînement ?"""
+    return bool(vault.has_key() or withings_client.connected() or strava_client.connected() or calendrier.linked())
 
 
 class SyncBusy(Exception):
@@ -165,36 +174,70 @@ def run(*, since: date | None = None, fit_days: int | None = None, with_fit: boo
                                                   progress=progress)
                     if results[name].get("erreurs"):
                         partial = True
-                    if name == "garmin":
-                        db.delete_meta(conn, KEY_REFUSED)
-                    if name == "withings":
-                        db.delete_meta(conn, withings_sync.REFUSED)
-                    if name == "strava":
-                        db.delete_meta(conn, strava_sync.REFUSED)
+                    _settle(conn, name)
                 except Exception as exc:  # on note l'échec d'une source sans bloquer les autres
-                    LOG.exception("Synchro %s en échec", name)
+                    if isinstance(exc, calendrier.CalendarError):
+                        LOG.warning("Synchro calendrier en échec : %s", exc)  # (message sans le lien, secret)
+                    else:
+                        LOG.exception("Synchro %s en échec", name)
                     results[name] = {"erreur": str(exc)}
                     failed += 1
-                    if name == "garmin" and getattr(exc, "key_rejected", False):
-                        # L'interface affichera « Garmin refuse ta clé : remplace-la »
-                        _note_refusal(conn, KEY_REFUSED, exc)
-                    if name == "withings" and getattr(exc, "access_refused", False):
-                        # « Withings n'accepte plus l'accès de Foulée : reconnecte ton compte »
-                        _note_refusal(conn, withings_sync.REFUSED, exc)
-                    if name == "strava" and getattr(exc, "access_refused", False):
-                        _note_refusal(conn, strava_sync.REFUSED, exc)  # (son cache est déjà effacé)
+                    _settle(conn, name, exc)
             # Échec si rien n'a marché ; partiel si une source (ou un de ses flux) a échoué
             status = "echec" if names and failed == len(names) else "partiel" if failed or partial else "ok"
-            finished = db.now_iso()
-            conn.execute(
-                "INSERT INTO sync_log(started_at, finished_at, source, status, summary) VALUES (?, ?, ?, ?, ?)",
-                (started, finished, ",".join(results), status, json.dumps(results, ensure_ascii=False)),
-            )
-            if status != "echec":
+            finished = _log(conn, started, results, status)
+            # Le calendrier seul ne compte pas comme une synchro des données (premier import, « dernière synchro »)
+            if status != "echec" and any(name in DATA_SOURCES for name in results):
                 db.set_meta(conn, "last_sync", finished)
             conn.commit()
     progress("Synchro terminée", 1.0)
     return {"statut": status, "debut": started, "fin": finished, "sources": results}
+
+
+REFUSAL_KEYS = {"garmin": KEY_REFUSED, "withings": withings_sync.REFUSED, "strava": strava_sync.REFUSED,
+                "calendrier": calendrier.REFUSED}
+
+
+def _settle(conn, name: str, exc: Exception | None = None) -> None:
+    """Après la synchro d'une source : un succès efface son refus éventuel ; un refus net (clé rejetée par Garmin,
+    accès retiré chez Withings ou Strava, lien du calendrier qui ne répond plus) est noté, pour l'interface
+    (« remplace ta clé », « reconnecte ton compte », « colle le nouveau lien ») et pour mettre la synchro
+    automatique de cette source en pause."""
+    key = REFUSAL_KEYS.get(name)
+    if key is None:
+        return
+    if exc is None:
+        db.delete_meta(conn, key)
+    elif getattr(exc, "key_rejected" if name == "garmin" else "access_refused", False):
+        _note_refusal(conn, key, exc)  # (le cache Strava est déjà effacé)
+
+
+def _log(conn, started: str, results: dict, status: str) -> str:
+    finished = db.now_iso()
+    conn.execute(
+        "INSERT INTO sync_log(started_at, finished_at, source, status, summary) VALUES (?, ?, ?, ?, ?)",
+        (started, finished, ",".join(results), status, json.dumps(results, ensure_ascii=False)),
+    )
+    return finished
+
+
+def refresh_calendar(conn, feed: tuple[list, dict] | None = None) -> dict:
+    """Relit le calendrier tout de suite (lien tout juste collé, bouton « Actualiser ») : même journal, même
+    pastille et même état qu'une synchro, sans attendre celle qui tourne peut-être (Garmin, premier import…).
+    ``feed`` : le calendrier déjà lu (événements, infos), pour ne pas le télécharger deux fois."""
+    started = db.now_iso()
+    try:
+        result = calendrier.apply(conn, *feed) if feed else calendrier.run(conn)
+    except Exception as exc:
+        conn.rollback()
+        _settle(conn, "calendrier", exc)
+        _log(conn, started, {"calendrier": {"erreur": str(exc)}}, "echec")
+        conn.commit()
+        raise
+    _settle(conn, "calendrier")
+    _log(conn, started, {"calendrier": result}, "ok")
+    conn.commit()
+    return result
 
 
 def _note_refusal(conn, key: str, exc: Exception) -> None:
@@ -242,22 +285,23 @@ def due_sources(conn, now: float | None = None) -> list[str]:
     """Les sources du profil courant dont la synchro automatique est due, d'après le délai choisi pour chacune
     et l'heure de sa dernière synchro réussie (journal des synchros).
 
-    Rien avant le premier import (il se décide sur la page d'accueil), rien pour une clé ou un accès refusés
-    (il faut passer par les Réglages), et pas plus d'un essai par demi-heure après un échec."""
+    Rien avant le premier import (il se décide sur la page d'accueil), sauf le calendrier ; rien pour une clé ou
+    un accès refusés (il faut passer par les Réglages), et pas plus d'un essai par demi-heure après un échec."""
     from .strava import vue as strava_vue
     from .withings import vue as withings_vue  # (import tardif : withings.vue importe les vues)
 
     if config.is_demo() or not can_sync():
         return []
     last_sync = db.get_meta(conn, "last_sync")
-    if last_sync is None:
-        return []
     now = time.time() if now is None else now
     every = intervals(db.get_settings(conn))
     history = _history(conn)
     due = []
     for name in active_sources():
-        refusal = {"garmin": key_refused, "withings": withings_vue.refused, "strava": strava_vue.refused}.get(name)
+        if last_sync is None and name != "calendrier":
+            continue
+        refusal = {"garmin": key_refused, "withings": withings_vue.refused, "strava": strava_vue.refused,
+                   "calendrier": calendrier.refused}.get(name)
         if name == "garmin" and not vault.has_key() or (refusal and refusal(conn)):
             continue
         runs = [(when, res[name]) for when, res in history if isinstance(res.get(name), dict)]
@@ -288,13 +332,13 @@ def _history(conn, limit: int = 120) -> list[tuple[str, dict]]:
 
 
 def connections(conn) -> list[dict]:
-    """Pastilles de l'en-tête : une par source branchée sur le profil (Garmin dès qu'il a une clé, ou quand rien
-    d'autre n'est branché ; Withings et Strava quand leur compte est connecté ; une autre source plus tard : une
-    entrée de plus dans ``SOURCES`` et ``LABELS``).
+    """Pastilles de l'en-tête : une par source branchée sur le profil (Garmin dès qu'il a une clé, ou quand aucune
+    autre source de données n'est branchée ; Withings et Strava quand leur compte est connecté ; le calendrier
+    quand son lien est enregistré ; une autre source plus tard : une entrée de plus dans ``SOURCES`` et ``LABELS``).
 
     État « ok » : la dernière synchro de la source a abouti (même avec des alertes dans le journal) ;
     « ko » : elle n'a pas abouti, ou la clé (l'accès) manque ou est refusée ; « attente » : pas encore
-    de synchro. Jamais de clé ni de jeton dans la réponse : seulement l'état et le message d'erreur."""
+    de synchro. Jamais de clé, de jeton ni de lien dans la réponse : seulement l'état et le message d'erreur."""
     from .strava import cache as strava_cache
     from .strava import vue as strava_vue
     from .withings import vue as withings_vue  # (import tardif : withings.vue importe les vues)
@@ -307,7 +351,11 @@ def connections(conn) -> list[dict]:
         names.append("strava")
     if demo or vault.has_key() or key_refused(conn) or not names:
         names.insert(0, "garmin")
+    if calendrier.status(conn)["lie"] if demo else calendrier.linked():
+        names.append("calendrier")
     history = [] if demo else _history(conn)
+    refusals = {"garmin": key_refused, "withings": withings_vue.refused, "strava": strava_vue.refused,
+                "calendrier": calendrier.refused}
     out = []
     for name in names:
         runs = [(when, res[name]) for when, res in history if isinstance(res.get(name), dict)]
@@ -318,7 +366,7 @@ def connections(conn) -> list[dict]:
             "derniere_reussie": next((when for when, res in runs if not res.get("erreur")), None),
             "erreur": None, "alertes": 0, "bloque": False,  # bloque : rien à faire sans passer par les Réglages
         }
-        refusal = {"garmin": key_refused, "withings": withings_vue.refused, "strava": strava_vue.refused}[name](conn)
+        refusal = refusals[name](conn)
         if demo:
             item.update(etat="ok", texte="Mode démo : données fictives, pas de synchro.")
         elif name == "garmin" and not vault.has_key():
@@ -326,7 +374,9 @@ def connections(conn) -> list[dict]:
         elif refusal:
             text = {"garmin": "Garmin refuse ta clé API : la synchro est en pause.",
                     "withings": "Withings n'accepte plus l'accès de Foulée : reconnecte ton compte.",
-                    "strava": "Strava n'accepte plus l'accès de Foulée : reconnecte ton compte."}[name]
+                    "strava": "Strava n'accepte plus l'accès de Foulée : reconnecte ton compte.",
+                    "calendrier": "Le lien du calendrier ne répond plus (publication annulée ?) : colle le nouveau "
+                                  "lien dans les Réglages."}[name]
             item.update(etat="ko", texte=text, depuis=refusal.get("depuis"), bloque=True)
         elif last is None:
             item.update(etat="attente", texte="Pas encore synchronisé.")
