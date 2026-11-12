@@ -32,10 +32,24 @@ SLEEP = ["wi_sleep_s", "wi_sleep_score", "wi_deep_s", "wi_light_s", "wi_rem_s", 
 ACTIVITY = ["wi_steps", "wi_distance_km", "wi_active_s", "wi_cal_active"]
 
 
+ACTIVITY_DAYS = 90  # l'activité Withings compte si des pas ont été comptés sur cette durée
+
+
+def _activity_since() -> str:
+    return (date.today() - timedelta(days=ACTIVITY_DAYS)).isoformat()
+
+
 def families(conn: sqlite3.Connection) -> list[str]:
+    """Les familles de mesures présentes. L'activité demande des pas récents : sans podomètre Withings, son
+    appli envoie des journées à 0 pas (et quelques séances importées), qui ne font pas une activité à suivre."""
     found = []
     for name, metric in FAMILIES.items():
-        if conn.execute("SELECT 1 FROM daily WHERE source = ? AND metric = ? LIMIT 1", (SOURCE, metric)).fetchone():
+        if name == "activite":
+            query = "SELECT 1 FROM daily WHERE source = ? AND metric = ? AND value > 0 AND date >= ? LIMIT 1"
+            params: tuple = (SOURCE, metric, _activity_since())
+        else:
+            query, params = "SELECT 1 FROM daily WHERE source = ? AND metric = ? LIMIT 1", (SOURCE, metric)
+        if conn.execute(query, params).fetchone():
             found.append(name)
     return found
 
@@ -142,7 +156,9 @@ def summary(conn: sqlite3.Connection) -> dict:
         start = (date.fromisoformat(day) - timedelta(days=6)).isoformat()
         out["sommeil"] = {"date": day, "valeurs": _day_values(conn, day, SLEEP),
                           "moyenne_7j": _average(conn, "wi_sleep_s", start, day)[0]}
-    day = _latest(conn, "wi_steps")
+    row = conn.execute("SELECT MAX(date) AS d FROM daily WHERE source = ? AND metric = 'wi_steps' AND value > 0 "
+                       "AND date >= ?", (SOURCE, _activity_since())).fetchone()
+    day = row["d"] if row else None  # dernière journée avec des pas (pas de carte « 0 pas »)
     if day:
         start = (date.fromisoformat(day) - timedelta(days=6)).isoformat()
         out["activite"] = {"date": day, "valeurs": _day_values(conn, day, ACTIVITY),

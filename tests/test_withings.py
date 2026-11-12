@@ -336,6 +336,25 @@ def test_view_follows_measures_until_edited():
         assert not conn.execute("SELECT 1 FROM views WHERE id = 'withings'").fetchone()
 
 
+def test_activity_needs_recent_steps():
+    """Sans podomètre Withings, son appli envoie des journées à 0 pas : ni carte « 0 pas », ni tuiles d'activité."""
+    today = dt.date.today()
+    with db.session() as conn:
+        def put(day, metric, value):
+            conn.execute("INSERT OR REPLACE INTO daily(date, source, metric, value) VALUES (?, 'withings', ?, ?)",
+                         (day.isoformat(), metric, value))
+        put(today - dt.timedelta(days=2), "wi_weight_kg", 72.2)
+        for back in range(1, 20):
+            put(today - dt.timedelta(days=back), "wi_steps", 0)
+            put(today - dt.timedelta(days=back), "wi_active_s", 1800 if back % 3 == 0 else 0)
+        put(today - dt.timedelta(days=400), "wi_steps", 16980)  # des pas, mais il y a plus d'un an
+        assert vue.families(conn) == ["corps"]
+        assert "activite" not in vue.summary(conn) and vue.summary(conn)["corps"]["date"]
+        put(today - dt.timedelta(days=5), "wi_steps", 8400)  # un vrai podomètre, la semaine dernière
+        assert vue.families(conn) == ["corps", "activite"]
+        assert vue.summary(conn)["activite"]["date"] == (today - dt.timedelta(days=5)).isoformat()
+
+
 def test_each_profile_has_its_own_access(withings):
     http = TestClient(web.create_app())
     authorize(http, withings)
