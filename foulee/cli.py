@@ -638,6 +638,93 @@ def cmd_reset_views(args: argparse.Namespace) -> int:
     return 0
 
 
+# ------------------------------------------------------------------- relais
+def _new_password(label: str = "Mot de passe") -> str | None:
+    import getpass
+
+    from .relais import store
+
+    for _ in range(3):
+        first = getpass.getpass(f"{label} ({store.MIN_PASSWORD} caractères au moins) : ")
+        try:
+            store.validate_password(first)
+        except store.RelayError as exc:
+            _say(str(exc))
+            continue
+        if getpass.getpass("Le même, pour confirmer : ") == first:
+            return first
+        _say("Les deux saisies ne sont pas identiques.")
+    return None
+
+
+def cmd_relais(args: argparse.Namespace) -> int:
+    """Le relais du club : le lancer, et gérer ses comptes coach (sur la machine du relais)."""
+    from .relais import store
+
+    action = args.action
+    if action == "serveur":
+        import uvicorn
+
+        from .relais.app import create_relay_app
+
+        _say(f"Relais Foulée {__version__} → http://{args.hote}:{args.port}/ (Ctrl+C pour arrêter)")
+        # proxy_headers=False : le tunnel Cloudflare arrive par la machine elle-même ; l'adresse du visiteur
+        # est lue dans CF-Connecting-IP, seulement pour ces connexions-là
+        uvicorn.run(create_relay_app(), host=args.hote, port=args.port, log_level="warning", proxy_headers=False)
+        return 0
+    with store.session() as conn:
+        if action == "comptes":
+            rows = store.accounts(conn)
+            if not rows:
+                _say("Aucun compte. Crée le tien : foulee relais admin")
+            for row in rows:
+                role = "coach" + (" (admin)" if row["admin"] else "") if row["role"] == "coach" \
+                    else f"élève de {(row.get('coach') or {}).get('nom', '?')}"
+                state = "" if row["actif"] else "  [désactivé]"
+                seen = row["derniere_connexion"] or "jamais connecté"
+                _say(f"  {row['identifiant']:<24} {row['nom']:<24} {role:<28} {seen}{state}")
+            return 0
+        if action in ("admin", "coach"):
+            if action == "admin" and store.has_admin(conn) and not args.force:
+                _say("Un administrateur existe déjà (foulee relais comptes). Pour un coach : foulee relais coach")
+                return 1
+            ident = args.identifiant or _ask("Identifiant (ex. william.l) :")
+            name = args.nom or _ask("Nom affiché (ex. William L.) :")
+            password = _new_password()
+            if not password:
+                return 1
+            try:
+                account = store.create_account(conn, ident=ident, name=name, password=password, role="coach",
+                                               admin=action == "admin")
+            except store.RelayError as exc:
+                _say(str(exc))
+                return 1
+            _say(f"Compte {'administrateur et ' if action == 'admin' else ''}coach « {account['identifiant']} » créé.")
+            _say("Dans Foulée : Réglages → Coach et élèves → « J'ai un compte », avec l'adresse du relais.")
+            return 0
+        row = store.find(conn, args.identifiant or "")
+        if row is None:
+            _say(f"Compte « {args.identifiant} » introuvable (foulee relais comptes).")
+            return 1
+        if action == "mot-de-passe":
+            password = _new_password("Nouveau mot de passe")
+            if not password:
+                return 1
+            store.set_password(conn, row["id"], password)
+            _say("Mot de passe changé ; les sessions ouvertes de ce compte sont fermées.")
+        elif action in ("desactiver", "reactiver"):
+            store.set_active(conn, row["id"], action == "reactiver")
+            _say(f"Compte « {row['identifiant']} » {'réactivé' if action == 'reactiver' else 'désactivé'}.")
+        elif action == "supprimer":
+            extra = " et ses élèves" if row["role"] == "coach" else ""
+            if _ask(f"Supprimer « {row['identifiant']} »{extra}, définitivement ? (oui/non)", "non").lower() != "oui":
+                _say("Rien n'a été supprimé.")
+                return 1
+            store.delete_account(conn, row["id"])
+            _say("Compte supprimé.")
+    return 0
+
+
 # ---------------------------------------------------------------------- main
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="foulee", description="Foulée — ton hub local de données sport et santé.")
@@ -719,6 +806,18 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("forget-key", help="supprimer la clé API enregistrée sur cet ordinateur")
     p.set_defaults(func=cmd_forget_key)
+
+    p = sub.add_parser("relais", help="le relais du club (coach et élèves) : le lancer, gérer ses comptes")
+    p.add_argument("action", choices=["serveur", "admin", "coach", "comptes", "mot-de-passe", "desactiver",
+                                      "reactiver", "supprimer"],
+                   help="serveur : lancer le relais ; admin / coach : créer un compte coach ; comptes : la liste ; "
+                        "mot-de-passe, desactiver, reactiver, supprimer : sur un compte (identifiant)")
+    p.add_argument("identifiant", nargs="?", help="identifiant du compte visé")
+    p.add_argument("--nom", help="nom affiché du nouveau compte")
+    p.add_argument("--port", type=int, default=config.DEFAULT_PORT, help="port du relais (8770 par défaut)")
+    p.add_argument("--hote", default="127.0.0.1", help="adresse d'écoute (127.0.0.1 : derrière le tunnel)")
+    p.add_argument("--force", action="store_true", help="admin : créer un administrateur de plus")
+    p.set_defaults(func=cmd_relais)
 
     p = sub.add_parser("reset-views", help="restaurer les vues par défaut")
     p.set_defaults(func=cmd_reset_views)

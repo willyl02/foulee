@@ -1,7 +1,7 @@
 """Rangement de tes secrets : la clé API Garmin, l'accès à Withings (ClientID, Secret et jetons
 de ton appli Withings), l'accès à Strava (Client ID et Client Secret de l'appli Strava de
 l'installation, jetons de chaque profil), le lien de publication du calendrier d'entraînement
-(quiconque le connaît lit le calendrier) et le jeton GitHub éventuel (pour chercher les mises à
+(quiconque le connaît lit le calendrier), le jeton de session du relais (coach et élèves) et le jeton GitHub éventuel (pour chercher les mises à
 jour tant que le dépôt de Foulée est privé).
 
 - Windows : Gestionnaire d'identification Windows (entrée « Foulee »), chiffré
@@ -41,9 +41,10 @@ SECRETS = {
     "strava-appli": ("strava-appli", "strava-appli", None),  # Client ID et Client Secret de l'appli Strava
     "strava": ("strava-acces", "strava-acces", None),        # jetons Strava du profil
     "calendrier": ("calendrier-lien", "calendrier-lien", None),  # lien de publication du calendrier (iCal)
+    "relais": ("relais-jeton", "relais-jeton", None),  # jeton de session auprès du relais (coach et élèves)
 }
 # un exemplaire par profil (l'appli Strava : un pour l'installation)
-PER_PROFILE = {"garmin", "withings", "strava", "calendrier"}
+PER_PROFILE = {"garmin", "withings", "strava", "calendrier", "relais"}
 
 
 def _entry(name: str) -> tuple[str, str, str | None]:

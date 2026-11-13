@@ -139,9 +139,11 @@ class Updater:
         self.run(str(self.root / ".venv" / "bin" / "python"), "-m", "compileall", "-q", str(self.root / "foulee"))
         # Réglages système de la nouvelle version (nouveaux services, nouvelles options)
         self.state("en_cours", "Réglage des services…", installee=before, disponible=after)
-        self.run("bash", str(self.root / "scripts" / "configurer-serveur.sh"))
+        # Le relais du club a ses propres réglages et son propre service (FOULEE_CONFIGURER, FOULEE_SERVICE)
+        configure = os.environ.get("FOULEE_CONFIGURER") or "configurer-serveur.sh"
+        self.run("bash", str(self.root / "scripts" / Path(configure).name))
         self.state("termine", f"Foulée {after} est installé. L'interface redémarre…", installee=after, precedente=before)
-        self.run(self.systemctl, "restart", "foulee-web.service")
+        self.run(self.systemctl, "restart", os.environ.get("FOULEE_SERVICE") or "foulee-web.service")
 
     def from_interface(self) -> int:
         request = self.state_dir / "demande"
@@ -173,9 +175,13 @@ class Updater:
 def configured_channel(root: Path | None = None) -> str:
     """Canal choisi dans les Réglages de Foulée (lu directement dans sa base).
 
-    Jamais choisi : une bêta installée continue de suivre les bêtas, sinon canal stable.
+    Jamais choisi : une bêta installée continue de suivre les bêtas, sinon canal stable. Le relais du club, qui
+    n'a pas de Réglages, suit le canal de FOULEE_CANAL.
     """
     import sqlite3
+
+    if os.environ.get("FOULEE_CANAL") in BRANCHES:
+        return os.environ["FOULEE_CANAL"]
 
     root = root or Path(__file__).resolve().parent.parent
     match = re.search(r'__version__\s*=\s*"([^"]+)"', (root / "foulee" / "__init__.py").read_text(encoding="utf-8"))

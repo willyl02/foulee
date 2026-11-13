@@ -189,3 +189,25 @@ def test_a_beta_install_follows_betas_until_told_otherwise(monkeypatch):
     assert client.get("/api/maj").json()["canal"] == "beta"
     client.put("/api/settings", json={"canal_maj": "stable"}, headers=WRITE)
     assert client.get("/api/maj").json()["canal"] == "stable"
+
+
+def test_the_club_relay_uses_its_own_service_and_channel(project, monkeypatch):
+    """Le relais du club : son canal vient de FOULEE_CANAL, ses réglages et son service ont leur nom."""
+    origin, install, state = project
+    (origin / "scripts" / "configurer-relais.sh").write_text('#!/bin/sh\ntouch "$(dirname "$0")/../relais-ok"\n')
+    git(origin, "add", "-A")
+    git(origin, "commit", "-qm", "Relais")
+    git(origin, "branch", "beta")
+    calls = install.parent / "systemctl.txt"
+    fake = install.parent / "systemctl"
+    fake.write_text(f'#!/bin/sh\necho "$@" >> "{calls}"\n')
+    fake.chmod(0o755)
+    env = {**os.environ, "FOULEE_MAJ": str(state), "FOULEE_UV": "true", "FOULEE_SYSTEMCTL": str(fake),
+           "GIT_TERMINAL_PROMPT": "0", "FOULEE_CANAL": "beta", "FOULEE_SERVICE": "foulee-relais.service",
+           "FOULEE_CONFIGURER": "configurer-relais.sh", "FOULEE_DATA": str(install.parent / "donnees")}
+    subprocess.run([sys.executable, str(install / "scripts" / "maj_serveur.py"), "installer"], env=env,
+                   capture_output=True, text=True, timeout=120)
+    done = json.loads((state / "etat.json").read_text(encoding="utf-8"))
+    assert done["statut"] == "termine" and done["canal"] == "beta"
+    assert (install / "relais-ok").exists() and not (install / "services-ok").exists()
+    assert calls.read_text().strip() == "restart foulee-relais.service"

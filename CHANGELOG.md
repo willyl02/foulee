@@ -4,6 +4,21 @@ Les versions « bêta » (par exemple 0.4.0b1) sont des avant-premières : elles
 sur le canal bêta (Réglages → Mises à jour → « Recevoir les versions bêta »), puis sortent en
 version stable une fois éprouvées.
 
+## 0.8.0b1 — 14 novembre 2026 (bêta)
+
+Première étape de **Foulée Coach** : relier un coach et ses élèves par le relais du club.
+
+- **Le relais** : Foulée en « mode relais » (`foulee relais serveur`), sur une petite machine sur Internet,
+  derrière un tunnel Cloudflare en HTTPS. Installation en une commande (`scripts/installer-relais.sh`, Ubuntu ou
+  Debian, AMD ou ARM), mise à jour automatique chaque nuit. Il ne garde que les comptes et les invitations.
+- **Les comptes** : un administrateur (qui crée les comptes coach sur la machine du relais), des coachs, des
+  élèves. Un élève rejoint son coach avec un code d'invitation (une seule fois, 7 jours), et peut quitter le
+  groupe à tout moment : son compte est effacé du relais.
+- **Dans Foulée** : Réglages → Coach et élèves pour se relier (le jeton de connexion va dans le coffre, comme
+  la clé Garmin), puis une page « Mes élèves » (le groupe, les codes d'invitation) ou « Mon coach ».
+- Rien des données d'un élève ne part encore : le partage des séances, avec son accord case par case, arrive
+  dans la prochaine bêta, puis la messagerie et les séances proposées.
+
 ## 0.7.0 — 13 novembre 2026
 
 La version stable qui réunit les bêtas 0.6 et 0.7 ; le détail de chacune est dans l'historique des versions (CHANGELOG.md sur GitHub).

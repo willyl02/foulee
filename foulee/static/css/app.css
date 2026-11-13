@@ -1628,3 +1628,25 @@ a.chip:hover { box-shadow: inset 0 0 0 1px var(--base); }
   .grid > .tile--seance_effet, .grid > .tile--renfo_equilibre { height: auto; min-height: 120px; }
   .grid > .tile--seance_effet .tile-body, .grid > .tile--renfo_equilibre .tile-body.scroll { overflow: visible; }
 }
+
+/* ---------------------------------------------------------- coach et élèves (relais du club) */
+a.nav-item { text-decoration: none; }
+.nav-coach { margin-top: 6px; }
+.coach-form { margin: 12px 0 4px; max-width: 760px; }
+.coach-page { display: grid; gap: 16px; max-width: 980px; }
+.coach-card { background: var(--surface); border-radius: 14px; box-shadow: 0 0 0 1px var(--hair); padding: 16px 18px; }
+.coach-card h2 { display: flex; align-items: center; gap: 8px; font-size: 17px; margin: 0 0 8px; }
+.coach-card h2 svg { width: 19px; height: 19px; color: var(--muted); }
+.coach-card p { margin: 0 0 10px; color: var(--ink-2); max-width: 78ch; }
+.coach-page .btn-small { padding: 4px 10px; font-size: 13.5px; }
+.coach-table { width: 100%; border-collapse: collapse; font-size: 14.5px; }
+.coach-table th { text-align: left; font-weight: 500; color: var(--muted); font-size: 13px; padding: 6px 8px; border-bottom: 1px solid var(--hair); }
+.coach-table td { padding: 8px; border-bottom: 1px solid var(--hair); vertical-align: middle; }
+.coach-table td:last-child { text-align: right; }
+.coach-codes { list-style: none; padding: 0; margin: 6px 0 0; display: grid; gap: 8px; }
+.coach-codes li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 8px 10px; border-radius: 10px; background: var(--surface-2); }
+.coach-codes li.fresh { box-shadow: 0 0 0 2px var(--good); }
+.coach-code { font-size: 19px; font-weight: 700; letter-spacing: .08em; }
+@media (max-width: 640px) {
+  .coach-table th:nth-child(3), .coach-table td:nth-child(3), .coach-table th:nth-child(2), .coach-table td:nth-child(2) { display: none; }
+}

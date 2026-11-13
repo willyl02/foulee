@@ -318,7 +318,7 @@ function keepInView(page, target) {
 // =============================================================== sommaire
 const JUMPS = [["profil", "Profil"], ["utilisateurs", "Utilisateurs"], ["club", "Club"], ["coureur", "Coureur"], ["objectif", "Objectif"], ["horaires", "Horaires"],
   ["zones-fc", "Zones FC"], ["zones", "Allures"], ["synchro", "Synchro"], ["sauvegarde", "Sauvegarde"], ["cle", "Clé Garmin"], ["withings", "Withings"], ["strava", "Strava"],
-  ["calendrier", "Calendrier"],
+  ["calendrier", "Calendrier"], ["coach", "Coach"],
   ["dossier", "Données"], ["claude", "Claude"], ["app", "Application"], ["lan", "Réseau local"], ["maj", "Mises à jour"],
   ["installation", "Installation"], ["apropos", "À propos"]];
 

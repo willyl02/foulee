@@ -500,6 +500,7 @@ Dans un terminal :
 | `reparse` | Reconstruire les tables depuis les réponses brutes (après une mise à jour de Foulée) |
 | `claude-config` | Montrer où Claude Desktop range sa configuration et si Foulée y figure ; `--ecrire` pour l'ajouter, `--retirer` pour l'enlever |
 | `acces-reseau` | Sur un serveur : choisir le mot de passe de l'accès par le réseau local |
+| `relais` | Sur la machine du relais du club : `relais serveur` le lance ; `relais admin` / `relais coach` créent un compte coach ; `relais comptes` les liste ; `relais mot-de-passe`, `desactiver`, `reactiver`, `supprimer` + identifiant |
 | `reset-views` | Restaurer les vues d'origine |
 | `forget-key` | Supprimer la clé de ce PC |
 
@@ -590,6 +591,44 @@ Au quotidien (en root, dans la console du serveur) :
 
 Les données vivent dans `/var/lib/foulee`, la clé et l'empreinte du mot de passe dans
 `/var/lib/foulee/secrets` (lisibles par le seul utilisateur `foulee`).
+
+### Le relais du club : coach et élèves (bêta)
+
+Un coach et ses élèves se relient par un **relais** : un petit serveur sur Internet, en HTTPS, que leurs
+Foulée appellent. Chacun garde Foulée et tout son historique chez lui ; le relais ne garde que les comptes,
+les codes d'invitation et, à venir, l'extrait que chaque élève choisit de partager (séances des 4 dernières
+semaines en résumé, objectif, VMA ; GPS, sommeil, VFC et poids en option, jamais Strava). Le relais, c'est
+Foulée lui-même, en « mode relais » : il ne touche pas à Garmin.
+
+```
+Foulée de l'élève  ──►  relais (HTTPS, tunnel Cloudflare)  ◄──  Foulée du coach
+```
+
+**Installer le relais** sur une machine Ubuntu ou Debian (AMD ou ARM ; par exemple une machine « Always Free »
+d'Oracle Cloud), en une commande :
+
+```bash
+sudo apt update && sudo apt install -y git && sudo git clone -b beta https://github.com/willyl02/foulee /opt/foulee && sudo bash /opt/foulee/scripts/installer-relais.sh
+```
+
+Le script installe le service `foulee-relais` (sur `127.0.0.1:8770` seulement), sa mise à jour automatique
+chaque nuit vers 4 h 30 (canal `FOULEE_CANAL` de `/etc/default/foulee` : `beta` pendant les essais, puis
+`stable`), et crée ton compte d'**administrateur** (tu es aussi coach). Aucun port n'est à ouvrir : un
+**tunnel Cloudflare** (Zero Trust → Networks → Tunnels, service HTTP `localhost:8770`) amène le relais sur
+ton adresse, par exemple `https://relais.mon-club.com`.
+
+**Les comptes** :
+- l'administrateur crée les comptes coach sur la machine du relais : `sudo foulee relais coach` ;
+- un coach se connecte dans Foulée (Réglages → Coach et élèves → « J'ai déjà un compte ») ; une page
+  « Mes élèves » s'ajoute à la colonne, où il crée des **codes d'invitation** (une seule fois, 7 jours) ;
+- un élève rejoint son coach avec ce code (« J'ai un code d'invitation ») et choisit son identifiant et son
+  mot de passe ; une page « Mon coach » s'ajoute à sa colonne. Il peut quitter le groupe à tout moment : son
+  compte est alors effacé du relais.
+
+Sécurité : mots de passe (10 caractères au moins) gardés seulement en empreinte scrypt ; dans Foulée, un jeton
+de connexion rangé dans le coffre, comme la clé Garmin ; 5 essais faux, puis 15 minutes d'attente ; un
+changement de mot de passe ferme les autres sessions. La connexion se fait depuis le PC où tourne Foulée (ou
+par Tailscale), jamais en clair sur le réseau de la maison.
 
 ## 10. Installation manuelle (développeurs)
 

@@ -9,6 +9,8 @@ import { icon } from "./icons.js";
 import { brandMark, setFavicon } from "./logos.js";
 import { startUpdateAlert } from "./maj.js";
 import { renderSettings } from "./settings.js";
+import { renderCoachPage } from "./coach.js";
+import { coachPageLabel } from "./settings-coach.js";
 import { renderChooser, whoButton, wireWho } from "./users.js";
 import { renderWelcome } from "./welcome.js";
 import { mergeSources, rowSources, sourceText } from "./sources.js";
@@ -230,7 +232,8 @@ function renderNav() {
   nav.innerHTML = state.views.map((v, i) => `<button class="nav-item" type="button" data-id="${F.escape(v.id)}" data-index="${i}"
       ${v.id === state.viewId && !isOtherPage() ? 'aria-current="page"' : ""} ${state.editing ? 'draggable="true"' : ""}>
       ${icon(v.icon)}<span>${F.escape(v.name)}</span><span class="blaze" aria-hidden="true"></span></button>`).join("")
-    + `<button class="nav-item nav-add" type="button" data-new>${icon("plus")}<span>Nouvelle vue</span></button>`;
+    + `<button class="nav-item nav-add" type="button" data-new>${icon("plus")}<span>Nouvelle vue</span></button>`
+    + (state.boot?.coach ? `<a class="nav-item nav-coach" href="#/coach" ${location.hash.startsWith("#/coach") ? 'aria-current="page"' : ""}>${icon(state.boot.coach.role === "coach" ? "club" : "user")}<span>${coachPageLabel(state.boot.coach)}</span></a>` : "");
   nav.querySelectorAll("[data-id]").forEach((b) => {
     b.addEventListener("click", () => { location.hash = `#/vue/${encodeURIComponent(b.dataset.id)}`; closeMenu(); });
     if (state.editing) wireNavDrag(b);
@@ -256,7 +259,7 @@ function wireNavDrag(item) {
 
 function isSettings() { return location.hash.startsWith("#/reglages"); }
 /** Une page qui n'est pas une vue : réglages, bienvenue, aide, retours. */
-function isOtherPage() { return /^#\/(reglages|bienvenue|aide|retours)/.test(location.hash); }
+function isOtherPage() { return /^#\/(reglages|bienvenue|aide|retours|coach)/.test(location.hash); }
 
 function markRailLinks(path) {
   [["#help-link", "/aide"], ["#feedback-link", "/retours"]].forEach(([selector, page]) => {
@@ -275,6 +278,7 @@ function route() {
   if (path === "/bienvenue") { showWelcome(); return; }
   if (path === "/aide") { showHelp(params); return; }
   if (path === "/retours") { showFeedback(params); return; }
+  if (path === "/coach") { showCoach(); return; }
   const match = path.match(/^\/vue\/([^/]+)/);
   const wanted = match ? decodeURIComponent(match[1]) : null;
   const view = state.views.find((v) => v.id === wanted) || state.views[0];
@@ -289,7 +293,7 @@ function currentView() { return state.views.find((v) => v.id === state.viewId); 
 
 function rerender() {
   // Formulaires en cours (bienvenue, retours) ou texte sans graphique (aide) : on ne redessine pas
-  if (/^#\/(bienvenue|aide|retours)/.test(location.hash)) return;
+  if (/^#\/(bienvenue|aide|retours|coach)/.test(location.hash)) return;
   if (isSettings()) showSettings(); else renderView();
 }
 
@@ -698,6 +702,15 @@ function showHelp(params) {
   renderNav();
   window.scrollTo(0, 0);
   renderHelp($("#page"), state.boot, { query: params.get("q") || "", theme: params.get("theme") || "", question: params.get("question") || "" });
+}
+
+function showCoach() {
+  disposePass();
+  state.editing = false;
+  closeMenu();
+  renderNav();
+  window.scrollTo(0, 0);
+  renderCoachPage($("#page"), state.boot, { toast, onUnlinked: async () => { await refreshBoot(); renderNav(); } });
 }
 
 function showFeedback(params) {

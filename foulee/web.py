@@ -45,6 +45,7 @@ from . import (
     calendrier,
     club,
     claude_desktop,
+    coach,
     config,
     datadir,
     db,
@@ -297,6 +298,7 @@ def create_app() -> FastAPI:
                            "appli": strava_client.has_app(), "refus": strava_vue.refused(conn),
                            "seances": strava_sync.counts()["seules"] if strava_cache.path().exists() else 0},
                 "calendrier": calendrier.status(conn),  # jamais le lien (secret), même masqué
+                "coach": coach.light(conn),  # relais du club : rôle et nom, jamais le jeton
                 "demarre_le": STARTED_AT,
                 "maj": update_dir() is not None,
                 "volumes": db.table_counts(conn),
@@ -1417,6 +1419,93 @@ def create_app() -> FastAPI:
         except sqlite3.OperationalError:
             raise HTTPException(503, busy_db) from None
         return calendar_info(request)
+
+    # ------------------------------------------------------- coach et élèves
+    # Le relais du club : se connecter range un jeton dans le coffre, donc par la machine elle-même ou Tailscale,
+    # comme les autres secrets. Une fois relié, la page « Mes élèves » / « Mon coach » s'ouvre de partout.
+    def coach_call(action):
+        if config.is_demo():
+            raise HTTPException(400, "Mode démo : pas de relais, les données sont fictives.")
+        try:
+            with db.session() as conn:
+                return action(conn)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from None
+        except coach.CoachError as exc:
+            raise HTTPException(exc.status if exc.status in (400, 401, 403, 404, 409, 429) else 502, str(exc)) from None
+        except sqlite3.OperationalError:
+            raise HTTPException(503, busy_db) from None
+
+    def coach_info(request: Request, conn) -> dict:
+        return {**coach.status(conn), "local": bool(request.state.local)}
+
+    @app.get("/api/coach")
+    def coach_status(request: Request) -> dict:
+        with db.session(readonly=True) as conn:
+            return coach_info(request, conn)
+
+    @app.post("/api/coach/connexion")
+    def coach_login(request: Request, payload: dict = Body(...)) -> dict:
+        require_local(request)
+        return coach_call(lambda conn: {**coach.login(conn, str(payload.get("adresse") or ""),
+                                                      str(payload.get("identifiant") or ""),
+                                                      str(payload.get("mot_de_passe") or "")),
+                                        "local": True})
+
+    @app.post("/api/coach/inscription")
+    def coach_join(request: Request, payload: dict = Body(...)) -> dict:
+        require_local(request)
+        return coach_call(lambda conn: {**coach.join(conn, str(payload.get("adresse") or ""),
+                                                     code=str(payload.get("code") or ""),
+                                                     ident=str(payload.get("identifiant") or ""),
+                                                     name=str(payload.get("nom") or ""),
+                                                     password=str(payload.get("mot_de_passe") or "")),
+                                        "local": True})
+
+    @app.post("/api/coach/actualiser")
+    def coach_refresh(request: Request) -> dict:
+        def run(conn):
+            try:
+                coach.refresh(conn)
+            except coach.CoachError as exc:
+                if exc.status != 401:
+                    raise
+            return coach_info(request, conn)
+        return coach_call(run)
+
+    @app.delete("/api/coach")
+    def coach_logout(request: Request) -> dict:
+        return coach_call(lambda conn: {**coach.logout(conn), "local": bool(request.state.local)})
+
+    @app.post("/api/coach/mot-de-passe")
+    def coach_password(request: Request, payload: dict = Body(...)) -> dict:
+        require_local(request)
+        coach_call(lambda conn: coach.change_password(conn, str(payload.get("actuel") or ""),
+                                                      str(payload.get("nouveau") or "")))
+        return {"ok": True}
+
+    @app.post("/api/coach/quitter")
+    def coach_leave(request: Request, payload: dict = Body(...)) -> dict:
+        require_local(request)
+        return coach_call(lambda conn: {**coach.leave(conn, str(payload.get("mot_de_passe") or "")),
+                                        "local": True})
+
+    @app.get("/api/coach/groupe")
+    def coach_group(request: Request) -> dict:
+        """Page « Mes élèves » : les élèves et les codes d'invitation en attente."""
+        return coach_call(lambda conn: {"eleves": coach.students(conn), "invitations": coach.invitations(conn)})
+
+    @app.post("/api/coach/invitations")
+    def coach_invite(request: Request) -> dict:
+        return coach_call(coach.create_invitation)
+
+    @app.delete("/api/coach/invitations/{code}")
+    def coach_cancel_invite(code: str, request: Request) -> dict:
+        return coach_call(lambda conn: {"invitations": coach.cancel_invitation(conn, code)})
+
+    @app.delete("/api/coach/eleves/{student_id}")
+    def coach_remove_student(student_id: int, request: Request) -> dict:
+        return coach_call(lambda conn: {"eleves": coach.remove_student(conn, student_id)})
 
     # -------------------------------------------------- dossier des données
     @app.get("/api/dossier")
