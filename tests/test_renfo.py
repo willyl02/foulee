@@ -226,7 +226,7 @@ def test_web_api_and_views(garmin):
     ids = [v["id"] for v in boot["vues"]]
     assert ids.index("renfo") == ids.index("entrainement") + 1  # la vue Renfo arrive après Entraînement
     renfo_view = next(v for v in boot["vues"] if v["id"] == "renfo")
-    assert [t["type"] for t in renfo_view["spec"]["tuiles"]][:2] == ["renfo", "renfo_exercices"]
+    assert [t["type"] for t in renfo_view["spec"]["tuiles"]][:3] == ["renfo", "renfo_equilibre", "renfo_exercices"]
     assert renfo_view["spec"]["tuiles"][0]["params"]["periode"] == "herite"  # suit la période de la vue
     seance = next(v for v in boot["vues"] if v["id"] == "seance")
     assert [t["type"] for t in seance["spec"]["tuiles"]][:2] == ["seance_resume", "seance_renfo"]

@@ -276,6 +276,7 @@ def _build_profile(days: int, seed: int) -> dict:
                 avg_hr = sum(hrs) / len(hrs)
                 gain = sim["relief"] * sim["distance"] / 1000 * 0.25 if sim["sport"] != "renfo" else None
                 trimp = analysis.trimp_from_summary(sim["duration"], avg_hr, HR_REST, HR_MAX, 1.92) or 0
+                te = training_effect(sim, trimp, rng)
                 row = {
                     "id": activity_id, "source": "garmin", "source_id": str(athlete.next_id),
                     "start_local": sim["start"].strftime("%Y-%m-%d %H:%M:%S"),
@@ -293,7 +294,7 @@ def _build_profile(days: int, seed: int) -> dict:
                     "max_speed": None, "avg_gap_speed": None,
                     "avg_cadence": 172 if sim["sport"] in ("course", "trail") else None, "avg_power": None,
                     "calories": round(sim["duration"] / 60 * (11 if sim["sport"] != "renfo" else 6)),
-                    "te_aerobic": round(min(5.0, 1.5 + trimp / 60), 1), "te_anaerobic": round(rng.uniform(0, 2.5), 1),
+                    "te_aerobic": te[0], "te_anaerobic": te[1],
                     "garmin_load": round(trimp * 1.15), "vo2max": 52 + round((day - start).days / days * 2) if sim["sport"] in ("course", "trail") else None,
                     "hr_zones_garmin": None, "start_lat": BASE_LAT, "start_lon": BASE_LON, "lap_count": len(sim["laps"]),
                 }
@@ -553,8 +554,21 @@ def _build_calendar(seed: int) -> None:
 
 
 # ------------------------------------------------- valeurs « à la Garmin »
-TE_LABELS = {"easy": "BASE", "long": "BASE", "tempo": "TEMPO", "vma": "VO2MAX", "hills": "ANAEROBIC_CAPACITY",
-             "race": "LACTATE_THRESHOLD"}
+TE_LABELS = {"easy": "AEROBIC_BASE", "long": "AEROBIC_BASE", "tempo": "TEMPO", "vma": "VO2MAX",
+             "hills": "ANAEROBIC_CAPACITY", "race": "LACTATE_THRESHOLD"}
+TE_ANAEROBIC = {"easy": (0.0, 0.4), "long": (0.0, 0.7), "trail": (0.2, 1.1), "bike": (0.0, 0.5), "tempo": (0.3, 1.2),
+                "vma": (1.6, 3.0), "hills": (2.2, 3.6), "race": (0.8, 2.0)}  # effet anaérobie (fourchette par séance)
+
+
+def training_effect(sim: dict, trimp: float, rng: random.Random) -> tuple[float, float]:
+    """Effets aérobie / anaérobie « à la Garmin » : faibles en renfo, l'anaérobie selon la séance.
+
+    Un seul tirage aléatoire, comme avant : le reste de la démo ne bouge pas."""
+    draw = rng.random()
+    if sim["sport"] == "renfo":
+        return round(min(1.8, 0.4 + trimp / 90 + 0.8 * draw), 1), round(0.3 * draw, 1)
+    low, high = TE_ANAEROBIC.get(sim.get("kind") or "easy", (0.0, 0.8))
+    return round(min(5.0, 1.5 + trimp / 60), 1), round(low + (high - low) * draw, 1)
 
 
 STRAVA_NOTES = ["Bonnes jambes ce matin, allure facile tenue sans forcer.", "Un peu de vent sur le retour.",
@@ -563,7 +577,7 @@ STRAVA_NOTES = ["Bonnes jambes ce matin, allure facile tenue sans forcer.", "Un 
 HEVY_SESSIONS = [
     ("Haut du corps", [("Bench Press (Barbell)", 50.0, 10, 4), ("Pull Up", 0.0, 7, 3), ("Overhead Press (Dumbbell)",
                                                                                          14.0, 10, 3),
-                       ("Plank", 0.0, 0, 3)]),
+                       ("Bent Over Row (Barbell)", 40.0, 10, 3), ("Plank", 0.0, 0, 3)]),
     ("Bas du corps", [("Squat (Barbell)", 60.0, 8, 4), ("Romanian Deadlift (Barbell)", 50.0, 10, 3),
                       ("Walking Lunge (Dumbbell)", 12.0, 12, 3), ("Standing Calf Raise", 20.0, 15, 3)]),
 ]
@@ -751,7 +765,7 @@ def activity_extra(sim: dict, trimp: float, rng: random.Random) -> dict:
         "resp": round(30 + 3 * speed + rng.gauss(0, 2), 1), "sweat": round(sim["duration"] / 3600 * 720),
         "bb_impact": -round(trimp / 7), "steps": round(cadence * 2 * sim["duration"] / 60 / 2),
         "temp_min": round(rng.uniform(8, 16)), "temp_max": round(rng.uniform(17, 26)),
-        "te_label": TE_LABELS.get(sim.get("kind", "easy"), "BASE"),
+        "te_label": TE_LABELS.get(sim.get("kind", "easy"), "AEROBIC_BASE"),
     }
     extra["vr"] = round(extra["vo"] / extra["stride"] * 100, 2)
     for meters in (1000, 1609, 5000, 10000, 21098):
@@ -769,6 +783,7 @@ RENFO_ROUTINES = [
         ("LUNGE", "DUMBBELL_LUNGE", 3, 8, 6, 8),
         ("CALF_RAISE", "SINGLE_LEG_STANDING_CALF_RAISE", 3, 12, 0, 8),
         ("HIP_RAISE", "SINGLE_LEG_HIP_RAISE", 3, 10, 0, 0),
+        ("DEADLIFT", "SINGLE_LEG_ROMANIAN_DEADLIFT_WITH_DUMBBELL", 3, 10, 8, 12),
         ("PLANK", "SIDE_PLANK", 2, "40s", 0, 0),
     ]),
     ("Renfo gainage et haut du corps", [
@@ -776,6 +791,7 @@ RENFO_ROUTINES = [
         ("PUSH_UP", "PUSH_UP", 3, 10, 0, 0),
         ("ROW", "DUMBBELL_ROW", 3, 10, 10, 12),
         ("HIP_STABILITY", "DEAD_BUG", 3, 12, 0, 0),
+        ("HYPEREXTENSION", "SUPERMAN_FROM_FLOOR", 3, 12, 0, 0),
         ("HIP_STABILITY", "LATERAL_WALKS_WITH_BAND_AT_ANKLES", 2, 20, 0, 0),
         ("PLANK", "PLANK", 3, "45s", 0, 0),
     ]),

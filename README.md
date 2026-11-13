@@ -240,8 +240,8 @@ Garmin Connect (une nouvelle publication donne un nouveau lien).
 | Calendrier | Si tu as relié ton calendrier d'entraînement : ta prochaine course (compte à rebours) et tes prochaines séances, puis le mois jour par jour, séances prévues face aux séances faites |
 | Aujourd'hui | Nuit, VFC, FC de repos, Body Battery au réveil, stress, km sur 7 jours, fraîcheur, dernière séance |
 | Entraînement | Km par semaine, forme et fatigue (charge chronique, aiguë, fraîcheur, ratio), zones FC et d'allure, liste des séances |
-| Renfo | Dès ta première séance de renfo détaillée : muscles travaillés (carte du corps face et dos, séries par muscle), régularité face à ton objectif, chaque exercice et sa progression, temps, séries et tonnage par semaine, séances |
-| Séance | Résumé, exercices de renfo (avec la carte du corps), carte, courbes synchronisées (FC, allure, altitude, cadence…), autres mesures (dynamique de course, puissance, respiration…), tours ou découpage au km |
+| Renfo | Dès ta première séance de renfo détaillée : muscles travaillés (carte du corps face et dos, séries par muscle), régularité face à ton objectif, équilibre avant / arrière (rapport 1:x, paire par paire, semaine après semaine), chaque exercice et sa progression, temps, séries et tonnage par semaine, séances |
+| Séance | Résumé, exercices de renfo (avec la carte du corps et l'équilibre avant / arrière de la séance), effet d'entraînement (jauges aérobie et anaérobie de Garmin), carte, courbes synchronisées (FC, allure, altitude, cadence…), autres mesures (dynamique de course, puissance, respiration…), tours ou découpage au km |
 | Récup & postes | Comparaison d'un poste de travail à l'autre, sommeil, VFC, FC de repos, nuage sommeil → VFC, calendrier |
 | Cap semi de Paris | Compte à rebours, allure cible, fractions rapides face à l'allure cible, volume, charge, zones, VO2max |
 | Mon club | Si tu l'as coché dans les Réglages : ton club FFA (coordonnées, site, carte), ta licence, et son classement sur athle.fr en un clic |
@@ -285,7 +285,28 @@ par muscle et muscles laissés de côté, séances par semaine face à ton objec
 répétitions ou durée par série). Dans la vue **Séance**, la tuile « Exercices de
 renfo » s'affiche pour les séances de renfo et s'efface pour les autres. Quatre
 métriques rejoignent les tuiles (catégorie « Renfo ») : séries, répétitions, tonnage
-et temps d'effort. Sur la montre, lance l'activité « Musculation » et choisis
+et temps d'effort.
+
+**Équilibre avant / arrière du renfo** : chaque exercice est rangé selon son
+mouvement, chaîne antérieure (dominante genou : squats, fentes ; poussée ; abdos ;
+biceps ; releveurs) ou chaîne postérieure (dominante hanche : soulevé de terre
+roumain, hip thrust, leg curl, swing ; tirage ; lombaires ; triceps ; mollets), et
+Foulée compare les séries : « 1 : 1,5 », c'est 1,5 série derrière pour 1 devant. La
+cible du coureur va de 1:1 à 1:2 (la propulsion vient de la chaîne postérieure). La
+tuile « Renfo : équilibre avant / arrière » donne le rapport sur la période, paire
+par paire (bas du corps genou / hanche, haut du corps poussée / tirage, tronc, bras,
+bas de jambe) avec un conseil, et semaine après semaine ; la tuile « Exercices de
+renfo » de la vue Séance donne celui de la séance, et une étiquette montre comment
+chaque exercice est compté. Les exercices « corps entier » comptent ½ de chaque côté ;
+le latéral et la rotation (planche latérale, bonds latéraux…) sont comptés à part.
+
+**Effet d'entraînement** : la tuile « Séance : effet d'entraînement » montre le
+Training Effect de Garmin en deux jauges de 0 à 5, aux couleurs de Garmin Connect
+(aucune amélioration, faible avantage, maintien, impact, fort impact, effort trop
+soutenu) : effet aérobie (l'endurance) et effet anaérobie (les efforts brefs et très
+intenses), l'avantage principal de la séance (base, tempo, seuil, VO2 max, capacité
+anaérobie, sprint…), et sa place parmi tes séances du même sport des 4 semaines
+précédentes (les petits traits autour des jauges). Sur la montre, lance l'activité « Musculation » et choisis
 l'exercice à chaque série (ou suis un entraînement de renfo préparé dans Garmin
 Connect) ; une séance enregistrée sans le détail se complète après coup dans l'appli
 Garmin Connect. Seules comptent les séances de musculation et de cardio / HIIT : en
@@ -381,6 +402,8 @@ Garmin, les mots de passe et le jeton GitHub n'y figurent jamais.
    - « Comment est ma forme ce matin ? »
    - « Analyse ma séance de fractionné d'hier : tours, FC, découplage. »
    - « Quels muscles ai-je travaillés en renfo ce mois-ci ? Qu'est-ce que je néglige ? »
+   - « Mon renfo est-il équilibré entre l'avant et l'arrière ? Que faut-il ajouter ? »
+   - « Ma séance d'hier a-t-elle fait progresser mon endurance ou ma vitesse ? »
    - « Où en est ma charge d'entraînement ? Suis-je frais pour samedi ? »
    - « Crée-moi une vue qui suit mes fractions longues et mon volume depuis octobre. »
    - « Ma VMA est maintenant de 16,5 km/h, mets à jour les réglages. »
@@ -672,7 +695,8 @@ foulee/
   db.py            schéma SQLite (et sa mise à niveau), réglages
   metrics.py       catalogue des métriques (libellés, unités, formats) et données brutes de Garmin
   analysis.py      tous les calculs (séries, charge, zones, postes, objectif, allures VMA, forme du jour…)
-  renfo.py         renfo : exercices du résumé de Garmin Connect, noms en français, muscles travaillés
+  renfo.py         renfo : exercices du résumé de Garmin Connect, noms en français, muscles travaillés,
+                   équilibre avant / arrière
   schedule.py      horaires de travail : bureau, 2x8, 3x8, 5x8, cycle personnalisé, congés
   zones.py         méthodes des zones FC et d'allure
   reglages.py      contrôle des réglages, export et import

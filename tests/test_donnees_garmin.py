@@ -54,7 +54,7 @@ def test_activity_extras_and_measures(filled):
         assert extra["te_label"] == "LACTATE_THRESHOLD" and extra["lieu"] == "Nogentel"
         detail = analysis.activity_detail(conn, row["id"], db.get_settings(conn))
         shown = {m["cle"]: m["affiche"] for m in detail["mesures"]}
-        assert shown["gct"] == "241 ms" and shown["stride"] == "1,08 m" and shown["te_label"] == "Seuil lactique"
+        assert shown["gct"] == "241 ms" and shown["stride"] == "1,08 m" and shown["te_label"] == "Seuil (aérobie élevée)"
         assert shown["gcb"] == "50,4 % / 49,6 %" and shown["best_1000"] == "4:30"
         week = analysis.series(conn, "act.gct", filled.today - dt.timedelta(days=15), filled.today, "semaine")
         assert any(v for _, v in week["points"])

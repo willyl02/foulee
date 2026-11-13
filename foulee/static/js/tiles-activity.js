@@ -35,6 +35,7 @@ function keyFigures(a, { extra = false } = {}) {
     if (a.max_hr) out.push(figure("FC max", F.int(a.max_hr), "bpm"));
     if (a.avg_cadence) out.push(figure("Cadence", F.int(a.avg_cadence), FOOT_SPORTS.includes(a.sport) ? "pas/min" : "tr/min"));
     if (F.isNum(a.te_aerobic)) out.push(figure("Effet aérobie", F.dec1(a.te_aerobic)));
+    if (F.isNum(a.te_anaerobic)) out.push(figure("Effet anaérobie", F.dec1(a.te_anaerobic)));
     if (F.isNum(a.pct_vma)) out.push(figure("Part de VMA", F.int(a.pct_vma), "%"));
     if (a.decouplage) out.push(figure("Découplage", F.dec1(a.decouplage.derive_pct), "%"));
     if (F.isNum(a.vo2max)) out.push(figure("VO2max", F.int(a.vo2max)));

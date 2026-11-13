@@ -67,6 +67,17 @@ Repères :
   exercices et leur progression, muscles travaillés, régularité) ; detail_seance → renfo pour une
   séance. Muscles : 1 série compte pour 1 sur un muscle principal, ½ sur un secondaire. Métriques
   act.sets (séries), act.reps, act.volume (tonnage en kg), act.sets_effort (temps d'effort).
+  Équilibre avant / arrière (equilibre) : séries de la chaîne antérieure (dominante genou, poussée, abdos,
+  biceps, releveurs) contre la chaîne postérieure (dominante hanche, tirage, lombaires, triceps, mollets),
+  écrit « 1 : x » (x séries derrière pour 1 devant). Repère : 1:1, jusqu'à 1:2 pour un coureur ;
+  « corps entier » compte ½ de chaque côté, latéral et rotation à part. Paire par paire (bas du corps :
+  genou / hanche, la plus importante en course ; haut du corps : poussée / tirage ; tronc ; bras ; bas de
+  jambe) avec un conseil.
+- Effet d'entraînement (Training Effect de Garmin, detail_seance → effet_entrainement) : effet aérobie et
+  effet anaérobie de 0 à 5 (0-0,9 aucune amélioration, 1-1,9 faible avantage, 2-2,9 maintien, 3-3,9 impact,
+  4-4,9 fort impact, 5 effort trop soutenu) et l'avantage principal de la séance (Base, Tempo, Seuil,
+  VO2 Max, Capacité anaérobie, Sprint, Récupération), comparés aux séances du même sport des 4 semaines
+  précédentes.
 - Calendrier d'entraînement (si l'utilisateur a relié son calendrier : statut → calendrier) : les séances
   prévues et les courses de son calendrier Garmin Connect (ou d'un agenda iCal). Outil calendrier pour
   une période (passée ou à venir), chaque séance prévue avec son état : fait (une séance du même sport
@@ -289,8 +300,31 @@ def _compact(activity: dict) -> dict:
         "distance_km": activity["distance_km"], "duree": activity["duree"], "allure": activity.get("allure"),
         "vitesse_kmh": activity.get("vitesse_kmh"), "fc_moy": activity.get("avg_hr"), "fc_max": activity.get("max_hr"),
         "d_plus_m": activity.get("elev_gain_m"), "charge": activity.get("load"),
-        "effet_aerobie": activity.get("te_aerobic"), "courbes": activity.get("has_streams") == 1,
+        "effet_aerobie": activity.get("te_aerobic"), "effet_anaerobie": activity.get("te_anaerobic"),
+        "courbes": activity.get("has_streams") == 1,
     }
+
+
+def _training_effect(effect: dict | None) -> dict[str, Any] | None:
+    """L'effet d'entraînement de Garmin, en clair : valeurs, niveaux, avantage principal, place parmi les séances
+    des 4 semaines précédentes."""
+    if not effect:
+        return None
+
+    def gauge(g: dict | None) -> dict | None:
+        return {"valeur": g["valeur"], "niveau": g["libelle"], "lecture": g["texte"]} if g else None
+
+    out: dict[str, Any] = {"aerobie": gauge(effect["aerobie"]), "anaerobie": gauge(effect["anaerobie"])}
+    if effect.get("avantage"):
+        b = effect["avantage"]
+        out["avantage_principal"] = f"{b['libelle']} ({b['famille_libelle'].lower()}) : {b['texte']}"
+    ctx = effect.get("contexte")
+    if ctx:
+        out["comparaison"] = {
+            "seances_comparees": len(ctx["seances"]), "sport": ctx["sport"], "jours": ctx["jours"],
+            "aerobie": ctx.get("aerobie"), "anaerobie": ctx.get("anaerobie"),
+        }
+    return out
 
 
 @mcp.tool(annotations=READ)
@@ -336,6 +370,7 @@ def detail_seance(seance_id: str) -> dict[str, Any]:
         "tours": tours[:80], "km": detail.get("splits_km", [])[:100], "decouplage_cardiaque": detail.get("decouplage"),
         "autres_mesures": {m["label"]: m["affiche"] for m in detail.get("mesures", [])},
         "telechargement_fit": status,
+        "effet_entrainement": _training_effect(detail.get("effet")),
     })
     if detail.get("renfo"):
         compact["renfo"] = _renfo_session(detail["renfo"])
@@ -372,7 +407,32 @@ def _renfo_session(data: dict) -> dict[str, Any]:
         "muscles_series": _muscles_text(data["muscles"]),
         "totaux": {"series": data["series"], "repetitions": data["repetitions"], "tonnage_kg": data["tonnage_kg"],
                    "temps_effort": metrics.fmt_duration(data["effort_s"]) if data["effort_s"] else None},
+        "equilibre_avant_arriere": _balance(data["equilibre"], data["exercices"]),
     }
+
+
+def _balance(b: dict, exercises: list[dict] | None = None) -> dict[str, Any]:
+    """L'équilibre avant / arrière, lisible : rapport, verdict, conseil, paires, et la famille de chaque exercice."""
+    out: dict[str, Any] = {
+        "rapport": b["ratio_texte"], "series_avant": b["avant"], "series_arriere": b["arriere"],
+        "verdict": b["verdict"], "explication": b["explication"], "conseil": b["conseil"],
+        "paires": [{"paire": p["nom"], p["avant"]["nom"]: p["avant"]["series"], p["arriere"]["nom"]: p["arriere"]["series"],
+                    "rapport": p["ratio_texte"], "penche": p["penche"]} for p in b["paires"]],
+        "corps_entier_series": b["mixte"], "lateral_et_rotation_series": b["neutre"],
+        "non_comptees_series": b["non_comptees"],
+    }
+    if exercises is not None:
+        def family(c: dict | None) -> str:
+            if not c:
+                return "pas compté (échauffement, cardio ou exercice non précisé)"
+            if c["chaine"] == "mixte":
+                return "Corps entier (½ devant, ½ derrière)"
+            if c["chaine"] == "neutre":
+                return "Latéral et rotation (à part, ni devant ni derrière)"
+            return f"{c['chaine_nom']} · {c['nom']}"
+
+        out["familles_des_exercices"] = {e["nom"]: family(e.get("chaine")) for e in exercises}
+    return out
 
 
 @mcp.tool(name="renfo", annotations=READ)
@@ -404,10 +464,13 @@ def renfo_period(debut: str | None = None, fin: str | None = None) -> dict[str, 
         "muscles_series": _muscles_text(worked),
         "muscles_non_travailles": [label for key, label in renfo.MUSCLES if not worked.get(key)],
         "exercices": exercises,
-        "semaines": [{"semaine_du": w["debut"], "seances": w["seances"], "series": w["series"]}
+        "semaines": [{"semaine_du": w["debut"], "seances": w["seances"], "series": w["series"],
+                      "equilibre": w["equilibre"]["ratio_texte"] if w.get("equilibre") else None}
                      for w in data["semaines"]],
+        "equilibre_avant_arriere": _balance(data["equilibre"], data["exercices"]),
         "lecture": "Séries par muscle : 1 série compte pour 1 sur un muscle principal, ½ sur un secondaire ; "
-                   "échauffement et étirements comptent au plus ½.",
+                   "échauffement et étirements comptent au plus ½. Équilibre « 1 : x » : x séries derrière "
+                   "pour 1 devant (repère 1:1, jusqu'à 1:2 pour un coureur).",
     }
 
 

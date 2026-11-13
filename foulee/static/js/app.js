@@ -16,6 +16,7 @@ import { connPills, wireConn } from "./connections.js";
 import * as A from "./tiles-activity.js";
 import * as G from "./tiles-agenda.js";
 import * as R from "./tiles-renfo.js";
+import * as T from "./tiles-effet.js";
 import * as D from "./tiles-data.js";
 import * as H from "./tiles-home.js";
 import * as W from "./tiles-withings.js";
@@ -26,7 +27,8 @@ const RENDERERS = {
   activites: A.activites, derniere_seance: A.derniere_seance, seance_resume: A.seance_resume,
   seance_carte: A.seance_carte, seance_courbes: A.seance_courbes, seance_tours: A.seance_tours,
   seance_mesures: A.seance_mesures,
-  renfo: R.renfo, renfo_exercices: R.renfo_exercices, seance_renfo: R.seance_renfo,
+  renfo: R.renfo, renfo_exercices: R.renfo_exercices, seance_renfo: R.seance_renfo, renfo_equilibre: R.renfo_equilibre,
+  seance_effet: T.seance_effet,
   profil: H.profil, forme: H.forme, allures: H.allures, semaine: H.semaine, records: H.records, journee: H.journee,
   club: H.club, withings: W.withings, agenda: G.agenda, a_venir: G.a_venir,
 };

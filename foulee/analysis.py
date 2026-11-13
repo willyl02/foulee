@@ -906,10 +906,125 @@ def zones(conn: sqlite3.Connection, kind: str, start: date, end: date, group: st
 #  Séances
 # ======================================================================
 
-TRAINING_EFFECT_LABELS = {
-    "RECOVERY": "Récupération", "BASE": "Endurance de base", "TEMPO": "Tempo", "LACTATE_THRESHOLD": "Seuil lactique",
-    "VO2MAX": "VO2max", "ANAEROBIC_CAPACITY": "Capacité anaérobie", "SPEED": "Vitesse", "NONE": "–",
+# Training Effect de Garmin (Firstbeat) : effet aérobie et effet anaérobie, de 0 à 5, et l'avantage principal de
+# la séance. Les libellés sont ceux de Garmin Connect ; les explications, celles de Foulée.
+TE_LEVELS = [  # (borne haute exclue, clé, libellé Garmin Connect)
+    (1.0, "aucun", "Aucune amélioration"),
+    (2.0, "faible", "Faible avantage"),
+    (3.0, "maintien", "Maintien"),
+    (4.0, "impact", "Impact"),
+    (5.0, "fort", "Fort impact"),
+    (math.inf, "surcharge", "Effort trop soutenu"),
+]
+TE_TEXTS = {
+    "aerobie": {
+        "aucun": "Trop court ou trop facile pour peser sur ton endurance.",
+        "faible": "Un petit plus pour ton endurance, sans plus.",
+        "maintien": "Entretient ta capacité aérobie, sans la faire progresser.",
+        "impact": "Fait progresser ta capacité aérobie.",
+        "fort": "Fait nettement progresser ta capacité aérobie : prévois la récupération qui va avec.",
+        "surcharge": "Au-delà de ce qui fait progresser : plusieurs jours de récupération, à ne pas répéter souvent.",
+    },
+    "anaerobie": {
+        "aucun": "Pas d'effort assez bref et intense pour solliciter tes capacités anaérobies.",
+        "faible": "Quelques efforts intenses : un petit plus pour ta vitesse.",
+        "maintien": "Entretient tes capacités à très haute intensité.",
+        "impact": "Fait progresser ta capacité à répéter des efforts très intenses.",
+        "fort": "Fait nettement progresser tes capacités anaérobies : récupère bien.",
+        "surcharge": "Beaucoup d'efforts à très haute intensité : récupération indispensable.",
+    },
 }
+TE_FAMILIES = {"aerobie_faible": "Aérobie faible", "aerobie_elevee": "Aérobie élevée", "anaerobie": "Anaérobique"}
+TE_BENEFITS = {  # clé de Garmin → (libellé Garmin Connect, famille, explication)
+    "RECOVERY": ("Récupération", "aerobie_faible", "Séance très facile : elle aide à récupérer des précédentes."),
+    "AEROBIC_BASE": ("Base", "aerobie_faible", "Endurance fondamentale : la base aérobie sur laquelle s'appuie tout "
+                                               "le reste de l'entraînement."),
+    "TEMPO": ("Tempo", "aerobie_elevee", "Allure soutenue mais tenable : améliore ton endurance à allure de course."),
+    "LACTATE_THRESHOLD": ("Seuil", "aerobie_elevee", "Proche du seuil : repousse l'allure que tu tiens longtemps."),
+    "VO2MAX": ("VO2 Max", "aerobie_elevee", "Efforts intenses de quelques minutes : développe ta VO2 max."),
+    "ANAEROBIC_CAPACITY": ("Capacité anaérobie", "anaerobie", "Efforts très intenses de 30 secondes à 2 minutes : "
+                                                              "développe ta capacité anaérobie."),
+    "SPEED": ("Sprint", "anaerobie", "Sprints très courts : développent ta vitesse et ta puissance."),
+}
+TE_ALIASES = {"BASE": "AEROBIC_BASE", "SPRINT": "SPEED", "ANAEROBIC": "ANAEROBIC_CAPACITY"}
+TE_CONTEXT_DAYS = 28
+TE_SPORT_WORDS = {  # « tes 12 séances de course et trail des 4 semaines précédentes »
+    "course": "de course et trail", "trail": "de course et trail", "velo": "de vélo", "marche": "de marche",
+    "rando": "de randonnée", "natation": "de natation", "renfo": "de renfo", "souplesse": "de souplesse",
+    "cardio": "de cardio / HIIT",
+}
+
+
+def te_level(value: float) -> tuple[str, str]:
+    shown = round(value, 1)
+    return next((key, label) for upper, key, label in TE_LEVELS if shown < upper)
+
+
+def te_benefit(label: str | None) -> dict | None:
+    """Avantage principal d'une séance (« AEROBIC_BASE » → Base, aérobie faible) ; None s'il manque."""
+    key = TE_ALIASES.get(str(label or "").upper(), str(label or "").upper())
+    if key not in TE_BENEFITS:
+        return None  # « UNKNOWN », « NO_BENEFIT », séance trop ancienne…
+    name, family, text = TE_BENEFITS[key]
+    return {"cle": key, "libelle": name, "famille": family, "famille_libelle": TE_FAMILIES[family], "texte": text}
+
+
+def te_benefit_text(label: str | None) -> str | None:
+    """« Base (aérobie faible) », comme Garmin Connect l'écrit."""
+    benefit = te_benefit(label)
+    return f"{benefit['libelle']} ({benefit['famille_libelle'].lower()})" if benefit else None
+
+
+def training_effect(conn: sqlite3.Connection, row: sqlite3.Row | dict, extra: dict) -> dict | None:
+    """L'effet d'entraînement d'une séance (Garmin) : aérobie, anaérobie, avantage principal, et la place de la
+    séance parmi celles du même sport des 4 semaines précédentes. None si Garmin ne l'a pas calculé."""
+    aero, anaero = row["te_aerobic"], row["te_anaerobic"]
+    if aero is None and anaero is None:
+        return None
+
+    def gauge(kind: str, value: float | None) -> dict | None:
+        if value is None:
+            return None
+        key, label = te_level(value)
+        return {"valeur": round(value, 1), "niveau": key, "libelle": label, "texte": TE_TEXTS[kind][key]}
+
+    sports = metrics.RUNNING_SPORTS if row["sport"] in metrics.RUNNING_SPORTS else (row["sport"],)
+    day = date.fromisoformat(row["date"])
+    previous = conn.execute(
+        f"SELECT id, date, name, te_aerobic, te_anaerobic FROM activities WHERE sport IN ({','.join('?' * len(sports))}) "
+        "AND date >= ? AND start_local < ? AND id <> ? AND (te_aerobic IS NOT NULL OR te_anaerobic IS NOT NULL) "
+        "ORDER BY start_local",
+        (*sports, iso(day - timedelta(days=TE_CONTEXT_DAYS)), row["start_local"], row["id"])).fetchall()
+
+    def spread(column: str, value: float | None) -> dict | None:
+        """Où se place la séance parmi les précédentes : nettement en dessous / au-dessus (au dixième près)."""
+        values = [round(r[column], 1) for r in previous if r[column] is not None]
+        if value is None or not values:
+            return None
+        shown = round(value, 1)
+        return {"nombre": len(values), "min": min(values), "max": max(values),
+                "moyenne": round(statistics.fmean(values), 1),
+                "en_dessous": sum(v < shown for v in values), "au_dessus": sum(v > shown for v in values)}
+
+    context = None
+    if previous:
+        context = {
+            "jours": TE_CONTEXT_DAYS,
+            "sport": TE_SPORT_WORDS.get(row["sport"], "du même sport"),
+            "seances": [{"id": r["id"], "date": r["date"], "nom": r["name"],
+                         "aerobie": round(r["te_aerobic"], 1) if r["te_aerobic"] is not None else None,
+                         "anaerobie": round(r["te_anaerobic"], 1) if r["te_anaerobic"] is not None else None}
+                        for r in previous][-80:],
+            "aerobie": spread("te_aerobic", aero), "anaerobie": spread("te_anaerobic", anaero),
+        }
+    benefit = te_benefit(extra.get("te_label"))
+    return {
+        "aerobie": gauge("aerobie", aero), "anaerobie": gauge("anaerobie", anaero), "avantage": benefit,
+        "charge_garmin": round(row["garmin_load"]) if row["garmin_load"] else None, "contexte": context,
+    }
+
+
+TRAINING_EFFECT_LABELS = {key: value[0] for key, value in TE_BENEFITS.items()}  # (pour Claude et les mesures)
 
 
 def activity_measures(row: sqlite3.Row | dict, extra: dict) -> list[dict]:
@@ -942,8 +1057,7 @@ def activity_measures(row: sqlite3.Row | dict, extra: dict) -> list[dict]:
         ("bb_impact", "Effet sur la Body Battery", num(extra.get("bb_impact"), "") if extra.get("bb_impact") is not None
          else None),
         ("steps", "Pas", f"{round(extra['steps']):,}".replace(",", " ") if extra.get("steps") else None),
-        ("te_label", "Bénéfice principal", TRAINING_EFFECT_LABELS.get(extra.get("te_label"), extra.get("te_label"))
-         if extra.get("te_label") else None),
+        ("te_label", "Bénéfice principal", te_benefit_text(extra.get("te_label"))),
         ("lieu", "Lieu", extra.get("lieu")),
     ]
     best = sorted((int(k[5:]), v) for k, v in extra.items() if k.startswith("best_") and isinstance(v, (int, float)))
@@ -1024,6 +1138,7 @@ def activity_detail(conn: sqlite3.Connection, activity_id: str, settings: dict) 
     data["zones_fc_noms"] = hrp["bornes"]
     data["zones_allure_noms"] = hrp["allure"]["bornes"]
     data["mesures"] = activity_measures(row, data["extra"])
+    data["effet"] = training_effect(conn, row, data["extra"])  # effet aérobie et anaérobie de Garmin (ou None)
     data["renfo"] = renfo.session(conn, activity_id)  # exercices de renfo, muscles travaillés (ou None)
     if row["sport"] in metrics.RUNNING_SPORTS:
         vma = float(settings.get("vma_kmh") or 16)

@@ -38,6 +38,10 @@
   --vb-recup: #cfe2f3; --vb-ef: #d9ead3; --vb-es: #6aa84f; --vb-seuil: #ffe599; --vb-pa: #f9cb9c; --vb-vma: #e06666; --vb-lactique: #8e7cc3;
   --vb-ink-strong: #ffffff; --vb-ink: #15201b;
   --warn: #b07800;
+  /* Effet d'entraînement (couleurs de Garmin Connect) et équilibre avant / arrière du renfo */
+  --te-0: #a7b1ac; --te-1: #7d8984; --te-2: #2a78d6; --te-3: #13a06e; --te-4: #eb6834; --te-5: #d3263a;
+  --te-low: #13a06e; --te-high: #eb6834; --te-ana: #8b5cd6;
+  --eq-front: #2a78d6; --eq-back: #eb6834;
   --font: "Barlow", system-ui, "Segoe UI", sans-serif;
   --font-figures: "Barlow Semi Condensed", "Barlow", system-ui, sans-serif;
   --row: 140px;
@@ -58,6 +62,9 @@
     --sl-deep: #3b7be0; --sl-light: #8fbdf2; --sl-rem: #b48ae8; --sl-awake: #ee8aa4;
     --vb-recup: #2b4a66; --vb-ef: #2f4a2b; --vb-es: #3f7a2c; --vb-seuil: #6b5a1e; --vb-pa: #6e4526; --vb-vma: #8f2f2f; --vb-lactique: #4e3f7f;
     --vb-ink-strong: #ffffff; --vb-ink: #e8eeeb; --warn: #e0a72e;
+    --te-0: #56625d; --te-1: #7b8782; --te-2: #3987e5; --te-3: #1fae7b; --te-4: #e2703f; --te-5: #e5485b;
+    --te-low: #1fae7b; --te-high: #e2703f; --te-ana: #a37ff0;
+    --eq-front: #3987e5; --eq-back: #e2703f;
   }
 }
 :root[data-theme="dark"] {
@@ -73,6 +80,9 @@
   --sl-deep: #3b7be0; --sl-light: #8fbdf2; --sl-rem: #b48ae8; --sl-awake: #ee8aa4;
   --vb-recup: #2b4a66; --vb-ef: #2f4a2b; --vb-es: #3f7a2c; --vb-seuil: #6b5a1e; --vb-pa: #6e4526; --vb-vma: #8f2f2f; --vb-lactique: #4e3f7f;
   --vb-ink-strong: #ffffff; --vb-ink: #e8eeeb; --warn: #e0a72e;
+  --te-0: #56625d; --te-1: #7b8782; --te-2: #3987e5; --te-3: #1fae7b; --te-4: #e2703f; --te-5: #e5485b;
+  --te-low: #1fae7b; --te-high: #e2703f; --te-ana: #a37ff0;
+  --eq-front: #3987e5; --eq-back: #e2703f;
 }
 
 * { box-sizing: border-box; }
@@ -1456,4 +1466,165 @@ a.chip:hover { box-shadow: inset 0 0 0 1px var(--base); }
   .upcoming { flex-direction: column; }
   .up-race { max-width: none; }
   .up-item { width: 150px; }
+}
+
+/* ------------------------------------------------------------- Séance : effet d'entraînement (Garmin) */
+.tile-body.te-body { container-type: inline-size; overflow: auto; }
+.te { display: grid; gap: 10px 18px; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+.te-side { grid-column: 1 / -1; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.te-gauge { margin: 0; min-width: 0; display: flex; flex-direction: column; align-items: center; text-align: center; }
+.te-kind { font-size: 12px; font-weight: 600; color: var(--ink-2); text-transform: uppercase; letter-spacing: 0.06em; cursor: help; }
+.te-dial { position: relative; width: 100%; max-width: 180px; margin-top: 2px; container-type: inline-size; }
+.te-dial svg { display: block; width: 100%; height: auto; overflow: visible; }
+.te-seg { fill: none; stroke-width: 12; stroke: color-mix(in srgb, var(--lvl) 26%, var(--surface)); }
+.te-fill { fill: none; stroke-width: 12; stroke: var(--lvl); }
+.te-rug { stroke: var(--ink-2); stroke-width: 2; stroke-linecap: round; opacity: 0.36; }
+.te-rug:hover { opacity: 1; stroke-width: 3; }
+.te-num { font: 500 10.5px var(--font); fill: var(--muted); text-anchor: middle; }
+.te-knob { fill: var(--surface); stroke: var(--lvl); stroke-width: 4.5; filter: drop-shadow(0 1px 1.5px rgba(0, 0, 0, 0.28)); }
+.te-center { position: absolute; left: 0; right: 0; top: 60%; transform: translateY(-50%); display: flex; justify-content: center; pointer-events: none; }
+.te-value { font: 600 22cqw/1 var(--font-figures); letter-spacing: -0.01em; color: var(--ink); }
+.te-dial.is-empty .te-value { color: var(--muted); }
+.te-level { display: inline-flex; align-items: center; gap: 6px; margin-top: 2px; padding: 2px 10px; border-radius: 999px; font-size: 13px;
+  font-weight: 600; white-space: nowrap; color: var(--ink); background: color-mix(in srgb, var(--lvl) 16%, var(--surface));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--lvl) 35%, transparent); }
+.te-level i { width: 8px; height: 8px; border-radius: 50%; background: var(--lvl); }
+.te-level.is-none { color: var(--muted); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--hair); }
+.te-text { margin: 6px 0 0; max-width: 32ch; font-size: 13px; line-height: 1.35; color: var(--ink-2); }
+.l-aucun { --lvl: var(--te-0); } .l-faible { --lvl: var(--te-1); } .l-maintien { --lvl: var(--te-2); }
+.l-impact { --lvl: var(--te-3); } .l-fort { --lvl: var(--te-4); } .l-surcharge { --lvl: var(--te-5); }
+.te-side-h { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; font-size: 12px; font-weight: 600; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.06em; }
+.te-benefit p { margin: 4px 0 0; font-size: 13.5px; line-height: 1.4; color: var(--ink-2); }
+.te-benefit-name { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 9px; }
+.te-benefit-name i { align-self: center; width: 11px; height: 11px; border-radius: 3px; background: var(--fam); }
+.te-benefit-name b { font: 600 21px/1.1 var(--font-figures); }
+.te-benefit-name span { font-size: 13px; font-weight: 600; color: var(--fam-ink); }
+.fam-aerobie_faible { --fam: var(--te-low); } .fam-aerobie_elevee { --fam: var(--te-high); } .fam-anaerobie { --fam: var(--te-ana); }
+.te-benefit { --fam-ink: color-mix(in srgb, var(--fam) 72%, var(--ink)); }
+.te-compare ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.te-compare li { font-size: 13.5px; line-height: 1.4; color: var(--ink-2); }
+.te-compare li b { color: var(--ink); font-weight: 600; margin-right: 3px; }
+.te-rug-key { display: inline-block; width: 2px; height: 10px; border-radius: 1px; background: var(--ink-2); opacity: 0.5; box-shadow: 4px 0 0 var(--ink-2); margin-right: 4px; }
+.te-alone { margin: 0; font-size: 13px; color: var(--muted); }
+.te-load { display: flex; align-items: baseline; gap: 10px; padding-top: 8px; border-top: 1px solid var(--hair); font-size: 13px; color: var(--muted); }
+.te-load b { font: 600 18px/1 var(--font-figures); color: var(--ink); }
+@container (min-width: 700px) {
+  .te { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(250px, 1.25fr); }
+  .te-side { grid-column: auto; padding-left: 18px; border-left: 1px solid var(--hair); }
+}
+@container (max-width: 420px) {
+  .te { gap: 10px 10px; }
+  .te-level { padding: 2px 8px; font-size: 12px; white-space: normal; text-align: left; }
+  .te-text { font-size: 12.5px; }
+}
+@container (max-width: 280px) {
+  .te { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ------------------------------------------------------------- Renfo : équilibre avant / arrière */
+.z-avant { --zone: var(--bad); } .z-proche { --zone: var(--warn); } .z-cible { --zone: var(--good); }
+.z-arriere, .z-arriere_fort { --zone: var(--warn); } .z-vide { --zone: var(--muted); }
+.tile-body.eq-body { container-type: inline-size; }
+.eq { display: grid; gap: 16px 28px; grid-template-columns: minmax(0, 1fr); align-items: start; }
+.eq > section { min-width: 0; }
+.eq-head { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; }
+.eq-ratio { font: 600 40px/1 var(--font-figures); letter-spacing: -0.01em; color: var(--ink); white-space: nowrap; cursor: help; }
+.eq-head.compact .eq-ratio { font-size: 26px; }
+.eq-pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 11px; border-radius: 999px; font-size: 13.5px; font-weight: 600;
+  white-space: nowrap; color: var(--ink); background: color-mix(in srgb, var(--zone) 15%, var(--surface));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--zone) 38%, transparent); cursor: help; }
+.eq-pill::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--zone); }
+.eq-counts { margin-top: 6px; font-size: 13.5px; color: var(--ink-2); }
+.eq-counts b { font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
+.eq-beam { margin-top: 26px; }
+.eq-track { position: relative; height: 16px; border-radius: 8px; background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--hair); }
+.eq-z { position: absolute; top: 0; bottom: 0; background: color-mix(in srgb, var(--zone) 12%, transparent); }
+.eq-z:first-child { border-radius: 8px 0 0 8px; }
+.eq-z:nth-child(5) { border-radius: 0 8px 8px 0; }
+.eq-z.z-cible { background: color-mix(in srgb, var(--zone) 30%, transparent); }
+.eq-z.z-arriere_fort { background: color-mix(in srgb, var(--zone) 20%, transparent); }
+.eq-z em { position: absolute; bottom: calc(100% + 4px); left: 50%; transform: translateX(-50%); font: 600 10.5px/1 var(--font);
+  font-style: normal; color: color-mix(in srgb, var(--good) 80%, var(--ink)); letter-spacing: 0.05em; text-transform: uppercase; white-space: nowrap; }
+.eq-ticklines { position: absolute; inset: 0; pointer-events: none; }
+.eq-tick { position: absolute; top: -3px; bottom: -3px; width: 0; border-left: 1.5px solid color-mix(in srgb, var(--ink-2) 55%, transparent); }
+.eq-tick b { position: absolute; top: calc(100% + 3px); left: 0; transform: translateX(-50%); font: 500 11.5px/1 var(--font); color: var(--muted); white-space: nowrap; }
+.eq-knob { position: absolute; top: 50%; width: 20px; height: 20px; margin: -10px 0 0 -10px; border-radius: 50%; background: var(--zone);
+  box-shadow: 0 0 0 3px var(--surface), 0 1px 4px 3px rgba(0, 0, 0, 0.22); z-index: 1; }
+.eq-ends { display: flex; justify-content: space-between; margin-top: 21px; font-size: 11.5px; color: var(--muted); }
+.eq-beam.compact { margin-top: 10px; }
+.eq-beam.compact .eq-track { height: 12px; }
+.eq-beam.compact .eq-knob { width: 16px; height: 16px; margin: -8px 0 0 -8px; }
+.eq-advice { margin: 12px 0 0; font-size: 13.5px; line-height: 1.45; color: var(--ink-2); }
+.eq-empty { margin: 0; font-size: 14px; color: var(--muted); }
+/* Les paires du repère 1:1, en ailes de papillon : l'avant à gauche de l'axe, l'arrière à droite */
+.eq-pairs { display: grid; }
+.eq-row { display: grid; grid-template-columns: minmax(78px, 108px) minmax(0, 1fr) minmax(0, 1fr); align-items: center; min-height: 30px; border-radius: 6px; }
+.eq-row.leans { background: color-mix(in srgb, var(--bad) 6%, transparent); }
+.eq-pairs-head { min-height: 20px; font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
+.eq-pairs-head .eq-front { text-align: right; padding-right: 10px; color: color-mix(in srgb, var(--eq-front) 80%, var(--ink)); }
+.eq-pairs-head .eq-back { padding-left: 10px; color: color-mix(in srgb, var(--eq-back) 80%, var(--ink)); }
+.eq-pname { padding-left: 6px; font-size: 13.5px; font-weight: 500; color: var(--ink); line-height: 1.15; }
+.eq-pname em { display: block; font-size: 11.5px; font-style: normal; font-weight: 500; color: var(--bad); }
+.eq-side { display: flex; align-items: center; gap: 6px; min-width: 0; height: 30px; }
+.eq-side.eq-front { flex-direction: row-reverse; border-right: 1.5px solid var(--ink-2); }
+.eq-bar { flex: none; height: 14px; width: calc((100% - var(--lab, 90px)) * var(--k, 0)); min-width: 3px; }
+.eq-lab i { font-style: normal; }
+.eq-pfam { display: none; font-size: 11.5px; color: var(--muted); }
+.eq-front .eq-bar { background: var(--eq-front); border-radius: 3px 0 0 3px; }
+.eq-back .eq-bar { background: var(--eq-back); border-radius: 0 3px 3px 0; }
+.eq-lab { flex: none; white-space: nowrap; font-size: 13px; color: var(--ink-2); }
+.eq-front .eq-lab { padding-left: 2px; }
+.eq-back .eq-lab { padding-right: 2px; }
+.eq-lab b { font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
+.eq-side.is-zero .eq-lab, .eq-side.is-zero .eq-lab b { color: var(--muted); font-weight: 400; }
+.eq-front.is-zero .eq-lab { padding-right: 8px; }
+.eq-back.is-zero .eq-lab { padding-left: 8px; }
+.eq-notes { margin: 10px 0 0; font-size: 13px; line-height: 1.45; color: var(--muted); }
+.eq-notes b { font-weight: 600; color: var(--ink-2); }
+/* Semaine après semaine : la part des séries faites derrière, face à la bande de la cible */
+.eq-weeks-head { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 2px 12px; margin-bottom: 10px; font-size: 13px; color: var(--muted); }
+.eq-weeks-head span:first-child { font-weight: 600; color: var(--ink-2); }
+.eq-weeks { display: grid; grid-template-columns: 38px minmax(0, 1fr); height: 128px; }
+.eq-wlabels { position: relative; font-size: 11px; color: var(--muted); }
+.eq-wlabels span { position: absolute; right: 7px; transform: translateY(-50%); white-space: nowrap; }
+.eq-wplot { position: relative; border-left: 1px solid var(--hair); border-bottom: 1px solid var(--base); }
+.eq-wband { position: absolute; left: 0; right: 0; background: color-mix(in srgb, var(--good) 15%, transparent); }
+.eq-wline { position: absolute; left: 0; right: 0; border-top: 1.5px dashed color-mix(in srgb, var(--ink-2) 60%, transparent); }
+.eq-wdot { position: absolute; width: 11px; height: 11px; margin: -5.5px 0 0 -5.5px; border-radius: 50%; background: var(--zone);
+  box-shadow: 0 0 0 2px var(--surface); cursor: help; }
+.eq-wdot.now { box-shadow: 0 0 0 2px var(--surface), 0 0 0 3.5px var(--ink); }
+.eq-waxis { margin-left: 38px; }
+/* Les exercices : leur famille dans l'équilibre */
+.chain-tag { display: inline-block; margin-right: 3px; padding: 0 6px; border-radius: 5px; font-size: 11.5px; line-height: 17px;
+  white-space: nowrap; vertical-align: 1px; color: var(--ink-2); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--hair); }
+.rf-ex-m .chain-tag { font-style: normal; }
+.chain-tag.is-avant { color: var(--ink); background: color-mix(in srgb, var(--eq-front) 12%, var(--surface));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--eq-front) 34%, transparent); }
+.chain-tag.is-arriere { color: var(--ink); background: color-mix(in srgb, var(--eq-back) 12%, var(--surface));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--eq-back) 34%, transparent); }
+.chain-tag.is-mixte { background: linear-gradient(90deg, color-mix(in srgb, var(--eq-front) 12%, var(--surface)) 50%,
+  color-mix(in srgb, var(--eq-back) 12%, var(--surface)) 50%); color: var(--ink); }
+.chain-tag.is-neutre { background: transparent; box-shadow: inset 0 0 0 1px var(--base); }
+.chain-tag.is-none { background: transparent; box-shadow: none; border: 1px dashed var(--base); line-height: 15px; color: var(--muted); }
+.eq-mini { max-width: 620px; }
+.eq-mini .eq-advice { margin-top: 10px; font-size: 13px; }
+/* Étroit : les familles passent sous le nom de la paire, les barres gardent la place */
+@container (max-width: 520px) {
+  .eq-pairs { --lab: 30px; }
+  .eq-lab i { display: none; }
+  .eq-pfam { display: block; }
+  .eq-row { grid-template-columns: minmax(96px, 120px) minmax(0, 1fr) minmax(0, 1fr); }
+}
+@container (min-width: 640px) {
+  .eq { grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); }
+  .eq-trend { grid-column: 1 / -1; }
+}
+@container (min-width: 1000px) {
+  .eq { grid-template-columns: minmax(250px, 0.9fr) minmax(0, 1.35fr) minmax(220px, 0.8fr); }
+  .eq-trend { grid-column: auto; }
+}
+@media (max-width: 900px) {
+  .grid > .tile--seance_effet, .grid > .tile--renfo_equilibre { height: auto; min-height: 120px; }
+  .grid > .tile--seance_effet .tile-body, .grid > .tile--renfo_equilibre .tile-body.scroll { overflow: visible; }
 }

@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
+import unicodedata
 from collections import defaultdict
 from datetime import date, timedelta
 from typing import Any
@@ -523,13 +524,319 @@ TEXT_CATEGORIES: list[tuple[str, str]] = [
 ]
 
 
+def text_category(name: str) -> str | None:
+    """Catégorie de Garmin d'un exercice écrit en toutes lettres (anglais ou français) ; None s'il n'est pas reconnu."""
+    low = (name or "").lower()
+    return next((category for pattern, category in TEXT_CATEGORIES if re.search(pattern, low)), None)
+
+
 def text_muscles(name: str) -> dict[str, float]:
     """Muscles d'un exercice écrit en toutes lettres (anglais ou français) ; rien s'il n'est pas reconnu."""
-    low = (name or "").lower()
-    for pattern, category in TEXT_CATEGORIES:
-        if re.search(pattern, low):
-            return dict(CATEGORIES[category][1])
-    return {}
+    category = text_category(name)
+    return dict(CATEGORIES[category][1]) if category else {}
+
+
+# ----------------------------------------------------- équilibre avant / arrière
+# Chaîne antérieure contre chaîne postérieure, en séries : le repère des préparateurs physiques est 1:1
+# (une série de tirage pour une série de poussée, une de soulevé de terre roumain pour une de squat),
+# et jusqu'à 1:2 en faveur de l'arrière pour un coureur. Chaque exercice est rangé par son mouvement
+# (une famille), d'après sa catégorie et son nom chez Garmin, ou ce qui est écrit dans la description Strava.
+CHAIN_FAMILIES: dict[str, tuple[str, str, str, str]] = {  # clé → (nom, chaîne, exemples, nom court)
+    "genou": ("Dominante genou", "avant", "squats, fentes, step-up, chaise", "genou"),
+    "poussee": ("Poussée", "avant", "pompes, développés, élévations", "poussée"),
+    "abdos": ("Abdos et gainage", "avant", "planche, crunchs, relevés de jambes", "abdos"),
+    "biceps": ("Biceps", "avant", "curls", "biceps"),
+    "releveurs": ("Releveurs du pied", "avant", "élévations des orteils", "releveurs"),
+    "hanche": ("Dominante hanche", "arriere", "soulevé de terre roumain, hip thrust, pont, leg curl, swing", "hanche"),
+    "tirage": ("Tirage", "arriere", "rowing, tractions, oiseau, face pull", "tirage"),
+    "lombaires": ("Lombaires", "arriere", "superman, extensions lombaires, bird dog", "lombaires"),
+    "triceps": ("Triceps", "arriere", "dips, extensions des triceps", "triceps"),
+    "mollets": ("Mollets", "arriere", "élévations des mollets", "mollets"),
+    "mixte": ("Corps entier", "mixte", "burpees, portés, haltérophilie", "corps entier"),
+    "lateral": ("Latéral et rotation", "neutre", "planche latérale, bonds latéraux, abduction, rotations", "latéral"),
+}
+CHAIN_LABELS = {"avant": "Avant", "arriere": "Arrière", "mixte": "Corps entier", "neutre": "Latéral"}
+# Les paires du repère 1:1, de la plus importante pour un coureur à la moins importante :
+# (clé, nom, famille avant, famille arrière, à ajouter derrière, à ajouter devant)
+CHAIN_PAIRS: list[tuple[str, str, str, str, str, str]] = [
+    ("bas", "Bas du corps", "genou", "hanche", "du soulevé de terre roumain, du hip thrust ou du leg curl",
+     "des squats, des fentes ou des step-up"),
+    ("haut", "Haut du corps", "poussee", "tirage", "du rowing, des tractions ou de l'oiseau",
+     "des pompes ou du développé"),
+    ("tronc", "Tronc", "abdos", "lombaires", "du superman, des extensions lombaires ou du bird dog",
+     "de la planche ou des crunchs"),
+    ("bras", "Bras", "biceps", "triceps", "des dips ou des extensions des triceps", "des curls"),
+    ("jambe", "Bas de jambe", "releveurs", "mollets", "des élévations des mollets",
+     "des élévations des orteils (releveurs, contre les périostites)"),
+]
+# Pas du renforcement de l'avant ou de l'arrière : échauffement, mobilité, cardio, exercice non précisé
+CHAIN_SKIP = LIGHT | {"unknown", "cardio", "run", "run_indoor", "bike", "bike_outdoor", "indoor_bike", "elliptical",
+                      "floor_climb", "indoor_row", "ladder", "stair_stepper", "battle_rope"}
+CHAIN_CATEGORY: dict[str, str] = {  # famille par défaut de chaque catégorie de Garmin
+    "bench_press": "poussee", "push_up": "poussee", "shoulder_press": "poussee", "flye": "poussee",
+    "lateral_raise": "poussee", "squat": "genou", "lunge": "genou", "plyo": "genou", "sled": "genou",
+    "core": "abdos", "crunch": "abdos", "sit_up": "abdos", "plank": "abdos", "leg_raise": "abdos",
+    "curl": "biceps", "pull_up": "tirage", "row": "tirage", "shrug": "tirage", "shoulder_stability": "tirage",
+    "deadlift": "hanche", "hip_raise": "hanche", "hip_swing": "hanche", "leg_curl": "hanche",
+    "olympic_lift": "hanche", "tire": "hanche", "hyperextension": "lombaires", "triceps_extension": "triceps",
+    "calf_raise": "mollets", "total_body": "mixte", "carry": "mixte", "sandbag": "mixte", "chop": "lateral",
+    "hip_stability": "lateral", "sledge_hammer": "lateral",
+}
+# Le nom de l'exercice l'emporte sur sa catégorie : (catégorie ou « * », motif sur le nom simplifié — minuscules
+# sans accents, mots séparés par « _ » et encadrés par « _ » —, famille ou None pour « pas compté »).
+# Le premier qui correspond l'emporte : l'arrière de l'épaule avant les élévations, le latéral avant la planche…
+CHAIN_RULES: list[tuple[str, str, str | None]] = [
+    # écrit à la main dans Strava : du cardio, pas du renforcement
+    ("texte", r"jump_rope|corde_a_sauter|jumping_jacks?_|_jacks_|rameur|elliptique|_velo_|footing|tapis_de_course"
+              r"|course_a_pied", None),
+    # l'épaule : l'arrière (rotation externe, oiseau, face pull…), puis l'avant (élévations, rotation interne) ;
+    # pas les rotations de hanche
+    ("*", r"^(?!.*_(?:hip|leg|hanche)_).*(?:external_rotation|rotations?_externes?|face_pull|pull_apart|reverse_fly"
+          r"|rear_delt|rear_fly|bent_over_lateral|_[ytw]_raise|_[ytw]_fly|scapula|oiseau|band_pull|shoulder_extension)",
+     "tirage"),
+    ("*", r"^(?!.*_(?:hip|leg|hanche)_).*(?:lateral_raise|side_raise|front_raise|elevations?_laterales?"
+          r"|elevations?_frontales?|internal_rotation|shoulder_abduction|shoulder_flexion)", "poussee"),
+    ("push_up", r"_row_", "mixte"),  # pompe et rowing
+    ("push_up", r".", "poussee"),
+    ("total_body", r".", "mixte"),
+    ("olympic_lift", r"clean.*(?:jerk|press)", "mixte"),
+    ("olympic_lift", r"jerk|press", "poussee"),
+    ("olympic_lift", r"clean|snatch|pull|deadlift|swing", "hanche"),
+    # latéral et rotation : ni devant ni derrière
+    ("*", r"side_plank|planche_laterale|copenhag|side_bend|windmill|russian_twist|rotation_russe|oblique|wood_?chop"
+          r"|bucheron|pallof|core_press|_chop_|hip_drop|lateral_(?:leap|hop|plyo|slide|walk|band|step|lunge|shuffle"
+          r"|bound|jump|swing)|side_(?:lunge|step|shuffle|to_side|lying_leg|kick|lying_hip)|shuffle|skater|abduct"
+          r"|adduct|clam|fire_hydrant|inner_thigh|monster_walk|band_walk|pas_chasses?|fentes?_laterales?"
+          r"|bonds?_lateraux|lateraux|_rotations?_du_buste|hip_(?:internal_|external_)?rotation", "lateral"),
+    ("hip_raise", r"leg_circles|leg_lift", "lateral"),
+    ("crunch", r".", "abdos"),
+    ("sit_up", r".", "abdos"),
+    # puis le mouvement, d'où qu'il vienne
+    ("*", r"swing|leg_curl|hamstring|ischio|nordic|good_morning|deadlift|souleve_de_terre|_rdl_|hip_thrust|hip_press"
+          r"|glute|fessier|bridge|_pont_|hip_raise|hip_extension|donkey_kick|rear_leg_(?:raise|extension)"
+          r"|reverse_hyper|pull_through", "hanche"),
+    ("*", r"tricep|_dips?_|skull", "triceps"),
+    ("*", r"calf|mollet|heel_raise", "mollets"),
+    ("*", r"toe_raise|tibialis|releveur|orteils", "releveurs"),
+    ("*", r"superman|back_extension|hyperextension|extensions?_lombaires?|lombaire|bird_dog|opposite_arm_and_leg"
+          r"|arm_and_leg_extension|reverse_plank|planche_inversee|swimming|nageur", "lombaires"),
+    ("*", r"burpee|turkish_get_up|man_maker|squat_thrust|sprawl|farmer|_carry_|marche_du_fermier", "mixte"),
+    ("plyo", r"medicine_ball|throw|slam", "mixte"),
+    ("*", r"dead_?bug|hollow|crunch|sit_?ups?_|curl_up|v_up|leg_raise|knee_raise|knee_to_chest|knee_tuck"
+          r"|releves?_de_(?:jambes|genoux|buste)|toes_to_bar|mountain_climber|bear_crawl|ab_wheel|rollout|jackknife"
+          r"|l_sit|knee_strike|plank|planche|gainage|abdo", "abdos"),
+    ("*", r"squat|lunge|fentes?_|step_?up|leg_press|presse|leg_extension|wall_sit|chaise|pistol|thruster|wall_ball",
+     "genou"),
+    ("*", r"pull_?ups?_|chin_?ups?_|traction|pull_?down|lat_?pull|_row|rowing|tirage|shrug|haussement", "tirage"),
+    ("*", r"push_?ups?_|pompe|bench_press|chest_press|developpe|_press_|_fly_|flye|ecarte", "poussee"),
+    ("*", r"curl|biceps", "biceps"),
+]
+# Pour un exercice que rien d'autre ne range : la famille de ses muscles principaux
+MUSCLE_FAMILY = {
+    "pectoraux": "poussee", "epaules": "poussee", "biceps": "biceps", "abdos": "abdos", "quadriceps": "genou",
+    "triceps": "triceps", "trapezes": "tirage", "dorsaux": "tirage", "lombaires": "lombaires",
+    "fessiers": "hanche", "ischios": "hanche", "mollets": "mollets", "obliques": "lateral",
+    "abducteurs": "lateral", "adducteurs": "lateral",
+}
+
+
+def _simple(text: str) -> str:
+    """« Soulevé de terre (roumain) » → « souleve_de_terre_roumain »."""
+    plain = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode().lower()
+    return re.sub(r"[^a-z0-9]+", "_", plain).strip("_")
+
+
+def _family_from_muscles(muscles: dict[str, float]) -> str | None:
+    families = [MUSCLE_FAMILY[m] for m, w in muscles.items() if w >= P and m in MUSCLE_FAMILY]
+    chains = {CHAIN_FAMILIES[f][1] for f in families}
+    if not families:
+        return None
+    if {"avant", "arriere"} <= chains:
+        return "mixte"
+    return next((f for f in families if CHAIN_FAMILIES[f][1] != "neutre"), families[0])
+
+
+def chain_family(category: str | None, name: str | None) -> str | None:
+    """Famille de mouvement d'un exercice (« genou », « hanche », « lateral »…) ; None s'il ne compte pas dans
+    l'équilibre (échauffement, cardio, exercice non précisé ou pas reconnu)."""
+    category = (category or "unknown").lower()
+    if category in CHAIN_SKIP:
+        return None
+    key = _simple(name or "")
+    if key:
+        padded = f"_{key}_"
+        for cat, pattern, family in CHAIN_RULES:
+            if (cat == "*" or cat == category) and re.search(pattern, padded):
+                return family
+    if category == "texte":
+        category = text_category(name or "") or "unknown"
+        if category in CHAIN_SKIP:
+            return None
+    if category in CHAIN_CATEGORY:
+        return CHAIN_CATEGORY[category]
+    return _family_from_muscles(exercise_muscles(category, name))
+
+
+def chain_info(category: str | None, name: str | None) -> dict | None:
+    """La famille d'un exercice telle que l'interface la montre ; None s'il ne compte pas."""
+    family = chain_family(category, name)
+    if family is None:
+        return None
+    label, chain, _, _ = CHAIN_FAMILIES[family]
+    return {"famille": family, "nom": label, "chaine": chain, "chaine_nom": CHAIN_LABELS[chain]}
+
+
+def _number(value: float) -> str:
+    """12 → « 12 », 12.5 → « 12,5 »."""
+    value = round(value, 1)
+    return str(int(value)) if value == int(value) else f"{value:.1f}".replace(".", ",")
+
+
+def ratio_text(ratio: float | None) -> str:
+    """Le rapport « avant : arrière » comme les préparateurs l'écrivent : « 1 : 1,5 », « 1 : 0,75 »."""
+    if ratio is None:
+        return "tout à l'arrière"
+    shown = (f"{ratio:.2f}" if ratio < 1 else f"{ratio:.1f}").rstrip("0").rstrip(".")
+    return "1 : " + shown.replace(".", ",")
+
+
+BALANCE_ZONES: dict[str, tuple[str, str]] = {  # zone → (verdict, explication)
+    "avant": ("Trop d'avant", "Plus de séries devant que derrière : la chaîne postérieure (fessiers, ischios, "
+                              "dos, mollets) est en retard."),
+    "proche": ("Presque à l'équilibre", "Un peu plus de séries devant que derrière : encore quelques séries "
+                                        "côté arrière pour atteindre 1:1."),
+    "cible": ("Dans la cible", "Entre 1:1 et 1:2 : l'équilibre conseillé pour un coureur, un peu plus de travail "
+                               "derrière que devant."),
+    "arriere": ("Très orienté arrière", "Au-delà de 1:2 : ne laisse pas tomber l'avant (quadriceps, gainage), utile "
+                                        "en descente et pour tenir le bassin."),
+    "arriere_fort": ("Presque tout à l'arrière", "Presque rien devant : quadriceps et gainage ont aussi leur place, "
+                                                 "même pour un coureur."),
+    "vide": ("Rien à comparer", "Aucune série rangée devant ou derrière : échauffement, cardio, latéral ou exercice "
+                                "non précisé."),
+}
+
+
+def balance_zone(front: float, back: float) -> tuple[str, float | None]:
+    """Zone du rapport arrière / avant (arrondi comme il s'affiche, pour que l'affichage et la zone concordent)."""
+    if front <= 0:
+        return ("arriere_fort" if back > 0 else "vide"), None
+    ratio = back / front
+    ratio = round(ratio, 2) if ratio < 1 else round(ratio, 1)
+    if ratio < 0.8:
+        return "avant", ratio
+    if ratio < 1:
+        return "proche", ratio
+    if ratio <= 2:
+        return "cible", ratio
+    return ("arriere" if ratio <= 4 else "arriere_fort"), ratio
+
+
+def _lean(front: float, back: float) -> str:
+    zone, _ = balance_zone(front, back)
+    return {"avant": "avant", "proche": "equilibre", "cible": "equilibre", "vide": "equilibre"}.get(zone, "arriere")
+
+
+def balance(rows: list[dict]) -> dict:
+    """Équilibre avant / arrière d'un ensemble d'exercices, en séries (« corps entier » : ½ de chaque côté ;
+    latéral et rotation : à part, ni devant ni derrière)."""
+    per_family: dict[str, float] = defaultdict(float)
+    skipped = 0.0
+    for e in rows:
+        family = chain_family(e["category"], e["name"])
+        if family is None:
+            skipped += e["sets"]
+        else:
+            per_family[family] += e["sets"]
+    mixed = per_family.get("mixte", 0.0)
+
+    def side(chain: str) -> float:
+        return sum(v for f, v in per_family.items() if CHAIN_FAMILIES[f][1] == chain) + mixed / 2
+
+    front, back = side("avant"), side("arriere")
+    zone, ratio = balance_zone(front, back)
+    verdict, explanation = BALANCE_ZONES[zone]
+    total = front + back
+    pairs = []
+    for key, label, fam_front, fam_back, add_back, add_front in CHAIN_PAIRS:
+        a, b = per_family.get(fam_front, 0.0), per_family.get(fam_back, 0.0)
+        if not a and not b:
+            continue
+        pair_zone, pair_ratio = balance_zone(a, b)
+        enough = a + b >= max(3.0, 0.1 * total)  # assez de séries pour juger de la paire
+        pairs.append({
+            "cle": key, "nom": label,
+            "avant": {"famille": fam_front, "nom": CHAIN_FAMILIES[fam_front][0], "court": CHAIN_FAMILIES[fam_front][3],
+                      "series": round(a, 1)},
+            "arriere": {"famille": fam_back, "nom": CHAIN_FAMILIES[fam_back][0], "court": CHAIN_FAMILIES[fam_back][3],
+                        "series": round(b, 1)},
+            "ratio": pair_ratio, "ratio_texte": ratio_text(pair_ratio) if a else None,
+            "penche": _lean(a, b) if enough else None,
+            "ajouter_arriere": add_back, "ajouter_avant": add_front, "_zone": pair_zone,
+        })
+    advice = _balance_advice(zone, pairs)
+    short = _balance_advice(zone, pairs, short=True)
+    for p in pairs:
+        p.pop("_zone")
+    families = [{"cle": f, "nom": CHAIN_FAMILIES[f][0], "chaine": CHAIN_FAMILIES[f][1],
+                 "exemples": CHAIN_FAMILIES[f][2], "series": round(v, 1)}
+                for f, v in sorted(per_family.items(), key=lambda kv: -kv[1]) if v]
+    return {
+        "avant": round(front, 1), "arriere": round(back, 1),
+        "ratio": ratio, "ratio_texte": ratio_text(ratio) if zone != "vide" else None,
+        "part_arriere": round(back / total, 3) if total else None,
+        "zone": zone, "verdict": verdict, "explication": explanation, "conseil": advice,
+        "conseil_court": short,  # sans les chiffres des paires, quand elles sont dessinées à côté
+        "paires": pairs, "familles": families,
+        "mixte": round(mixed, 1), "neutre": round(per_family.get("lateral", 0.0), 1), "non_comptees": round(skipped, 1),
+    }
+
+
+PAIR_WORDS = {  # paire → (sujet, verbe, séries devant, séries derrière)
+    "bas": ("le bas du corps", "penche", "côté genou", "côté hanche"),
+    "haut": ("le haut du corps", "penche", "de poussée", "de tirage"),
+    "tronc": ("le tronc", "penche", "d'abdos", "de lombaires"),
+    "bras": ("les bras", "penchent", "de biceps", "de triceps"),
+    "jambe": ("le bas de jambe", "penche", "de releveurs", "de mollets"),
+}
+
+
+def _pair_phrase(pair: dict) -> str:
+    """« 32 séries côté genou pour 24 côté hanche », « 10 séries d'abdos, aucune de lombaires »."""
+    _, _, front_word, back_word = PAIR_WORDS[pair["cle"]]
+    a, b = pair["avant"]["series"], pair["arriere"]["series"]
+    front = f"{_number(a)} série{'s' if a >= 2 else ''} {front_word}"
+    return f"{front} pour {_number(b)} {back_word}" if b else f"{front}, aucune {back_word}"
+
+
+def _balance_advice(zone: str, pairs: list[dict], short: bool = False) -> str | None:
+    """Ce qu'il y a à faire, paire par paire (le bas du corps d'abord : c'est lui qui compte le plus en course).
+    ``short`` : sans les séries de chaque paire (la tuile les dessine juste à côté)."""
+    if zone == "vide":
+        return None
+    forward = [p for p in pairs if p["penche"] == "avant"][:2]
+    if forward:
+        first = forward[0]
+        subject, verb, _, _ = PAIR_WORDS[first["cle"]]
+        if short:
+            subjects = " et ".join(PAIR_WORDS[p["cle"]][0] for p in forward)
+            text = f"{subjects} {verb if len(forward) == 1 else 'penchent'} vers l'avant"
+        else:
+            text = f"{subject} {verb} vers l'avant ({_pair_phrase(first)})"
+            if len(forward) > 1:
+                text += f", {PAIR_WORDS[forward[1]['cle']][0]} aussi ({_pair_phrase(forward[1])})"
+        text = f"Bon équilibre d'ensemble, mais {text}" if zone == "cible" else text[0].upper() + text[1:]
+        add = ", et ".join(p["ajouter_arriere"] for p in forward)
+        return f"{text} : ajoute {add}." if short else f"{text}. Ajoute {add}."
+    if zone in ("avant", "proche"):
+        biggest = max(pairs, key=lambda p: p["avant"]["series"] - p["arriere"]["series"], default=None)
+        if biggest and biggest["avant"]["series"] > biggest["arriere"]["series"]:
+            return f"Ajoute des séries côté arrière, par exemple {biggest['ajouter_arriere']}."
+        return "Ajoute quelques séries côté arrière : tirage, soulevé de terre roumain, hip thrust."
+    if zone in ("arriere", "arriere_fort"):
+        light = [p for p in pairs if p["cle"] in ("bas", "tronc") and p["avant"]["series"] < p["arriere"]["series"]]
+        hint = ", et ".join(p["ajouter_avant"] for p in light[:2]) or "des squats, des fentes ou de la planche"
+        return f"Garde aussi un peu d'avant : {hint}."
+    return "Rien à corriger : continue comme ça."
 
 
 # ------------------------------------------------------------------ stockage
@@ -639,6 +946,7 @@ def describe(e: dict) -> dict:
         "detail": _per_set(e),
         "muscles": [{"cle": m, "nom": MUSCLE_LABELS[m], "role": "principal" if w >= P else "secondaire"}
                     for m, w in sorted(muscles.items(), key=lambda kv: -kv[1])],
+        "chaine": chain_info(e["category"], e["name"]),  # avant, arrière, corps entier, latéral (ou None)
     }
 
 
@@ -672,6 +980,7 @@ def session(conn: sqlite3.Connection, activity_id: str) -> dict | None:
         "repetitions": sum(e["reps"] for e in rows),
         "tonnage_kg": round(sum(e["volume_kg"] for e in rows), 1) or None,
         "effort_s": round(sum(e["duration_s"] for e in rows)) or None,
+        "equilibre": balance(rows),
         "noms_muscles": MUSCLE_LABELS,
     }
 
@@ -743,6 +1052,17 @@ def period(conn: sqlite3.Connection, start: date, end: date, weeks: int = 12) ->
         if week in counts:
             counts[week]["seances"] += 1
             counts[week]["series"] += r["sets"] or 0
+    # Équilibre avant / arrière semaine par semaine, sur les mêmes semaines
+    by_week: dict[date, list[dict]] = defaultdict(list)
+    for e in _rows(conn, "a.date BETWEEN ? AND ?", [first_week.isoformat(), (last + timedelta(days=6)).isoformat()]):
+        by_week[_week_start(date.fromisoformat(e["date"]))].append(e)
+
+    def week_balance(week: date) -> dict | None:
+        if not by_week.get(week):
+            return None
+        b = balance(by_week[week])
+        return {k: b[k] for k in ("avant", "arriere", "ratio", "ratio_texte", "part_arriere", "zone", "verdict")}
+
     return {
         "debut": start.isoformat(), "fin": end.isoformat(),
         "seances": listed,
@@ -753,8 +1073,9 @@ def period(conn: sqlite3.Connection, start: date, end: date, weeks: int = 12) ->
         "effort_s": round(sum(e["duration_s"] for e in rows)) or None,
         "muscles": _muscle_load(rows),
         "exercices": exercises,
-        "semaines": [{"debut": k.isoformat(), "seances": int(v["seances"]), "series": int(v["series"])}
-                     for k, v in sorted(counts.items())],
+        "equilibre": balance(rows),
+        "semaines": [{"debut": k.isoformat(), "seances": int(v["seances"]), "series": int(v["series"]),
+                      "equilibre": week_balance(k)} for k, v in sorted(counts.items())],
         "noms_muscles": MUSCLE_LABELS,
     }
 

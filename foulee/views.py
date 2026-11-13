@@ -201,10 +201,28 @@ TILE_TYPES: list[dict[str, Any]] = [
         "params": [{"key": "periode", "label": "Période (jours)", "kind": "periode", "default": "herite"}],
     },
     {
+        "type": "renfo_equilibre", "label": "Renfo : équilibre avant / arrière", "icone": "balance",
+        "categorie": "Entraînement",
+        "description": "Séries de la chaîne antérieure (squats, pompes, abdos…) face à la chaîne postérieure "
+                       "(soulevé de terre, tirage, lombaires, mollets…) : le rapport 1:x et la cible du coureur "
+                       "(1:1 à 1:2), paire par paire (genou / hanche, poussée / tirage…) avec un conseil, et "
+                       "semaine après semaine.",
+        "taille": {"w": 12, "h": 2},
+        "params": [{"key": "periode", "label": "Période (jours)", "kind": "periode", "default": "herite"}],
+    },
+    {
         "type": "seance_renfo", "label": "Séance : exercices de renfo", "icone": "dumbbell", "categorie": "Séances",
-        "description": "Les exercices de la séance choisie (séries, répétitions, charge) et les muscles travaillés. "
-                       "La tuile s'efface pour les séances sans renfo.",
+        "description": "Les exercices de la séance choisie (séries, répétitions, charge), les muscles travaillés "
+                       "et l'équilibre avant / arrière de la séance. La tuile s'efface pour les séances sans renfo.",
         "taille": {"w": 12, "h": 3}, "params": [],
+    },
+    {
+        "type": "seance_effet", "label": "Séance : effet d'entraînement", "icone": "gauge", "categorie": "Séances",
+        "description": "Effet aérobie et effet anaérobie de la séance (Training Effect de Garmin, de 0 à 5), son "
+                       "avantage principal (base, tempo, seuil, VO2 max…) et sa place parmi tes séances du même "
+                       "sport des 4 semaines précédentes. La tuile s'efface pour les séances sans effet "
+                       "d'entraînement.",
+        "taille": {"w": 12, "h": 2}, "params": [],
     },
     {
         "type": "seance_resume", "label": "Séance : résumé", "icone": "info", "categorie": "Séances",
@@ -362,6 +380,7 @@ def default_views() -> list[dict]:
             "spec": {"tuiles": [
                 _tile("seance_resume", 12, 1),
                 _tile("seance_renfo", 12, 3),
+                _tile("seance_effet", 12, 2),
                 _tile("seance_carte", 6, 3),
                 _tile("seance_courbes", 6, 3),
                 _tile("seance_mesures", 12, 2),
@@ -452,11 +471,34 @@ def slugify(text: str) -> str:
 
 
 # ------------------------------------------------------------------- stockage
+def _insert_tile(conn: sqlite3.Connection, view_id: str, kind: str, w: int, h: int, after: tuple[str, ...]) -> None:
+    """Ajoute une tuile à une vue déjà en place (mise à niveau), juste après la première tuile trouvée parmi
+    ``after`` (en tête sinon) ; rien si la vue n'existe plus ou a déjà la tuile."""
+    row = conn.execute("SELECT spec FROM views WHERE id = ?", (view_id,)).fetchone()
+    if not row:
+        return
+    spec = json.loads(row["spec"])
+    tiles = spec.setdefault("tuiles", [])
+    if any(t.get("type") == kind for t in tiles):
+        return
+    at = 0
+    for anchor in after:
+        found = next((i + 1 for i, t in enumerate(tiles) if t.get("type") == anchor), None)
+        if found is not None:
+            at = found
+            break
+    tiles.insert(at, _tile(kind, w, h))
+    conn.execute("UPDATE views SET spec = ?, updated_at = ? WHERE id = ?",
+                 (json.dumps(spec, ensure_ascii=False), db.now_iso(), view_id))
+
+
 def ensure_default_views(conn: sqlite3.Connection) -> None:
     if not conn.execute("SELECT COUNT(*) AS n FROM views").fetchone()["n"]:
         reset_default_views(conn)
         db.set_meta(conn, "vue_accueil", "1")
         db.set_meta(conn, "vue_seance_renfo", "1")
+        db.set_meta(conn, "vue_effet_entrainement", "1")
+        db.set_meta(conn, "vue_renfo_equilibre", "1")
         conn.commit()
         return
     if db.get_meta(conn, "vue_seance_renfo") is None:
@@ -471,6 +513,16 @@ def ensure_default_views(conn: sqlite3.Connection) -> None:
                 conn.execute("UPDATE views SET spec = ?, updated_at = ? WHERE id = 'seance'",
                              (json.dumps(spec, ensure_ascii=False), db.now_iso()))
         db.set_meta(conn, "vue_seance_renfo", "1")
+        conn.commit()
+    if db.get_meta(conn, "vue_effet_entrainement") is None:
+        # 0.7 : l'effet d'entraînement dans la vue « Séance » déjà en place (après les exercices de renfo)
+        _insert_tile(conn, "seance", "seance_effet", 12, 2, after=("seance_renfo", "seance_resume"))
+        db.set_meta(conn, "vue_effet_entrainement", "1")
+        conn.commit()
+    if db.get_meta(conn, "vue_renfo_equilibre") is None:
+        # 0.7 : l'équilibre avant / arrière dans la vue « Renfo » déjà en place (sous les muscles travaillés)
+        _insert_tile(conn, RENFO_VIEW, "renfo_equilibre", 12, 2, after=("renfo",))
+        db.set_meta(conn, "vue_renfo_equilibre", "1")
         conn.commit()
     if db.get_meta(conn, "vue_accueil") is None:
         # 0.5 : la page d'accueil arrive en tête des vues déjà en place, une seule fois
@@ -662,6 +714,7 @@ def renfo_view() -> dict:
     """La vue « Renfo » : muscles travaillés, exercices et leur progression, régularité, séances."""
     return {"id": RENFO_VIEW, "name": "Renfo", "icon": "dumbbell", "spec": {"tuiles": [
         _tile("renfo", 12, 4),
+        _tile("renfo_equilibre", 12, 2),
         _tile("renfo_exercices", 12, 3),
         _tile("serie", 6, 2, titre="Temps de renfo par semaine", metriques=["act.duration_s"], style="barres",
               agregation="semaine", sport="renfo", periode="180"),
