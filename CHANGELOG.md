@@ -4,6 +4,18 @@ Les versions « bêta » (par exemple 0.4.0b1) sont des avant-premières : elles
 sur le canal bêta (Réglages → Mises à jour → « Recevoir les versions bêta »), puis sortent en
 version stable une fois éprouvées.
 
+## 0.7.0 — 13 novembre 2026
+
+La version stable qui réunit les bêtas 0.6 et 0.7  ; le détail de chacune est dans l'historique des versions (CHANGELOG.md sur GitHub).
+
+- **Withings** (Réglages → Withings) : ta balance, ton tensiomètre, ton Sleep Analyzer ou ta montre Withings rejoignent Foulée, avec leur vue et 51 métriques dans toutes les tuiles.
+- **Strava, en lecture seule** (Réglages → Strava) : les séances d'une autre montre, d'un compteur de vélo ou notées sur Strava rejoignent les tiennes, sans doublon ; une séance Garmin affiche ses kudos et sa description Strava.
+- **Calendrier d'entraînement** (Réglages → Calendrier) : le lien de ton calendrier Garmin Connect publié amène tes séances prévues et tes courses, face à ce que tu as fait. Une vue « Calendrier » s'ajoute après l'Accueil, et « Ta semaine » montre les séances prévues et le bilan (« Prévues 2/5 faites »). Le lien reste secret.
+- **Renfo** : tes séances de musculation exercice par exercice, en français, les muscles travaillés sur une carte du corps, ta progression, et l'**équilibre avant / arrière** (chaîne antérieure face à la chaîne postérieure, cible du coureur de 1:1 à 1:2) avec le conseil qui va avec.
+- **Effet d'entraînement** de chaque séance, en deux jauges aux couleurs de Garmin Connect (aérobie et anaérobie), avec l'avantage principal et sa place parmi tes séances des 4 semaines précédentes.
+- **Pastilles de connexion** en haut de chaque vue (Garmin, Withings, Strava, Calendrier) et **rythme de la synchro** réglable source par source (3 heures par défaut).
+- Claude Desktop voit ton renfo, son équilibre, l'effet d'entraînement de tes séances et ton calendrier (pas les données Strava). L'aide compte maintenant 115 questions.
+
 ## 0.7.0b3 — 13 novembre 2026 (bêta)
 
 - **Effet d'entraînement de chaque séance** : une nouvelle tuile de la vue Séance montre le Training Effect de Garmin en deux jauges de 0 à 5, aux couleurs de Garmin Connect : l'**effet aérobie** (ce que la séance apporte à ton endurance) et l'**effet anaérobie** (tes efforts brefs et très intenses), avec leur niveau (aucune amélioration, faible avantage, maintien, impact, fort impact, effort trop soutenu) et ce qu'il veut dire. L'**avantage principal** de la séance l'accompagne (base, tempo, seuil, VO2 max, capacité anaérobie, sprint…), ainsi que sa place parmi tes séances du même sport des 4 semaines précédentes : les petits traits autour des jauges, et « au-dessus de 9 de tes 14 séances de course et trail ». Le résumé de la séance affiche aussi l'effet anaérobie. La tuile s'efface pour les séances sans effet d'entraînement (Strava, montre sans cardio).
