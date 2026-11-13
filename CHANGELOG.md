@@ -6,7 +6,7 @@ version stable une fois éprouvées.
 
 ## 0.7.0 — 13 novembre 2026
 
-La version stable qui réunit les bêtas 0.6 et 0.7  ; le détail de chacune est dans l'historique des versions (CHANGELOG.md sur GitHub).
+La version stable qui réunit les bêtas 0.6 et 0.7 ; le détail de chacune est dans l'historique des versions (CHANGELOG.md sur GitHub).
 
 - **Withings** (Réglages → Withings) : ta balance, ton tensiomètre, ton Sleep Analyzer ou ta montre Withings rejoignent Foulée, avec leur vue et 51 métriques dans toutes les tuiles.
 - **Strava, en lecture seule** (Réglages → Strava) : les séances d'une autre montre, d'un compteur de vélo ou notées sur Strava rejoignent les tiennes, sans doublon ; une séance Garmin affiche ses kudos et sa description Strava.
