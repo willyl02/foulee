@@ -187,7 +187,7 @@ export async function renderSession(ctx, sid, key) {
   mountThread(page.querySelector("[data-thread]"), {
     fil: data.fil, role, style: "comments", toast, onRead: () => ctx.poke(),
     placeholder: coachSide ? `Un mot à ${name || "l'élève"} sur cette séance…` : "Un mot à ton coach sur cette séance…",
-    empty: coachSide ? "Pas encore de commentaire. Écris le premier : il le verra dans sa page « Mon coach »." : "Pas encore de commentaire sur cette séance.",
+    empty: coachSide ? "Pas encore de commentaire. Écris le premier : il le retrouvera dans ses messages, sous la séance." : "Pas encore de commentaire sur cette séance.",
   });
 }
 

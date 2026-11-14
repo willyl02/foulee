@@ -4,6 +4,11 @@ Les versions « bêta » (par exemple 0.4.0b1) sont des avant-premières : elles
 sur le canal bêta (Réglages → Mises à jour → « Recevoir les versions bêta »), puis sortent en
 version stable une fois éprouvées.
 
+## 0.8.0b3 — 14 novembre 2026 (bêta)
+
+- Foulée Coach : un fil encore vide (sous une séance, ou la conversation avec un nouvel élève) restait sur
+  « Chargement… » ; il affiche maintenant qu'il n'y a pas encore de message, et la zone pour écrire le premier.
+
 ## 0.8.0b2 — 14 novembre 2026 (bêta)
 
 **Foulée Coach**, étapes 2 à 5 : le partage, le suivi, les messages et les séances proposées.

@@ -197,6 +197,7 @@ function bubble(m, { role, fil, style }) {
 export function mountThread(box, { fil, role, style = "bubbles", placeholder = "Écrire un message…", toast, onRead, empty = "Pas encore de message." }) {
   let messages = [];
   let alive = true;
+  let loaded = false;  // un fil vide doit aussi remplacer « Chargement… »
   box.innerHTML = `<div class="co-thread ${style}"><div class="co-msgs" data-msgs>${loading()}</div>
     <form class="co-compose" data-compose><textarea rows="1" maxlength="4000" placeholder="${F.escape(placeholder)}" aria-label="${F.escape(placeholder)}"></textarea>
       <button class="btn btn-primary co-send" type="submit" title="Envoyer (Entrée)">${icon("up")}<span class="sr-only">Envoyer</span></button></form></div>`;
@@ -234,8 +235,9 @@ export function mountThread(box, { fil, role, style = "bubbles", placeholder = "
     try {
       const data = await rget(`fils/${encodeURIComponent(fil)}`);
       if (!alive) return null;
-      const changed = data.messages.length !== messages.length || data.messages.at(-1)?.id !== messages.at(-1)?.id
+      const changed = !loaded || data.messages.length !== messages.length || data.messages.at(-1)?.id !== messages.at(-1)?.id
         || data.messages.some((m, i) => m.epingle !== messages[i]?.epingle);
+      loaded = true;
       messages = data.messages;
       if (changed) draw();
       if (style === "bubbles" && changed) list.scrollTop = list.scrollHeight;
