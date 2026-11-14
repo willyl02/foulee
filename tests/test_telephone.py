@@ -37,9 +37,14 @@ state.write_text(json.dumps(data))
 @pytest.fixture
 def tailscale(tmp_path, monkeypatch):
     """Un faux Tailscale : connecté, HTTPS activé, sans relais au départ."""
-    exe = tmp_path / "tailscale"
-    exe.write_text(FAKE.format(python=sys.executable, name=NAME))
-    exe.chmod(0o755)
+    script = tmp_path / "tailscale.py"
+    script.write_text(FAKE.format(python=sys.executable, name=NAME))
+    if sys.platform == "win32":  # Windows ne lance pas un script Python directement : un petit .cmd le fait
+        exe = tmp_path / "tailscale.cmd"
+        exe.write_text(f'@"{sys.executable}" "{script}" %*\r\n')
+    else:
+        exe = script
+        exe.chmod(0o755)
     state = tmp_path / "etat.json"
     data = {"status": {"BackendState": "Running", "Self": {"DNSName": NAME + "."}, "CertDomains": [NAME]}, "serve": {}}
     state.write_text(json.dumps(data))
