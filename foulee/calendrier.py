@@ -561,6 +561,7 @@ def _end(event: dict) -> str | None:
     return _iso(end)
 
 
+NOT_COACH = "COALESCE(uid, '') NOT LIKE 'coach:%'"
 INSERT = ("INSERT INTO calendar_events(date, start_local, end_local, all_day, title, description, location, kind, "
           "sport, uid, fetched_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
 
@@ -579,10 +580,13 @@ def store(conn: sqlite3.Connection, events: list[dict], today: date | None = Non
         # (faite, ou son heure passée) reste là, pour dire ce soir « fait » ou « manqué ».
         fresh = {(event["title"][:200], None if event["all_day"] else _iso(event["start"]))
                  for event, day in rows if day == today}
-        kept = [r for r in conn.execute("SELECT * FROM calendar_events WHERE date = ?", (today.isoformat(),))
+        kept = [r for r in conn.execute("SELECT * FROM calendar_events WHERE date = ? AND " + NOT_COACH,
+                                        (today.isoformat(),))
                 if (r["title"], r["start_local"]) not in fresh]
     now = db.now_iso()
-    conn.execute("DELETE FROM calendar_events WHERE date >= ? OR date < ?", (since.isoformat(), oldest.isoformat()))
+    # Les séances proposées par le coach (uid « coach:… ») ont leur propre mise à jour (coach.py)
+    conn.execute("DELETE FROM calendar_events WHERE (date >= ? OR date < ?) AND " + NOT_COACH,
+                 (since.isoformat(), oldest.isoformat()))
     upcoming = races = 0
     for event, day in rows:
         kind, sport = classify(event)
@@ -624,7 +628,7 @@ def forget(conn: sqlite3.Connection) -> None:
     """Retire le calendrier du profil : le lien et les séances prévues (les séances faites restent)."""
     forget_url()
     if ready(conn):
-        conn.execute("DELETE FROM calendar_events")
+        conn.execute("DELETE FROM calendar_events WHERE " + NOT_COACH)
     for key in ("calendrier_lu_le", "calendrier_info", "calendrier_lie_le", REFUSED):
         db.delete_meta(conn, key)
 
@@ -703,6 +707,7 @@ def plan(conn: sqlite3.Connection, start: date, end: date, today: date | None = 
             "lieu": row["location"], "type": row["kind"], "sport": row["sport"],
             "sport_label": metrics.SPORTS.get(row["sport"]) if row["sport"] else None,
             "statut": state, "seance_id": done["id"] if done is not None else None,
+            "coach": (row["uid"] or "").startswith("coach:"),
             "seance_nom": done["name"] if done is not None else None, "journee": bool(row["all_day"]),
         })
     return out
@@ -742,8 +747,12 @@ def status(conn: sqlite3.Connection, *, with_link: bool = False) -> dict[str, An
                            "AND kind <> 'autre'", (today.isoformat(),)).fetchone()
         upcoming = {"n": row["n"] or 0, "c": row["c"] or 0}
         has_events = conn.execute("SELECT 1 FROM calendar_events LIMIT 1").fetchone() is not None
+        has_coach = conn.execute("SELECT 1 FROM calendar_events WHERE uid LIKE 'coach:%' LIMIT 1").fetchone() is not None
+    else:
+        has_coach = False
     info = feed_info(conn)
-    out = {"lie": bool(url) or (demo and has_events), "demo": demo, "nom": info.get("nom"),
+    out = {"lie": bool(url) or has_coach or (demo and has_events), "coach": has_coach, "demo": demo,
+           "nom": info.get("nom"),
            "garmin": bool(info.get("garmin")), "lu_le": db.get_meta(conn, "calendrier_lu_le"),
            "a_venir": upcoming["n"], "courses_a_venir": upcoming["c"], "prochaine_course": next_race(conn, today),
            "refus": refused(conn)}

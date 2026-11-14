@@ -9,7 +9,7 @@ import { icon } from "./icons.js";
 import { brandMark, setFavicon } from "./logos.js";
 import { startUpdateAlert } from "./maj.js";
 import { renderSettings } from "./settings.js";
-import { renderCoachPage } from "./coach.js";
+import { coachUnread, renderCoachPage, watchCoach } from "./coach.js";
 import { coachPageLabel } from "./settings-coach.js";
 import { renderChooser, whoButton, wireWho } from "./users.js";
 import { renderWelcome } from "./welcome.js";
@@ -130,6 +130,7 @@ async function loadBoot() {
   state.catalog = Object.fromEntries(state.boot.metriques.map((m) => [m.key, m]));
   state.types = Object.fromEntries(state.boot.tuiles.map((t) => [t.type, t]));
   state.views = state.boot.vues;
+  watchCoach(state.boot, { toast });
 }
 
 function setupChrome() {
@@ -233,7 +234,7 @@ function renderNav() {
       ${v.id === state.viewId && !isOtherPage() ? 'aria-current="page"' : ""} ${state.editing ? 'draggable="true"' : ""}>
       ${icon(v.icon)}<span>${F.escape(v.name)}</span><span class="blaze" aria-hidden="true"></span></button>`).join("")
     + `<button class="nav-item nav-add" type="button" data-new>${icon("plus")}<span>Nouvelle vue</span></button>`
-    + (state.boot?.coach ? `<a class="nav-item nav-coach" href="#/coach" ${location.hash.startsWith("#/coach") ? 'aria-current="page"' : ""}>${icon(state.boot.coach.role === "coach" ? "club" : "user")}<span>${coachPageLabel(state.boot.coach)}</span></a>` : "");
+    + (state.boot?.coach ? `<a class="nav-item nav-coach" href="#/coach" ${location.hash.startsWith("#/coach") ? 'aria-current="page"' : ""}>${icon(state.boot.coach.role === "coach" ? "club" : "user")}<span>${coachPageLabel(state.boot.coach)}</span><span class="co-badge nav-badge" data-coach-unread ${coachUnread() ? "" : "hidden"}>${coachUnread()}</span></a>` : "");
   nav.querySelectorAll("[data-id]").forEach((b) => {
     b.addEventListener("click", () => { location.hash = `#/vue/${encodeURIComponent(b.dataset.id)}`; closeMenu(); });
     if (state.editing) wireNavDrag(b);
@@ -278,7 +279,7 @@ function route() {
   if (path === "/bienvenue") { showWelcome(); return; }
   if (path === "/aide") { showHelp(params); return; }
   if (path === "/retours") { showFeedback(params); return; }
-  if (path === "/coach") { showCoach(); return; }
+  if (path === "/coach" || path.startsWith("/coach/")) { showCoach(path, params); return; }
   const match = path.match(/^\/vue\/([^/]+)/);
   const wanted = match ? decodeURIComponent(match[1]) : null;
   const view = state.views.find((v) => v.id === wanted) || state.views[0];
@@ -704,13 +705,13 @@ function showHelp(params) {
   renderHelp($("#page"), state.boot, { query: params.get("q") || "", theme: params.get("theme") || "", question: params.get("question") || "" });
 }
 
-function showCoach() {
+function showCoach(path = "/coach", params = new URLSearchParams()) {
   disposePass();
   state.editing = false;
   closeMenu();
   renderNav();
   window.scrollTo(0, 0);
-  renderCoachPage($("#page"), state.boot, { toast, onUnlinked: async () => { await refreshBoot(); renderNav(); } });
+  renderCoachPage($("#page"), state.boot, { toast, path, params, onUnlinked: async () => { await refreshBoot(); renderNav(); } });
 }
 
 function showFeedback(params) {

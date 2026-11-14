@@ -4,6 +4,31 @@ Les versions « bêta » (par exemple 0.4.0b1) sont des avant-premières : elles
 sur le canal bêta (Réglages → Mises à jour → « Recevoir les versions bêta »), puis sortent en
 version stable une fois éprouvées.
 
+## 0.8.0b2 — 14 novembre 2026 (bêta)
+
+**Foulée Coach**, étapes 2 à 5 : le partage, le suivi, les messages et les séances proposées.
+
+- **Le partage, avec l'accord de l'élève** : juste après l'inscription, l'élève choisit case par case ce que
+  voit son coach (ses séances des 4 dernières semaines en résumé, son objectif et sa VMA ; en option le tracé
+  GPS, départ et arrivée masqués, son sommeil, sa VFC et sa FC au repos, son poids). Jamais Strava. Rien ne
+  part avant. L'extrait part après chaque synchro (ou « Envoyer maintenant ») et remplace le précédent ; une
+  case décochée efface aussitôt la donnée chez le relais.
+- **Mes élèves** : le tableau de bord du groupe (dernière séance, semaine jour par jour, charge 7 jours, VMA,
+  objectif et compte à rebours, messages non lus, alerte « N jours sans séance »), la **fiche** de chaque
+  élève (sa semaine face à son plan, ses séances, son objectif et son allure, sa forme) et chaque **séance**
+  en détail : tours, renfo, tracé simplifié sans fond de carte, ce qui était proposé.
+- **Messages** : une conversation entre le coach et chaque élève, le fil du groupe (le coach y épingle ses
+  annonces) et un fil sous chaque séance. Foulée relève les nouveautés toutes les minutes : badge dans la
+  colonne et petit message à l'écran.
+- **Séances proposées** : le coach compose un déroulé en blocs (échauffement, corps de séance, retour au
+  calme ; durée ou distance, répétitions, % de VMA ou zone de FC, récupération), part d'un exemple ou de ses
+  modèles, et l'envoie à un ou plusieurs élèves ; chacun le reçoit avec ses allures, dans « Mon coach » et en
+  pointillé bleu dans sa vue « Calendrier ». Elle se marque « faite » comme les séances du plan Garmin.
+- **Essayer avec un élève fictif** : le mode démo peut rejoindre le groupe avec un code d'invitation et
+  partager ses séances fictives ; il a sa propre place dans le coffre, sans toucher au compte coach.
+- Le relais date ses messages à l'heure de Paris, même sur un serveur réglé en UTC (`FOULEE_RELAIS_TZ` pour
+  un autre fuseau).
+
 ## 0.8.0b1 — 14 novembre 2026 (bêta)
 
 Première étape de **Foulée Coach** : relier un coach et ses élèves par le relais du club.

@@ -15,13 +15,14 @@ from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from .. import __version__
-from . import API_VERSION, store
+from . import API_VERSION, club, store
 
 log = logging.getLogger("foulee.relais")
 
 MAX_FAILURES = 5
 LOCK_SECONDS = 15 * 60
 MAX_BODY = 64 * 1024
+MAX_SHARE = 4 * 1024 * 1024  # l'extrait de 4 semaines d'un élève, tracés GPS compris
 
 HOME = """<!doctype html><html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width">
 <title>Relais Foulée</title><body style="font-family:system-ui;max-width:36em;margin:4em auto;padding:0 1em;color:#222">
@@ -74,7 +75,8 @@ def create_relay_app() -> FastAPI:
     @app.middleware("http")
     async def guard(request: Request, call_next):
         length = request.headers.get("content-length")
-        if length and length.isdigit() and int(length) > MAX_BODY:
+        limit = MAX_SHARE if request.url.path == "/api/v1/partage" else MAX_BODY
+        if length and length.isdigit() and int(length) > limit:
             return JSONResponse({"detail": "Requête trop volumineuse."}, status_code=413)
         response = await call_next(request)
         response.headers["X-Foulee-Api"] = str(API_VERSION)
@@ -223,6 +225,112 @@ def create_relay_app() -> FastAPI:
             account, _ = current(request, conn, role="coach")
             store.cancel_invitation(conn, account["id"], code)
             return {"invitations": store.invitations(conn, account["id"])}
+
+    # ------------------------------------------------- partage, messages, séances
+    def run(request: Request, action, *, role: str | None = None):
+        """Ouvre la base, vérifie la session (et le rôle), traduit les refus en réponses claires."""
+        with store.session() as conn:
+            account, _ = current(request, conn, role=role)
+            try:
+                return action(conn, account)
+            except store.RelayError as exc:
+                raise refuse(exc) from None
+            except PermissionError as exc:
+                raise HTTPException(403, str(exc)) from None
+
+    @app.get("/api/v1/partage/accord")
+    def get_accord(request: Request) -> dict:
+        return run(request, lambda conn, me: {"accord": club.get_accord(conn, me["id"]),
+                                              "defaut": club.ACCORD_DEFAULT}, role="eleve")
+
+    @app.put("/api/v1/partage/accord")
+    def put_accord(request: Request, payload: dict = Body(...)) -> dict:
+        return run(request, lambda conn, me: {"accord": club.set_accord(conn, me["id"], payload)}, role="eleve")
+
+    @app.put("/api/v1/partage")
+    def put_share(request: Request, payload: dict = Body(...)) -> dict:
+        return run(request, lambda conn, me: club.receive_share(conn, me["id"], payload), role="eleve")
+
+    @app.get("/api/v1/moi/coach")
+    def my_coach(request: Request) -> dict:
+        return run(request, lambda conn, me: club.my_page(conn, me), role="eleve")
+
+    @app.get("/api/v1/moi/seances/{key}")
+    def my_session(key: str, request: Request) -> dict:
+        return run(request, lambda conn, me: club.student_session(conn, me, me["id"], key), role="eleve")
+
+    @app.get("/api/v1/groupe")
+    def group_overview(request: Request) -> dict:
+        return run(request, lambda conn, me: {"eleves": club.overview(conn, me),
+                                              "invitations": store.invitations(conn, me["id"])}, role="coach")
+
+    @app.get("/api/v1/eleves/{student_id}/fiche")
+    def student_page(student_id: int, request: Request, semaine: str | None = None) -> dict:
+        return run(request, lambda conn, me: club.student_page(conn, me, student_id, club.parse_monday(semaine)),
+                   role="coach")
+
+    @app.get("/api/v1/eleves/{student_id}/seances/{key}")
+    def student_session(student_id: int, key: str, request: Request) -> dict:
+        return run(request, lambda conn, me: club.student_session(conn, me, student_id, key), role="coach")
+
+    @app.post("/api/v1/propositions")
+    def new_proposals(request: Request, payload: dict = Body(...)) -> dict:
+        return run(request, lambda conn, me: {"propositions": club.create_proposals(conn, me["id"], payload)},
+                   role="coach")
+
+    @app.put("/api/v1/propositions/{proposal_id}")
+    def edit_proposal(proposal_id: int, request: Request, payload: dict = Body(...)) -> dict:
+        return run(request, lambda conn, me: {"proposition": club.update_proposal(conn, me["id"], proposal_id,
+                                                                                   payload)}, role="coach")
+
+    @app.delete("/api/v1/propositions/{proposal_id}")
+    def drop_proposal(proposal_id: int, request: Request) -> dict:
+        return run(request, lambda conn, me: {"ok": club.delete_proposal(conn, me["id"], proposal_id)}, role="coach")
+
+    @app.get("/api/v1/modeles")
+    def list_templates(request: Request) -> dict:
+        return run(request, lambda conn, me: {"modeles": club.templates(conn, me["id"])}, role="coach")
+
+    @app.post("/api/v1/modeles")
+    def new_template(request: Request, payload: dict = Body(...)) -> dict:
+        return run(request, lambda conn, me: {"modeles": club.save_template(conn, me["id"], payload)}, role="coach")
+
+    @app.delete("/api/v1/modeles/{template_id}")
+    def drop_template(template_id: int, request: Request) -> dict:
+        return run(request, lambda conn, me: {"modeles": club.delete_template(conn, me["id"], template_id)},
+                   role="coach")
+
+    @app.get("/api/v1/fils")
+    def list_threads(request: Request) -> dict:
+        return run(request, lambda conn, me: {"fils": club.threads(conn, me)})
+
+    @app.get("/api/v1/fils/{thread}")
+    def read_thread(thread: str, request: Request, apres: int = 0) -> dict:
+        return run(request, lambda conn, me: club.read_thread(conn, me, thread, apres))
+
+    @app.post("/api/v1/fils/{thread}")
+    def write(thread: str, request: Request, payload: dict = Body(...)) -> dict:
+        return run(request, lambda conn, me: {"message": club.post(conn, me, thread, payload.get("texte"))})
+
+    @app.post("/api/v1/messages/{message_id}/epingle")
+    def pin(message_id: int, request: Request, payload: dict = Body(...)) -> dict:
+        def action(conn, me):
+            club.pin(conn, me, message_id, bool(payload.get("epingle", True)))
+            return {"ok": True}
+        return run(request, action)
+
+    @app.delete("/api/v1/messages/{message_id}")
+    def erase(message_id: int, request: Request) -> dict:
+        def action(conn, me):
+            club.delete_message(conn, me, message_id)
+            return {"ok": True}
+        return run(request, action)
+
+    @app.get("/api/v1/nouveautes")
+    def news(request: Request) -> dict:
+        """Relevé léger, toutes les minutes : non lus et repère des changements."""
+        return run(request, lambda conn, me: {"non_lus": club.unread_total(conn, me),
+                                              "repere": club.last_activity(conn, me)})
 
     @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"], include_in_schema=False)
     def not_found(path: str) -> JSONResponse:

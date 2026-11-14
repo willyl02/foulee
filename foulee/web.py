@@ -37,6 +37,7 @@ from typing import Any
 from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
+from starlette.concurrency import run_in_threadpool
 
 from . import (
     __version__,
@@ -1424,8 +1425,7 @@ def create_app() -> FastAPI:
     # Le relais du club : se connecter range un jeton dans le coffre, donc par la machine elle-même ou Tailscale,
     # comme les autres secrets. Une fois relié, la page « Mes élèves » / « Mon coach » s'ouvre de partout.
     def coach_call(action):
-        if config.is_demo():
-            raise HTTPException(400, "Mode démo : pas de relais, les données sont fictives.")
+        # Le mode démo peut se relier aussi : un élève fictif, pour essayer le relais avec des données de test
         try:
             with db.session() as conn:
                 return action(conn)
@@ -1502,6 +1502,41 @@ def create_app() -> FastAPI:
     @app.delete("/api/coach/invitations/{code}")
     def coach_cancel_invite(code: str, request: Request) -> dict:
         return coach_call(lambda conn: {"invitations": coach.cancel_invitation(conn, code)})
+
+    @app.get("/api/coach/moi")
+    def coach_my_page(request: Request) -> dict:
+        """Page « Mon coach » de l'élève (relit le relais, envoie l'extrait s'il date)."""
+        return coach_call(coach.my_page)
+
+    @app.get("/api/coach/accord")
+    def coach_accord(request: Request) -> dict:
+        def run(conn):
+            local = coach.local_accord(conn)
+            if local is None and coach.role(conn) == "eleve":
+                remote = coach.proxy(conn, "GET", "partage/accord").get("accord")
+                local = remote
+            return {"accord": local, "defaut": coach.ACCORD_DEFAULT, "envoye_le": db.get_meta(conn, coach.META_PUSHED)}
+        return coach_call(run)
+
+    @app.put("/api/coach/accord")
+    def coach_set_accord(request: Request, payload: dict = Body(...)) -> dict:
+        return coach_call(lambda conn: coach.set_accord(conn, payload))
+
+    @app.post("/api/coach/echange")
+    def coach_exchange(request: Request) -> dict:
+        return coach_call(lambda conn: coach.exchange(conn, force=True))
+
+    @app.api_route("/api/coach/r/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
+    async def coach_proxy(path: str, request: Request) -> dict:
+        """Passerelle vers le relais pour les pages coach et élève (Mes élèves, fiches, messages, séances…)."""
+        payload = None
+        if request.method in ("POST", "PUT"):
+            try:
+                payload = await request.json()
+            except ValueError:
+                raise HTTPException(400, "Requête illisible.") from None
+        query = dict(request.query_params)
+        return await run_in_threadpool(coach_call, lambda conn: coach.proxy(conn, request.method, path, payload, query))
 
     @app.delete("/api/coach/eleves/{student_id}")
     def coach_remove_student(student_id: int, request: Request) -> dict:
@@ -1613,14 +1648,28 @@ def create_app() -> FastAPI:
         config.set_demo(True)  # base séparée (foulee-demo.db) : les vraies données ne sont pas touchées
         if config.db_path().exists():
             with db.session(readonly=True) as conn:
-                if db.table_counts(conn).get("activities"):
-                    return demo_status()  # déjà prête
+                latest = conn.execute("SELECT MAX(date) FROM activities").fetchone()[0] \
+                    if db.table_counts(conn).get("activities") else None
+            # Prête et récente : on la garde ; vieillie (démo ouverte il y a longtemps), on la refait à la date du jour
+            if latest and latest >= (date.today() - timedelta(days=3)).isoformat():
+                return demo_status()
+
+        # Un élève fictif relié au relais le reste quand la démo est refaite (le jeton est dans le coffre)
+        kept: dict = {}
+        if config.db_path().exists():
+            with db.session(readonly=True) as conn:
+                kept = {k: v for k in coach.KEEP_META if (v := db.get_meta(conn, k)) is not None}
 
         def build() -> None:
             from . import demo
 
             try:
                 demo.build()
+                if kept:
+                    with db.session() as conn:
+                        for key, value in kept.items():
+                            db.set_meta(conn, key, value)
+                        conn.commit()
                 demo_build["erreur"] = None
             except Exception as exc:  # affiché dans l'interface
                 demo_build["erreur"] = str(exc)

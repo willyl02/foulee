@@ -596,9 +596,9 @@ Les données vivent dans `/var/lib/foulee`, la clé et l'empreinte du mot de pas
 
 Un coach et ses élèves se relient par un **relais** : un petit serveur sur Internet, en HTTPS, que leurs
 Foulée appellent. Chacun garde Foulée et tout son historique chez lui ; le relais ne garde que les comptes,
-les codes d'invitation et, à venir, l'extrait que chaque élève choisit de partager (séances des 4 dernières
-semaines en résumé, objectif, VMA ; GPS, sommeil, VFC et poids en option, jamais Strava). Le relais, c'est
-Foulée lui-même, en « mode relais » : il ne touche pas à Garmin.
+les codes d'invitation, les messages, les séances proposées et l'extrait que chaque élève choisit de partager
+(séances des 4 dernières semaines en résumé, objectif, VMA ; GPS, sommeil, VFC et poids en option, jamais
+Strava). Le relais, c'est Foulée lui-même, en « mode relais » : il ne touche pas à Garmin.
 
 ```
 Foulée de l'élève  ──►  relais (HTTPS, tunnel Cloudflare)  ◄──  Foulée du coach
@@ -622,8 +622,32 @@ ton adresse, par exemple `https://relais.mon-club.com`.
 - un coach se connecte dans Foulée (Réglages → Coach et élèves → « J'ai déjà un compte ») ; une page
   « Mes élèves » s'ajoute à la colonne, où il crée des **codes d'invitation** (une seule fois, 7 jours) ;
 - un élève rejoint son coach avec ce code (« J'ai un code d'invitation ») et choisit son identifiant et son
-  mot de passe ; une page « Mon coach » s'ajoute à sa colonne. Il peut quitter le groupe à tout moment : son
-  compte est alors effacé du relais.
+  mot de passe, puis **ce qu'il partage, case par case** (rien ne part avant) ; une page « Mon coach »
+  s'ajoute à sa colonne. Il peut quitter le groupe à tout moment : son compte et tout ce qu'il a partagé sont
+  alors effacés du relais.
+
+**Ce que fait le coach** (page « Mes élèves ») :
+- le tableau de bord du groupe : pour chaque élève sa dernière séance, sa semaine jour par jour (fait, manqué,
+  prévu), sa charge sur 7 jours, sa VMA, son objectif et le compte à rebours, les messages non lus, et
+  l'alerte « 6 jours sans séance » ;
+- la **fiche** d'un élève : sa semaine (son plan Garmin et les séances proposées, face à ce qu'il a fait,
+  semaine après semaine), ses séances des 4 dernières semaines, son objectif et l'allure qui va avec, ses
+  séances proposées, sa forme (sommeil, VFC, FC au repos, poids) s'il la partage ;
+- chaque **séance** en détail : chiffres, tours, renfo, tracé simplifié (sans fond de carte), ce qui était
+  proposé, et un **fil** pour en parler ;
+- **proposer une séance** à un ou plusieurs élèves : un déroulé en blocs (durée ou distance, répétitions,
+  % de VMA ou zone de FC, récupération), des exemples et ses modèles ; chacun la reçoit avec **ses** allures.
+
+**Ce que voit l'élève** (page « Mon coach ») : les séances proposées, bloc par bloc avec ses allures (et dans
+sa vue « Calendrier », en pointillé bleu, face à ce qu'il fait), la conversation avec son coach, et ce qu'il
+partage. **Messages** : une conversation par élève, le fil du groupe (le coach y épingle ses annonces) et un
+fil sous chaque séance ; Foulée relève les nouveautés toutes les minutes (badge dans la colonne). L'extrait
+part après chaque synchro.
+
+**Essayer avec un élève fictif** : dans ta vraie installation, relie-toi comme coach et crée un code
+d'invitation ; passe en mode démo, puis Réglages → Coach et élèves → « J'ai un code d'invitation ». L'élève
+fictif partage ses 4 semaines de séances fictives ; revenu à tes données, tu le vois dans « Mes élèves ». Le
+mode démo a sa propre place dans le coffre : son jeton ne remplace pas celui de ton compte coach.
 
 Sécurité : mots de passe (10 caractères au moins) gardés seulement en empreinte scrypt ; dans Foulée, un jeton
 de connexion rangé dans le coffre, comme la clé Garmin ; 5 essais faux, puis 15 minutes d'attente ; un

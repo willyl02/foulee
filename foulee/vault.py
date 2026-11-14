@@ -51,6 +51,8 @@ def _entry(name: str) -> tuple[str, str, str | None]:
     """(entrée du Gestionnaire d'identification, nom de fichier, variable d'environnement) du profil courant."""
     username, stem, env_var = SECRETS[name]
     suffix = config.profile_suffix() if name in PER_PROFILE else ""
+    if name == "relais" and config.is_demo():  # un élève fictif pour essayer le relais, sans toucher au vrai compte
+        suffix += "-demo"
     if suffix:  # autre profil que le principal : ni la même entrée, ni la variable d'environnement
         return f"{username}{suffix}", f"{stem}{suffix}", None
     return username, stem, env_var

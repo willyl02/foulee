@@ -34,7 +34,7 @@ export function hour(text) {
 
 /** « Séance prévue · Course à pied · 9 h 30 · Fontainebleau » */
 function planMeta(p) {
-  const parts = [p.type === "course" ? "Course" : p.type === "seance" ? "Séance prévue" : "Événement"];
+  const parts = [p.coach ? "Proposée par ton coach" : p.type === "course" ? "Course" : p.type === "seance" ? "Séance prévue" : "Événement"];
   if (p.type === "seance" && p.sport_label) parts.push(p.sport_label);
   if (p.heure) parts.push(hour(p.heure));
   else if (p.fin) parts.push(`jusqu'au ${F.dateLong(p.fin, { weekday: false })}`);
@@ -50,7 +50,7 @@ function planTitle(p) {
 /** Puce d'une séance prévue dans « Ta semaine » : son état (fait, manqué, à venir) et son titre. */
 export function weekPlanChip(p) {
   const mark = p.type === "course" ? icon("flag") : p.statut === "fait" ? icon("check") : p.statut === "manque" ? icon("close") : planIcon(p);
-  return `<button type="button" class="wday-plan is-${F.escape(p.statut)} is-${F.escape(p.type)}" data-plan-day="${F.escape(p.date)}" title="${F.escape(planTitle(p))}">
+  return `<button type="button" class="wday-plan is-${F.escape(p.statut)} is-${F.escape(p.type)}${p.coach ? " is-coach" : ""}" data-plan-day="${F.escape(p.date)}" title="${F.escape(planTitle(p))}">
     ${mark}<span>${F.escape(p.titre)}${p.type === "course" && p.heure ? ` · ${F.escape(hour(p.heure))}` : ""}</span></button>`;
 }
 
@@ -105,7 +105,7 @@ export const a_venir = {
           <span class="up-race-text"><b>${F.escape(race.titre)}</b><small>${F.escape([F.dateLong(race.date), hour(race.heure), race.lieu].filter(Boolean).join(" · "))}</small></span>
         </button>` : ""}
       ${items.length ? `<ol class="up-list">${items.map((e) => `<li>
-          <button type="button" class="up-item is-${F.escape(e.statut)} is-${F.escape(e.type)}" data-plan-day="${F.escape(e.date)}" title="${F.escape(planTitle(e))}">
+          <button type="button" class="up-item is-${F.escape(e.statut)} is-${F.escape(e.type)}${e.coach ? " is-coach" : ""}" data-plan-day="${F.escape(e.date)}" title="${F.escape(planTitle(e))}">
             <span class="up-when">${F.escape(when(e.date, today))}${e.heure ? ` · ${F.escape(hour(e.heure))}` : ""}</span>
             <span class="up-name">${planIcon(e)}<b>${F.escape(e.titre)}</b></span>
             <small>${e.statut === "fait" ? `${icon("check")}Fait` : F.escape(e.type === "course" ? "Course" : e.sport_label || "Séance")}</small>
@@ -166,11 +166,12 @@ function dayPanel(iso, d, today) {
       ${iso === today ? `<span class="badge">Aujourd'hui</span>` : race ? `<span class="badge is-race">${countdown(days)}</span>` : ""}</header>
     ${plans.length ? plans.map((p) => {
       const done = p.seance_id ? acts.find((a) => a.id === p.seance_id) : null;
-      return `<article class="aplan is-${F.escape(p.statut)} is-${F.escape(p.type)}">
+      return `<article class="aplan is-${F.escape(p.statut)} is-${F.escape(p.type)}${p.coach ? " is-coach" : ""}">
         <div class="aplan-title">${planIcon(p)}<b>${F.escape(p.titre)}</b>
           ${p.type !== "autre" ? `<span class="aplan-state">${icon(STATUS[p.statut]?.icon || "calendar")}${F.escape(STATUS[p.statut]?.label || "")}</span>` : ""}</div>
         <p class="aplan-meta">${F.escape(planMeta(p))}</p>
         ${p.description ? `<p class="aplan-desc">${F.escape(p.description)}</p>` : ""}
+        ${p.coach ? `<a class="aplan-coach" href="#/coach">${icon("user")}Le détail et tes allures dans « Mon coach »</a>` : ""}
         ${done ? `<button type="button" class="aplan-done" data-act="${F.escape(done.id)}">${activityLine(done)}<b>${F.escape(done.nom || done.sport_label)}</b><small>${F.escape(done.duree)}</small>${icon("right")}</button>` : ""}
       </article>`;
     }).join("") : none ? `<p class="aday-none">${none}</p>` : ""}
@@ -207,10 +208,10 @@ export const agenda = {
       const acts = data.seances.filter((a) => a.date === iso);
       const extra = acts.filter((a) => !linked.has(a.id));
       const items = [
-        ...plans.map((e) => `<span class="aitem is-${F.escape(e.statut)} is-${F.escape(e.type)}">${e.type === "course" ? icon("flag") : e.statut === "fait" ? icon("check") : e.statut === "manque" ? icon("close") : planIcon(e)}<span>${F.escape(e.titre)}</span></span>`),
+        ...plans.map((e) => `<span class="aitem is-${F.escape(e.statut)} is-${F.escape(e.type)}${e.coach ? " is-coach" : ""}">${e.type === "course" ? icon("flag") : e.statut === "fait" ? icon("check") : e.statut === "manque" ? icon("close") : planIcon(e)}<span>${F.escape(e.titre)}</span></span>`),
         ...extra.map((a) => `<span class="aitem is-extra">${activityLine(a)}</span>`),
       ];
-      const dots = [...plans.map((e) => `<i class="adot is-${F.escape(e.statut)} is-${F.escape(e.type)}"></i>`), ...extra.map(() => `<i class="adot is-extra"></i>`)].slice(0, 4).join("");
+      const dots = [...plans.map((e) => `<i class="adot is-${F.escape(e.statut)} is-${F.escape(e.type)}${e.coach ? " is-coach" : ""}"></i>`), ...extra.map(() => `<i class="adot is-extra"></i>`)].slice(0, 4).join("");
       const classes = ["aday", day.getMonth() !== month.getMonth() ? "out" : "", iso === today ? "today" : "", iso === selected ? "selected" : "",
         plans.some((e) => e.type === "course") ? "has-race" : "", iso < today ? "past" : ""].filter(Boolean).join(" ");
       return `<button type="button" class="${classes}" data-day="${iso}" aria-pressed="${iso === selected}" tabindex="${iso === selected ? 0 : -1}" aria-label="${F.escape(dayLabel(iso, plans, acts))}">

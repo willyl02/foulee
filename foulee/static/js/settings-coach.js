@@ -20,10 +20,6 @@ export async function coachPanel(box, boot, { toast, onChange }) {
     box.innerHTML = fail(`État du lien avec le relais indisponible : ${err.message}`);
     return;
   }
-  if (info.demo) {
-    box.innerHTML = `<p class="computed">Le mode démo n'est relié à aucun relais : connecte ce profil depuis ta vraie installation.</p>`;
-    return;
-  }
   const where = boot.machine === "pc" ? "le PC" : "le serveur";
 
   const linked = () => {
@@ -32,6 +28,7 @@ export async function coachPanel(box, boot, { toast, onChange }) {
     return `<p class="computed ok">${icon("check")}<span>Relié au relais <b>${F.escape(info.adresse.replace(/^https?:\/\//, ""))}</b> en tant que ${role} : <b>${F.escape(a.nom)}</b> (identifiant <code>${F.escape(a.identifiant)}</code>).</span></p>
       <div class="inline-actions">
         <a class="btn" href="#/coach">${icon(a.role === "coach" ? "club" : "user")}${coachPageLabel(a)}</a>
+        ${a.role === "eleve" ? `<a class="btn btn-ghost" href="#/coach/partage">${icon("edit")}Ce que je partage</a><button class="btn btn-ghost" type="button" data-push>${icon("sync")}Envoyer maintenant</button>` : ""}
         ${info.local ? `<button class="btn btn-ghost" type="button" data-pw>${icon("lock")}Changer le mot de passe</button>` : ""}
         <button class="btn btn-ghost" type="button" data-logout>${icon("power")}Se déconnecter</button>
         ${a.role === "eleve" && info.local ? `<button class="btn btn-ghost btn-danger" type="button" data-leave>${icon("trash")}Quitter le groupe</button>` : ""}
@@ -58,7 +55,7 @@ export async function coachPanel(box, boot, { toast, onChange }) {
       <p class="hint" data-status aria-live="polite"></p>
     </form>
     <p class="computed info">${icon("lock")}<span>${mode === "eleve"
-      ? "Ton coach te donne l'adresse du relais et un code d'invitation (valable 7 jours, une seule fois). Tu choisis ton identifiant et ton mot de passe : ils serviront si tu réinstalles Foulée. Pour l'instant, rien de tes données ne part : le partage de tes séances arrive dans une prochaine bêta, et il faudra ton accord, case par case."
+      ? "Ton coach te donne l'adresse du relais et un code d'invitation (valable 7 jours, une seule fois). Tu choisis ton identifiant et ton mot de passe : ils serviront si tu réinstalles Foulée. Ensuite, tu choisis ce que tu partages, case par case : rien ne part avant ton accord."
       : "Les comptes coach sont créés par l'administrateur du relais. Ton mot de passe ne reste pas sur ce PC : Foulée garde seulement un jeton de connexion, dans le coffre, comme ta clé Garmin."}</span></p>`;
 
   const render = (mode = "eleve") => {
@@ -94,7 +91,8 @@ export async function coachPanel(box, boot, { toast, onChange }) {
           : await api.post("/api/coach/connexion", body);
         toast(info.compte.role === "coach" ? "Relié au relais en tant que coach." : `Bienvenue dans le groupe de ${info.compte.coach?.nom || "ton coach"} !`);
         render();
-        onChange?.();
+        await onChange?.();
+        if (info.compte.role === "eleve" && mode === "eleve") location.hash = "#/coach/partage";
       } catch (err) {
         status.textContent = err.message;
         button.disabled = false;
@@ -105,6 +103,16 @@ export async function coachPanel(box, boot, { toast, onChange }) {
   const wireLinked = () => {
     const status = box.querySelector("[data-status]");
     const extra = box.querySelector("[data-extra]");
+    box.querySelector("[data-push]")?.addEventListener("click", async (e) => {
+      const button = e.currentTarget;
+      button.disabled = true;
+      status.textContent = "Envoi au relais…";
+      try {
+        const res = await api.post("/api/coach/echange");
+        status.textContent = res.envoi ? `Envoyé : ${res.envoi.seances} séance${res.envoi.seances > 1 ? "s" : ""} partagée${res.envoi.seances > 1 ? "s" : ""}, ${res.propositions} séance${res.propositions > 1 ? "s" : ""} proposée${res.propositions > 1 ? "s" : ""} par ton coach.` : "Choisis d'abord ce que tu partages (« Ce que je partage »).";
+      } catch (err) { status.textContent = err.message; }
+      button.disabled = false;
+    });
     box.querySelector("[data-logout]").addEventListener("click", async () => {
       if (!window.confirm("Se déconnecter du relais ? Tu pourras te reconnecter avec ton identifiant et ton mot de passe.")) return;
       try {

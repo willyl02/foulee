@@ -54,6 +54,59 @@ CREATE TABLE IF NOT EXISTS sessions (
     vu_le      TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS sessions_compte ON sessions(compte_id);
+
+-- Ce que chaque élève a accepté de partager, et le dernier extrait reçu (4 semaines, remplacé à chaque envoi)
+CREATE TABLE IF NOT EXISTS accords (
+    eleve_id    INTEGER PRIMARY KEY REFERENCES comptes(id) ON DELETE CASCADE,
+    choix       TEXT NOT NULL,
+    modifie_le  TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS partages (
+    eleve_id    INTEGER PRIMARY KEY REFERENCES comptes(id) ON DELETE CASCADE,
+    contenu     TEXT NOT NULL,
+    recu_le     TEXT NOT NULL
+);
+
+-- Messages : fil du groupe (« groupe »), conversation coach-élève (« eleve-ID »), fil d'une séance
+-- (« seance-ID-CLE »). coach_id = le groupe auquel le fil appartient.
+CREATE TABLE IF NOT EXISTS messages (
+    id         INTEGER PRIMARY KEY,
+    coach_id   INTEGER NOT NULL REFERENCES comptes(id) ON DELETE CASCADE,
+    fil        TEXT NOT NULL,
+    auteur_id  INTEGER REFERENCES comptes(id) ON DELETE SET NULL,
+    texte      TEXT NOT NULL,
+    cree_le    TEXT NOT NULL,
+    epingle    INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS messages_fil ON messages(coach_id, fil, id);
+CREATE TABLE IF NOT EXISTS lus (
+    compte_id  INTEGER NOT NULL REFERENCES comptes(id) ON DELETE CASCADE,
+    fil        TEXT NOT NULL,
+    dernier_id INTEGER NOT NULL,
+    PRIMARY KEY (compte_id, fil)
+);
+
+-- Séances proposées par le coach (une ligne par élève), et ses modèles
+CREATE TABLE IF NOT EXISTS propositions (
+    id          INTEGER PRIMARY KEY,
+    coach_id    INTEGER NOT NULL REFERENCES comptes(id) ON DELETE CASCADE,
+    eleve_id    INTEGER NOT NULL REFERENCES comptes(id) ON DELETE CASCADE,
+    date        TEXT NOT NULL,
+    titre       TEXT NOT NULL,
+    sport       TEXT NOT NULL,
+    contenu     TEXT NOT NULL,
+    cree_le     TEXT NOT NULL,
+    modifie_le  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS propositions_eleve ON propositions(eleve_id, date);
+CREATE TABLE IF NOT EXISTS modeles (
+    id        INTEGER PRIMARY KEY,
+    coach_id  INTEGER NOT NULL REFERENCES comptes(id) ON DELETE CASCADE,
+    titre     TEXT NOT NULL,
+    sport     TEXT NOT NULL,
+    contenu   TEXT NOT NULL,
+    cree_le   TEXT NOT NULL
+);
 """
 
 SCHEMA_VERSION = 1
@@ -69,8 +122,24 @@ class RelayError(ValueError):
     """Refus expliqué en français (montré tel quel à l'utilisateur)."""
 
 
+def _zone():
+    """L'heure du club (Paris par défaut, FOULEE_RELAIS_TZ sinon) : un serveur loué tourne souvent en UTC, et les
+    élèves lisent l'heure de leurs messages comme sur leur montre."""
+    try:
+        from zoneinfo import ZoneInfo
+
+        return ZoneInfo(os.environ.get("FOULEE_RELAIS_TZ") or "Europe/Paris")
+    except Exception:  # base des fuseaux absente : l'heure du serveur
+        return None
+
+
+def local_now() -> datetime:
+    zone = _zone()
+    return datetime.now(zone).replace(tzinfo=None) if zone else datetime.now()
+
+
 def now() -> str:
-    return datetime.now().replace(microsecond=0).isoformat(sep=" ")
+    return local_now().replace(microsecond=0).isoformat(sep=" ")
 
 
 def db_path() -> Path:
@@ -199,7 +268,9 @@ def set_active(conn: sqlite3.Connection, account_id: int, active: bool) -> None:
 
 
 def delete_account(conn: sqlite3.Connection, account_id: int) -> None:
-    """Efface le compte et tout ce qui s'y rattache (sessions, invitations ; pour un coach, ses élèves)."""
+    """Efface le compte et tout ce qui s'y rattache (sessions, invitations, ce qu'il a partagé, ses conversations ;
+    pour un coach, ses élèves et tout son groupe)."""
+    conn.execute("DELETE FROM messages WHERE fil = ? OR fil LIKE ?", (f"eleve-{account_id}", f"seance-{account_id}-%"))
     conn.execute("DELETE FROM comptes WHERE id = ?", (account_id,))
 
 
@@ -241,7 +312,7 @@ def session_account(conn: sqlite3.Connection, token: str | None) -> tuple[sqlite
                           WHERE s.empreinte = ?""", (fingerprint,)).fetchone()
     if row is None:
         return None
-    limit = (datetime.now() - timedelta(days=SESSION_DAYS)).isoformat(sep=" ")
+    limit = (local_now() - timedelta(days=SESSION_DAYS)).isoformat(sep=" ")
     if not row["actif"] or row["session_vu"] < limit:
         conn.execute("DELETE FROM sessions WHERE empreinte = ?", (fingerprint,))
         return None
@@ -274,7 +345,7 @@ def create_invitation(conn: sqlite3.Connection, coach_id: int) -> dict:
     if pending >= 30:
         raise RelayError("Déjà 30 codes en attente : annule ceux qui ne servent plus.")
     code = new_code()
-    expiry = (datetime.now() + timedelta(days=INVITATION_DAYS)).replace(microsecond=0).isoformat(sep=" ")
+    expiry = (local_now() + timedelta(days=INVITATION_DAYS)).replace(microsecond=0).isoformat(sep=" ")
     conn.execute("INSERT INTO invitations(code, coach_id, cree_le, expire_le) VALUES (?,?,?,?)",
                  (code, coach_id, now(), expiry))
     return {"code": code, "cree_le": now(), "expire_le": expiry}

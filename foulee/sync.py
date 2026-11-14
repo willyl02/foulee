@@ -190,6 +190,10 @@ def run(*, since: date | None = None, fit_days: int | None = None, with_fit: boo
             if status != "echec" and any(name in DATA_SOURCES for name in results):
                 db.set_meta(conn, "last_sync", finished)
             conn.commit()
+            if status != "echec":
+                from . import coach  # élève relié à un coach : son extrait part, ses séances proposées arrivent
+
+                coach.exchange_quietly(conn)
     progress("Synchro terminée", 1.0)
     return {"statut": status, "debut": started, "fin": finished, "sources": results}
 
