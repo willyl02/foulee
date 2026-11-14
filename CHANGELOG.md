@@ -4,6 +4,24 @@ Les versions « bêta » (par exemple 0.4.0b1) sont des avant-premières : elles
 sur le canal bêta (Réglages → Mises à jour → « Recevoir les versions bêta »), puis sortent en
 version stable une fois éprouvées.
 
+## 0.8.0 — 14 novembre 2026
+
+La version stable qui réunit les bêtas 0.8 ; le détail de chacune est dans l'historique des versions (CHANGELOG.md sur GitHub).
+
+- **Foulée Coach** (Réglages → Coach et élèves) : un coach et ses élèves se relient par le relais du club, un petit serveur
+  sur Internet ; chacun garde Foulée et tout son historique chez lui. L'élève rejoint son coach avec un code d'invitation
+  et choisit, case par case, ce qu'il partage (ses 4 dernières semaines de séances en résumé, son objectif et sa VMA ; en
+  option le tracé GPS, départ et arrivée masqués, son sommeil, sa VFC, son poids ; jamais Strava).
+- **Mes élèves**, côté coach : le tableau de bord du groupe, la fiche de chaque élève, chaque séance en détail, et
+  **proposer une séance** en blocs (% de VMA ou zone de FC), que chaque élève reçoit avec ses allures, dans « Mon coach »,
+  dans sa vue « Calendrier », et en **fichier .fit pour sa montre**. **Messages** : une conversation par élève, le fil du
+  groupe, un fil sous chaque séance.
+- **La forme du jour en petites courbes** sur l'Accueil : FC de repos face à ta moyenne, VFC dans ta zone habituelle,
+  sommeil face à ton besoin, Body Battery, fraîcheur, SpO2.
+- **« Fier de ton club ? »** (Réglages → Mon club) : le logo du club, dans « Mon club » et, si ton coach fait partie du
+  club, sur sa carte.
+- La FAQ précise pourquoi la séance passe par le câble USB : Garmin Connect n'importe pas les fichiers d'entraînement.
+
 ## 0.8.0b4 — 14 novembre 2026 (bêta)
 
 - **La séance du coach sur la montre** : chaque séance proposée se télécharge en fichier **.fit** (« Pour ma
