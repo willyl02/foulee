@@ -13,7 +13,7 @@ Sur Windows, Foulée s'installe comme n'importe quel programme et tourne en
 arrière-plan, avec son icône près de l'horloge. Installé sur un serveur à la maison,
 il s'ouvre aussi **sur ton téléphone**, de partout, comme une appli (section 9).
 
-**Présentation illustrée** (18 pages, avec le téléchargement, l'installation pas à pas
+**Présentation illustrée** (27 pages, avec le téléchargement, l'installation pas à pas
 et la clé API Garmin) : [le PDF](docs/presentation/Foulee-presentation-beta-testeurs.pdf),
 ou [les mêmes pages en images JPG](docs/presentation/Foulee-presentation-pages-jpg.zip)
 à partager.
@@ -36,7 +36,7 @@ Withings (API publique) ──┘                                   │
 
 ## 1. Installer Foulée sur Windows
 
-En images : pages 15 à 18 de la [présentation](docs/presentation/Foulee-presentation-beta-testeurs.pdf).
+En images : pages 24 à 27 de la [présentation](docs/presentation/Foulee-presentation-beta-testeurs.pdf).
 
 1. Télécharge **`Foulee-Setup-<version>.exe`** sur la page des versions :
    https://github.com/willyl02/foulee/releases (pas besoin de compte GitHub).
@@ -646,10 +646,13 @@ sa vue « Calendrier », en pointillé bleu, face à ce qu'il fait), la conversa
 partage. Chaque séance proposée se télécharge en **fichier .fit pour la montre** (« Pour ma montre ») : chaque
 bloc devient une étape, les répétitions une boucle, les % de VMA une fourchette d'allure calculée avec la VMA
 de l'élève (± 3 %), la zone de FC une cible de FC. Montre branchée en USB, le fichier se copie dans le
-dossier `GARMIN\NewFiles` ; débranchée, la montre la range dans Entraînement → Entraînements. (L'API
-officielle de Garmin ne fait que lire : rien ne part vers Garmin Connect sans toi.) Le coach peut télécharger
+dossier `GARMIN\NewFiles` ; débranchée, la montre la range dans Entraînement → Entraînements. Sans câble ?
+Garmin Connect n'importe pas les fichiers d'entraînement (seulement des activités et des parcours), et l'API
+officielle de Garmin, celle de Foulée, ne fait que lire : l'élève recopie alors la séance dans Garmin Connect
+(Entraînement et planification → Entraînements → Créer), puis « Envoyer vers l'appareil ». Le coach peut télécharger
 le même fichier, avec les allures de l'élève, depuis sa fiche. Si l'élève répond « oui » à « Ton coach
-fait-il partie de ton club ? » (Réglages → Coach et élèves), le logo du club s'affiche sur la carte du coach. **Messages** : une conversation par élève, le fil du groupe (le coach y épingle ses annonces) et un
+fait-il partie de ton club ? » (Réglages → Coach et élèves), le logo du club s'affiche sur la carte du coach.
+**Messages** : une conversation par élève, le fil du groupe (le coach y épingle ses annonces) et un
 fil sous chaque séance ; Foulée relève les nouveautés toutes les minutes (badge dans la colonne). L'extrait
 part après chaque synchro.
 
