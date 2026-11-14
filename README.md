@@ -507,9 +507,29 @@ Dans un terminal :
 | `reset-views` | Restaurer les vues d'origine |
 | `forget-key` | Supprimer la clé de ce PC |
 
-## 9. Sur ton téléphone : Foulée sur un serveur
+## 9. Sur ton téléphone
 
-Pour consulter Foulée de partout, il tourne en permanence sur un petit serveur
+### Le plus simple : depuis ton PC, avec Tailscale
+
+Foulée reste sur ton PC ; **Tailscale** (gratuit) relie ton téléphone à ton PC par une liaison privée et
+chiffrée, de partout, sans rien publier sur Internet.
+
+1. Installe [Tailscale](https://tailscale.com/download) sur le PC et sur le téléphone, et connecte-toi sur
+   les deux avec **le même compte** (Google, Microsoft, Apple…).
+2. Une fois pour toutes, dans la [console Tailscale, page DNS](https://login.tailscale.com/admin/dns) :
+   active MagicDNS, puis « Enable HTTPS ».
+3. Dans Foulée, **Réglages → Foulée sur ton téléphone** : les étapes se cochent toutes seules ; puis
+   « Activer l'accès depuis mon téléphone » (si Windows demande une autorisation, réponds « Oui »).
+4. Sur le téléphone, Tailscale connecté, scanne le QR code : ton Foulée s'ouvre. Pour l'avoir comme une
+   appli : Android, menu ⋮ → « Installer l'application » ; iPhone, Partager → « Sur l'écran d'accueil ».
+
+Le PC doit rester allumé (pas en veille), avec Foulée lancé. Foulée fait pour toi ce qu'il fallait taper
+dans PowerShell (`tailscale serve --bg 8770`, puis accepter le nom Tailscale du PC) ; « Couper l'accès »
+le défait. Par Tailscale, tu as tous tes réglages, comme sur le PC.
+
+### Foulée sur un serveur, allumé en permanence
+
+Pour consulter Foulée de partout sans laisser le PC allumé, il tourne en permanence sur un petit serveur
 Linux (par exemple un conteneur Debian sous Proxmox), et **Tailscale** le relie
 à tes seuls appareils, en HTTPS. Rien n'est publié sur Internet.
 

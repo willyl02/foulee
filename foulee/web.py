@@ -21,6 +21,7 @@ seules la liste des profils et la page de choix répondent.
 from __future__ import annotations
 
 import contextvars
+import io
 import ipaddress
 import json
 import mimetypes
@@ -34,6 +35,7 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
+import segno
 from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -57,6 +59,7 @@ from . import (
     renfo,
     retours,
     schedule,
+    telephone,
     updates,
     utilisateurs,
     vault,
@@ -220,7 +223,8 @@ def create_app() -> FastAPI:
 
     @app.middleware("http")
     async def guard(request: Request, call_next):
-        if not host_allowed(host_name(request.headers.get("host")), hosts):
+        host = host_name(request.headers.get("host"))
+        if not host_allowed(host, hosts) and host != telephone.allowed_host():  # Foulée sur ton téléphone
             return JSONResponse({"detail": "Hôte refusé"}, status_code=403)
         if request.method not in ("GET", "HEAD", "OPTIONS") and request.headers.get("x-foulee") != "1":
             return JSONResponse({"detail": "En-tête X-Foulee manquant"}, status_code=403)
@@ -922,6 +926,35 @@ def create_app() -> FastAPI:
     def require_principal(request: Request) -> None:
         if not utilisateurs.is_principal(request.state.profil):
             raise HTTPException(403, "Réservé à l'utilisateur principal : ce réglage concerne toute l'installation.")
+
+    # Foulée sur ton téléphone (PC) : Tailscale relaie l'interface vers tes appareils (voir telephone.py)
+    @app.get("/api/telephone")
+    def phone_status(request: Request) -> dict:
+        require_local(request)
+        try:
+            return telephone.status()
+        except telephone.PhoneError as exc:
+            raise HTTPException(503, str(exc)) from exc
+
+    @app.put("/api/telephone")
+    def phone_switch(request: Request, payload: dict = Body(...)) -> dict:
+        require_local(request)
+        require_principal(request)
+        try:
+            return telephone.enable() if payload.get("actif") else telephone.disable()
+        except telephone.PhoneError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+    @app.get("/api/telephone/qr.svg")
+    def phone_qr(request: Request) -> Response:
+        require_local(request)
+        name = telephone.allowed_host()
+        if not name:
+            raise HTTPException(404, "Accès depuis le téléphone pas activé")
+        out = io.BytesIO()  # un vrai fichier SVG (avec xmlns), affichable seul dans une balise <img>
+        segno.make(f"https://{name}/", error="m").save(out, kind="svg", dark="#15201b", light="#ffffff", border=2, scale=4,
+                                                         xmldecl=False)
+        return Response(out.getvalue(), media_type="image/svg+xml", headers={"Cache-Control": "no-store"})
 
     @app.put("/api/acces-reseau")
     def lan_enable(request: Request, payload: dict = Body(...)) -> dict:

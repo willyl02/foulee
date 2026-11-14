@@ -1,6 +1,6 @@
 [project]
 name = "foulee"
-version = "0.8.0"
+version = "0.8.1b1"
 description = "Foulée — hub local de données sport et santé (Garmin d'abord)"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -14,6 +14,7 @@ dependencies = [
     "pystray>=0.19.5 ; sys_platform == 'win32'",
     "tzdata>=2024.1 ; sys_platform == 'win32'",  # fuseaux horaires (heures des mesures Withings) : absents de Windows
     "pillow>=11",
+    "segno>=1.6",
 ]
 
 [project.scripts]

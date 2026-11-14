@@ -4,6 +4,17 @@ Les versions « bêta » (par exemple 0.4.0b1) sont des avant-premières : elles
 sur le canal bêta (Réglages → Mises à jour → « Recevoir les versions bêta »), puis sortent en
 version stable une fois éprouvées.
 
+## 0.8.1b1 — 15 novembre 2026 (bêta)
+
+- **Foulée sur ton téléphone, depuis ton PC** (Réglages → Foulée sur ton téléphone) : avec Tailscale installé
+  sur le PC et sur le téléphone (gratuit, même compte), un bouton « Activer l'accès depuis mon téléphone » fait
+  ce qu'il fallait taper dans PowerShell : Tailscale relaie Foulée sur une adresse https privée, que Foulée
+  accepte. Les étapes se cochent toutes seules (Tailscale installé, connecté, certificats HTTPS activés), et un
+  **QR code** ouvre ton Foulée sur le téléphone. Si Tailscale demande les droits d'administrateur, Windows pose
+  la question. « Couper l'accès » défait tout. Le PC doit rester allumé, avec Foulée lancé.
+- FAQ : Foulée sur le téléphone depuis le PC, les certificats HTTPS de Tailscale, « Foulée est injoignable »
+  (PC en veille).
+
 ## 0.8.0 — 14 novembre 2026
 
 La version stable qui réunit les bêtas 0.8 ; le détail de chacune est dans l'historique des versions (CHANGELOG.md sur GitHub).

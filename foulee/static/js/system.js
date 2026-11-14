@@ -48,6 +48,9 @@ export function systemSections(boot) {
   if (boot.application) {
     parts.push(section("app", "Application", "Foulée tourne en arrière-plan, avec son icône près de l'horloge : clic pour ouvrir l'interface, clic droit pour synchroniser ou quitter."));
   }
+  if (local && boot.machine === "pc") {
+    parts.push(section("telephone", "Foulée sur ton téléphone", "Ouvre ton Foulée depuis ton téléphone, où que tu sois, grâce à Tailscale : une liaison privée et chiffrée entre tes appareils, gratuite. Ce PC doit rester allumé, avec Foulée lancé."));
+  }
   if (boot.machine === "serveur" && !boot.demo) {
     parts.push(section("lan", "Accès depuis le réseau local", "Ouvre Foulée depuis n'importe quel appareil de la maison, sans Tailscale, avec l'adresse du serveur. Un mot de passe le protège ; par Tailscale, il n'est jamais demandé."));
   }
@@ -75,6 +78,7 @@ export function wireSystem(root, boot, ctx) {
   if (find("dossier")) folderPanel(find("dossier"), boot, ctx);
   if (find("claude")) claudePanel(find("claude"), ctx);
   if (find("app")) appPanel(find("app"), ctx);
+  if (find("telephone")) phonePanel(find("telephone"), ctx);
   if (find("lan")) lanPanel(find("lan"), ctx);
   if (find("maj")) updatesPanel(find("maj"), boot, ctx);
 }
@@ -395,6 +399,71 @@ async function appPanel(box, { toast }) {
       toast(err.message, { error: true });
     }
   });
+}
+
+// ============================================ Foulée sur ton téléphone (PC)
+async function phonePanel(body, { toast }) {
+  const paint = async () => {
+    let info;
+    try {
+      info = await api.get("/api/telephone", null, { fresh: true });
+    } catch (err) {
+      body.innerHTML = fail(err.message);
+      return;
+    }
+    const recheck = `<button class="btn btn-ghost" type="button" data-phone-check>${icon("sync")}Vérifier à nouveau</button>`;
+    const step = (n, title, done, text = "") => `<li class="phone-step${done ? " done" : ""}"><span class="phone-n">${done ? icon("check") : n}</span>
+        <div><b>${title}</b>${text ? `<p>${text}</p>` : ""}</div></li>`;
+    if (!info.actif || !info.autorise) {
+      const ready = info.installe && info.connecte && info.https;
+      body.innerHTML = `<ol class="phone-steps">
+          ${step(1, "Tailscale installé sur ce PC", info.installe, info.installe ? "" : `Télécharge-le sur ${link(info.telechargement, "tailscale.com/download")}, installe-le, puis connecte-toi (avec ton compte Google, Microsoft ou Apple).`)}
+          ${step(2, "Tailscale connecté", info.connecte, info.installe && !info.connecte ? "Ouvre Tailscale (son icône près de l'horloge) et connecte-toi." : "")}
+          ${step(3, "Certificats HTTPS activés", info.https, info.connecte && !info.https ? `Une fois pour toutes : dans ${link(info.console_dns, "la console Tailscale, page DNS")}, active MagicDNS puis « Enable HTTPS ».` : "")}
+          ${step(4, "Tailscale installé sur ton téléphone", false, "Depuis le Play Store ou l'App Store, avec le même compte que sur ce PC.")}
+        </ol>
+        <div class="inline-actions">
+          ${ready ? `<button class="btn btn-primary" type="button" data-phone-on>${icon("check")}Activer l'accès depuis mon téléphone</button>` : ""}
+          ${recheck}
+        </div>
+        ${ready ? `<p class="computed">Si Windows demande « Autoriser cette application à apporter des modifications ? », réponds « Oui » : c'est Tailscale.</p>` : ""}`;
+    } else {
+      body.innerHTML = `<div class="phone-on">
+          <img class="phone-qr" src="/api/telephone/qr.svg?v=${encodeURIComponent(info.nom)}" alt="QR code de l'adresse" width="150" height="150">
+          <div>
+            <p class="phone-state">${icon("check")}Accès depuis le téléphone activé</p>
+            <p class="phone-url"><code>${F.escape(info.adresse)}</code></p>
+            <ol class="steps">
+              <li>Sur ton téléphone, ouvre Tailscale : il doit être connecté.</li>
+              <li>Scanne ce QR code avec l'appareil photo (ou tape l'adresse) : ton Foulée s'ouvre.</li>
+              <li>Pour l'avoir comme une appli : sur Android, menu ⋮ › « Installer l'application » ; sur iPhone, Partager › « Sur l'écran d'accueil ».</li>
+            </ol>
+            <div class="inline-actions">
+              <button class="btn" type="button" data-phone-copy>${icon("copy")}Copier l'adresse</button>
+              <button class="btn btn-ghost btn-danger" type="button" data-phone-off>${icon("close")}Couper l'accès</button>
+            </div>
+          </div>
+        </div>
+        <p class="computed">Seuls tes appareils connectés à ton compte Tailscale peuvent ouvrir cette adresse, par une liaison chiffrée. Ce PC doit rester allumé (pas en veille), avec Foulée lancé.</p>`;
+    }
+    body.querySelector("[data-phone-check]")?.addEventListener("click", paint);
+    body.querySelector("[data-phone-copy]")?.addEventListener("click", async () => {
+      try { await navigator.clipboard.writeText(info.adresse); toast("Adresse copiée."); } catch { toast(info.adresse); }
+    });
+    for (const [sel, on] of [["[data-phone-on]", true], ["[data-phone-off]", false]]) {
+      body.querySelector(sel)?.addEventListener("click", async (event) => {
+        event.currentTarget.disabled = true;
+        try {
+          await api.put("/api/telephone", { actif: on });
+          toast(on ? "C'est prêt : scanne le QR code avec ton téléphone." : "Accès depuis le téléphone coupé.");
+        } catch (err) {
+          toast(err.message, { error: true });
+        }
+        paint();
+      });
+    }
+  };
+  paint();
 }
 
 // ===================================================== réseau local (serveur)
