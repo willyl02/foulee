@@ -111,6 +111,7 @@ export async function renderStudent(ctx, sid) {
         <section class="coach-card"><h2>${icon("layers")}Séances proposées</h2><div data-props>
           ${data.propositions.length ? data.propositions.map((p) => `<div class="co-prop"><div><b>${F.escape(p.titre)}</b><span>${F.escape(dayLabel(p.date))}${p.sport_label ? ` · ${F.escape(p.sport_label)}` : ""}</span></div>
             ${statusChip(p.statut)}<span class="co-prop-tools">${p.seance ? `<a class="co-mini" href="#/coach/eleve/${sid}/seance/${encodeURIComponent(p.seance.cle)}" title="Voir la séance faite">${icon("right")}</a>` : ""}
+            <a class="co-mini" href="/api/coach/eleves/${sid}/seances/${p.id}.fit" download title="Le fichier pour sa montre (.fit), avec ses allures">${icon("download")}</a>
             <a class="co-mini" href="#/coach/proposer?id=${p.id}&eleve=${sid}" title="Modifier">${icon("edit")}</a>
             <button type="button" class="co-mini" data-drop="${p.id}" title="Supprimer">${icon("trash")}</button></span></div>`).join("")
             : `<p class="co-empty">Aucune séance proposée.</p>`}</div>

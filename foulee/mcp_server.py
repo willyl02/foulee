@@ -535,9 +535,14 @@ def allures_vma(vma: float | None = None, test_vameval: str | None = None, compa
 @mcp.tool(annotations=READ)
 def forme_du_jour(date_jour: str | None = None) -> dict[str, Any]:
     """Signaux de récupération d'un jour (FC de repos, VFC, sommeil, Body Battery, fraîcheur, SpO2),
-    chacun face aux habitudes de l'utilisateur, avec une phrase de synthèse. Pas un avis médical."""
+    chacun face aux habitudes de l'utilisateur, avec une phrase de synthèse. Pas un avis médical.
+    Chaque signal porte « graphe » : ses valeurs des derniers jours (du « debut » à la « fin »), et sa
+    référence (moyenne, fourchette habituelle jour par jour « bande », repère « seuil »)."""
     with db.session(readonly=True) as conn:
-        return analysis.day_form(conn, analysis.to_date(date_jour) if date_jour else None, db.get_settings(conn))
+        form = analysis.day_form(conn, analysis.to_date(date_jour) if date_jour else None, db.get_settings(conn))
+    for signal in form["signaux"]:
+        signal.get("graphe", {}).pop("affiches", None)  # les mêmes valeurs mises en forme : inutile ici
+    return form
 
 
 @mcp.tool(annotations=READ)
@@ -676,7 +681,7 @@ def types_de_tuiles() -> dict[str, Any]:
     """Types de tuiles disponibles et leurs réglages, pour composer une vue avec enregistrer_vue."""
     return {
         "tuiles": views.TILE_TYPES,
-        "tailles": "w = largeur sur 12 colonnes (3, 4, 6, 8 ou 12) ; h = hauteur (1, 2 ou 3).",
+        "tailles": "w = largeur sur 12 colonnes (3, 4, 6, 8, 9 ou 12) ; h = hauteur (1, 2 ou 3).",
         "periode": "'herite' suit le sélecteur de période de la vue, sinon un nombre de jours.",
         "sports": views.SPORT_OPTIONS,
         "icones": views.ICONS,

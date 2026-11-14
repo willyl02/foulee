@@ -6,15 +6,22 @@ Foulée ne lit donc rien sur athle.fr. Il garde ce que l'utilisateur saisit, ou 
 classement du club se retrouve par son numéro, celui de la licence), que le navigateur ouvre.
 
 Saisons FFA : du 1er septembre au 31 août ; la saison « 2027 » va de septembre 2026 à août 2027.
+
+« Fier de ton club ? » : le logo du club, importé par l'utilisateur (PNG à fond transparent de préférence), est
+gardé à côté des données du profil, transparence comprise, réduit à 500 pixels de côté au plus.
 """
 
 from __future__ import annotations
 
 import datetime as dt
+import io
 import re
 import unicodedata
+from pathlib import Path
 from typing import Any
 from urllib.parse import quote, urlparse
+
+from . import config
 
 CLASSEMENT_URL = ("https://www.athle.fr/bases/liste.aspx?frmbase=cclubs&frmmode=2&frmespace=&frmtypeclub=M"
                   "&frmsaison={saison}&frmnclub={numero}&frmruptures=")
@@ -22,6 +29,12 @@ FIND_URL = "https://www.athle.fr/trouver-un-club/"
 LICENCE_TYPES = ["Athlé Compétition", "Athlé Running", "Athlé Santé", "Athlé Découverte", "Athlé Encadrement",
                  "Athlé Entreprise", "Autre"]
 LICENCE_WARNING_DAYS = 30
+LOGO_SIDE = 500                   # côté maximal du logo gardé, en pixels (sans rognage : proportions conservées)
+LOGO_MAX_UPLOAD = 5 * 1024 * 1024  # 5 Mo à l'envoi
+LOGO_MAX_SIDE = 6000               # au-delà, on refuse d'ouvrir l'image (fichier piégé ou démesuré)
+LOGO_FORMATS = {"PNG", "WEBP", "JPEG"}
+LOGO_RULES = (f"PNG à fond transparent de préférence ({LOGO_SIDE} × {LOGO_SIDE} pixels conseillés), WebP ou JPEG, "
+              f"{LOGO_MAX_UPLOAD // (1024 * 1024)} Mo au plus. Il reste sur ta machine.")
 TEXT_FIELDS = {"nom": 80, "president": 80, "adresse": 160, "code_postal": 10, "ville": 80, "telephone": 30,
                "email": 120, "site": 300, "page": 300}
 
@@ -301,3 +314,76 @@ def summary(value: dict | None, today: dt.date | None = None) -> dict | None:
         },
         "licence": licence,
     }
+
+
+# ------------------------------------------------------------------- logo
+class LogoError(ValueError):
+    """Image de logo refusée, expliquée en français."""
+
+
+def logo_path() -> Path:
+    # Le mode démo garde son propre logo : il ne remplace jamais le tien
+    return config.data_dir() / ("club-logo-demo.png" if config.is_demo() else "club-logo.png")
+
+
+def logo_version() -> int | None:
+    """La date du fichier (pour l'adresse de l'image, qui change à chaque nouveau logo), ou None sans logo."""
+    path = logo_path()
+    return int(path.stat().st_mtime) if path.exists() else None
+
+
+def logo_info() -> dict:
+    return {"logo": logo_version() is not None, "logo_maj": logo_version(), "regles": LOGO_RULES, "taille": LOGO_SIDE}
+
+
+def _normalize_logo(data: bytes) -> tuple[bytes, bool]:
+    """Le PNG gardé (transparence comprise, marges transparentes retirées) et s'il a un fond transparent."""
+    if not data:
+        raise LogoError("Fichier vide.")
+    if len(data) > LOGO_MAX_UPLOAD:
+        raise LogoError(f"Image trop lourde ({len(data) / 1024 / 1024:.1f} Mo) : "
+                        f"{LOGO_MAX_UPLOAD // (1024 * 1024)} Mo au plus.")
+    from PIL import Image, ImageOps, UnidentifiedImageError
+
+    try:
+        with Image.open(io.BytesIO(data)) as probe:
+            kind = probe.format
+            width, height = probe.size
+    except (UnidentifiedImageError, OSError, ValueError) as exc:
+        raise LogoError("Ce fichier n'est pas une image lisible (PNG, WebP ou JPEG).") from exc
+    if kind not in LOGO_FORMATS:
+        raise LogoError(f"Format {kind} non accepté : PNG (idéalement à fond transparent), WebP ou JPEG.")
+    if width > LOGO_MAX_SIDE or height > LOGO_MAX_SIDE or width < 32 or height < 32:
+        raise LogoError(f"Image de {width} × {height} pixels : entre 32 et {LOGO_MAX_SIDE} pixels de côté.")
+    try:
+        with Image.open(io.BytesIO(data)) as image:
+            image = ImageOps.exif_transpose(image).convert("RGBA")
+            alpha = image.getchannel("A")
+            transparent = alpha.getextrema()[0] < 255
+            box = alpha.getbbox()  # le dessin, sans les marges entièrement transparentes
+            if box is None:
+                raise LogoError("Cette image est entièrement transparente : il n'y a rien à afficher.")
+            image = image.crop(box)
+            image.thumbnail((LOGO_SIDE, LOGO_SIDE), Image.Resampling.LANCZOS)
+            out = io.BytesIO()
+            image.save(out, "PNG", optimize=True)  # sans métadonnées
+    except LogoError:
+        raise
+    except (OSError, ValueError) as exc:
+        raise LogoError("Image abîmée : impossible de la lire jusqu'au bout.") from exc
+    return out.getvalue(), transparent
+
+
+def save_logo(data: bytes) -> dict:
+    clean, transparent = _normalize_logo(data)
+    path = logo_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_bytes(clean)
+    tmp.replace(path)
+    return {**logo_info(), "transparent": transparent}
+
+
+def delete_logo() -> dict:
+    logo_path().unlink(missing_ok=True)
+    return logo_info()

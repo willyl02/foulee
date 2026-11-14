@@ -1447,17 +1447,38 @@ def _mean(conn: sqlite3.Connection, key: str, end: date, days: int) -> float | N
     return row["m"] if row and row["m"] is not None else None
 
 
+def _series(conn: sqlite3.Connection, key: str, end: date, days: int) -> list[float | None]:
+    """Une valeur par jour (None sans mesure), du plus ancien au jour ``end`` compris."""
+    start = end - timedelta(days=days - 1)
+    found = {r["date"]: r["v"] for r in conn.execute(
+        "SELECT date, AVG(value) AS v FROM daily WHERE metric = ? AND date BETWEEN ? AND ? GROUP BY date",
+        (key, iso(start), iso(end)))}
+    return [found.get(iso(start + timedelta(days=i))) for i in range(days)]
+
+
+def _graph(conn: sqlite3.Connection, key: str, when: str, days: int, kind: str = "ligne", **extra: Any) -> dict:
+    """La petite courbe d'un signal de la forme du jour : les derniers jours et ce à quoi les comparer."""
+    end = to_date(when)
+    values = _series(conn, key, end, days)
+    return {"type": kind, "debut": iso(end - timedelta(days=days - 1)), "fin": when,
+            "valeurs": [None if v is None else round(v, 2) for v in values],
+            "affiches": [None if v is None else metrics.format_value(key, v) for v in values], **extra}
+
+
 def day_form(conn: sqlite3.Connection, day: date | None, settings: dict) -> dict:
-    """Signaux de récupération du jour, chacun lu face à ta référence, et une phrase de synthèse."""
+    """Signaux de récupération du jour, chacun lu face à ta référence, et une phrase de synthèse. Chaque signal
+    porte sa petite courbe (``graphe``) : les derniers jours, la moyenne, la fourchette ou le seuil."""
     day = day or date.today()
     items = []
 
-    def add(key: str, value: float | None, when: str | None, state: str | None, reference: str, note: str) -> None:
+    def add(key: str, value: float | None, when: str | None, state: str | None, reference: str, note: str,
+            graph: dict | None = None) -> None:
         if value is None:
             return
         meta = metrics.get(key)
         items.append({"metric": key, "label": meta.label, "valeur": value, "affiche": metrics.format_value(key, value),
-                      "date": when, "etat": state, "reference": reference, "explication": note})
+                      "date": when, "etat": state, "reference": reference, "explication": note,
+                      **({"graphe": graph} if graph else {})})
 
     rhr, when = _latest(conn, "resting_hr", day)
     if rhr is not None:
@@ -1465,12 +1486,17 @@ def day_form(conn: sqlite3.Connection, day: date | None, settings: dict) -> dict
         delta = rhr - base if base else 0
         state = "bon" if delta <= 2 else "moyen" if delta <= 5 else "alerte"
         add("resting_hr", rhr, when, state, f"moyenne 30 j : {metrics.format_value('resting_hr', base)}",
-            "dans tes habitudes" if delta <= 2 else f"{delta:+.0f} bpm par rapport à d'habitude")
+            "dans tes habitudes" if delta <= 2 else f"{delta:+.0f} bpm par rapport à d'habitude",
+            _graph(conn, "resting_hr", when, 30, moyenne=round(base, 1) if base else None,
+                   legende="30 jours et ta moyenne"))
     hrv, when = _latest(conn, "hrv_night", day)
     if hrv is not None:
         low, _ = _latest(conn, "hrv_bl_low", to_date(when), 0)
         high, _ = _latest(conn, "hrv_bl_high", to_date(when), 0)
+        graph = _graph(conn, "hrv_night", when, 30, legende="30 nuits et ta zone habituelle")
         if low:
+            lows, highs = _series(conn, "hrv_bl_low", to_date(when), 30), _series(conn, "hrv_bl_high", to_date(when), 30)
+            graph["bande"] = [[round(a), round(b)] if a and b else None for a, b in zip(lows, highs)]
             state = "bon" if hrv >= low else "moyen" if hrv >= low * 0.9 else "alerte"
             reference = f"ta zone : {round(low)}–{round(high or low)} ms"
             note = "dans ta zone habituelle" if low <= hrv <= (high or hrv) else (
@@ -1480,32 +1506,37 @@ def day_form(conn: sqlite3.Connection, day: date | None, settings: dict) -> dict
             state = None if not base else "bon" if hrv >= base * 0.95 else "moyen" if hrv >= base * 0.85 else "alerte"
             reference = f"moyenne 30 j : {metrics.format_value('hrv_night', base)}"
             note = "face à ta moyenne"
-        add("hrv_night", hrv, when, state, reference, note)
+            graph.update(moyenne=round(base, 1) if base else None, legende="30 nuits et ta moyenne")
+        add("hrv_night", hrv, when, state, reference, note, graph)
     sleep, when = _latest(conn, "sleep_s", day)
     if sleep is not None:
         need, _ = _latest(conn, "sleep_need_min", to_date(when), 0)
         target = (need or 420) * 60
         state = "bon" if sleep >= target - 15 * 60 else "moyen" if sleep >= target - 75 * 60 else "alerte"
         add("sleep_s", sleep, when, state, f"besoin : {metrics.fmt_duration(target)}",
-            "besoin couvert" if state == "bon" else f"{metrics.fmt_duration(target - sleep)} de moins que ton besoin")
+            "besoin couvert" if state == "bon" else f"{metrics.fmt_duration(target - sleep)} de moins que ton besoin",
+            _graph(conn, "sleep_s", when, 14, "barres", seuil=target, legende="14 nuits et ton besoin"))
     score, when = _latest(conn, "sleep_score", day)
     if score is not None:
         state = "bon" if score >= 80 else "moyen" if score >= 60 else "alerte"
-        add("sleep_score", score, when, state, "Garmin : 80 et plus = bon", "")
+        add("sleep_score", score, when, state, "Garmin : 80 et plus = bon", "",
+            _graph(conn, "sleep_score", when, 14, "barres", seuil=80, min=0, max=100, legende="14 nuits, repère à 80"))
     battery, when = _latest(conn, "bb_wake", day)
     if battery is not None:
         state = "bon" if battery >= 70 else "moyen" if battery >= 40 else "alerte"
-        add("bb_wake", battery, when, state, "70 et plus = bien rechargé", "")
+        add("bb_wake", battery, when, state, "70 et plus = bien rechargé", "",
+            _graph(conn, "bb_wake", when, 14, "barres", seuil=70, min=0, max=100, legende="14 réveils, repère à 70"))
     tsb, when = _latest(conn, "tsb", day, 0)
     if tsb is not None:
         state = "bon" if tsb > -10 else "moyen" if tsb >= -30 else "alerte"
         note = ("frais" if tsb > 5 else "équilibré" if tsb > -10 else "tu encaisses ta charge" if tsb >= -30
                 else "fatigue accumulée")
-        add("tsb", tsb, when, state, "−10 à −30 = charge productive", note)
+        add("tsb", tsb, when, state, "−10 à −30 = charge productive", note,
+            _graph(conn, "tsb", when, 30, bande_fixe=[-30, -10], zero=True, legende="30 jours et la zone productive"))
     spo2, when = _latest(conn, "sleep_spo2_avg", day)
     if spo2 is not None:
         add("sleep_spo2_avg", spo2, when, "bon" if spo2 >= 94 else "moyen" if spo2 >= 90 else "alerte",
-            "95 % et plus = habituel", "")
+            "95 % et plus = habituel", "", _graph(conn, "sleep_spo2_avg", when, 14, seuil=95, legende="14 nuits, repère à 95 %"))
     states = [i["etat"] for i in items if i["etat"]]
     watch = [i["label"].lower() for i in items if i["etat"] in ("moyen", "alerte")]
     if not states:

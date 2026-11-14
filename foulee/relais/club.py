@@ -251,6 +251,9 @@ def shared(conn: sqlite3.Connection, student_id: int) -> tuple[dict, str | None]
 
 
 # --------------------------------------------------------------- propositions
+GENRE_NAMES = {"echauffement": "Échauffement", "corps": "Bloc", "calme": "Retour au calme", "libre": "Libre"}
+
+
 def clean_blocks(raw: Any) -> list[dict]:
     if not isinstance(raw, list) or not raw:
         raise RelayError("Ajoute au moins un bloc à la séance.")
@@ -258,7 +261,8 @@ def clean_blocks(raw: Any) -> list[dict]:
     for item in raw[:30]:
         if not isinstance(item, dict):
             continue
-        block = {"nom": _txt(item.get("nom"), 60) or "Bloc",
+        genre = item.get("genre") if item.get("genre") in GENRE_NAMES else "corps"
+        block = {"nom": _txt(item.get("nom"), 60) or GENRE_NAMES[genre],
                  "repetitions": int(_num(item.get("repetitions"), 1, 50, 0) or 1),
                  "duree_min": _num(item.get("duree_min"), 0.1, 600, 2),
                  "distance_m": _num(item.get("distance_m"), 1, 200000, 0),
@@ -267,8 +271,7 @@ def clean_blocks(raw: Any) -> list[dict]:
                  "recup_min": _num(item.get("recup_min"), 0.1, 60, 2),
                  "recup_texte": _txt(item.get("recup_texte"), 40),
                  "note": _txt(item.get("note"), 200),
-                 "genre": item.get("genre") if item.get("genre") in ("echauffement", "corps", "calme", "libre")
-                 else "corps"}
+                 "genre": genre}
         if block["duree_min"] is None and block["distance_m"] is None and not block["note"]:
             raise RelayError(f"Bloc « {block['nom']} » : indique une durée ou une distance.")
         blocks.append({k: v for k, v in block.items() if v is not None})

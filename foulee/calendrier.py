@@ -708,6 +708,7 @@ def plan(conn: sqlite3.Connection, start: date, end: date, today: date | None = 
             "sport_label": metrics.SPORTS.get(row["sport"]) if row["sport"] else None,
             "statut": state, "seance_id": done["id"] if done is not None else None,
             "coach": (row["uid"] or "").startswith("coach:"),
+            "coach_id": int(row["uid"][6:]) if (row["uid"] or "").startswith("coach:") and row["uid"][6:].isdigit() else None,
             "seance_nom": done["name"] if done is not None else None, "journee": bool(row["all_day"]),
         })
     return out
@@ -751,7 +752,9 @@ def status(conn: sqlite3.Connection, *, with_link: bool = False) -> dict[str, An
     else:
         has_coach = False
     info = feed_info(conn)
-    out = {"lie": bool(url) or has_coach or (demo and has_events), "coach": has_coach, "demo": demo,
+    relay = db.get_meta(conn, "relais_compte") is not None  # mode coach ou élève : la vue est là aussi
+    out = {"lie": bool(url) or has_coach or relay or (demo and has_events), "coach": has_coach, "relais": relay,
+           "demo": demo,
            "nom": info.get("nom"),
            "garmin": bool(info.get("garmin")), "lu_le": db.get_meta(conn, "calendrier_lu_le"),
            "a_venir": upcoming["n"], "courses_a_venir": upcoming["c"], "prochaine_course": next_race(conn, today),

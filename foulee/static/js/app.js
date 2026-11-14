@@ -37,7 +37,7 @@ const RENDERERS = {
 const PERIODS = [[7, "7 j"], [30, "30 j"], [90, "90 j"], [180, "6 mois"], [365, "1 an"], [730, "2 ans"]];
 // Tuiles qui ne dépendent pas de la période : une vue faite seulement de celles-ci se passe du sélecteur
 const TIMELESS = new Set(["profil", "club", "withings", "agenda", "a_venir"]);
-const WIDTHS = [3, 4, 6, 8, 12];
+const WIDTHS = [3, 4, 6, 8, 9, 12];
 const THEMES = ["auto", "light", "dark"];
 const THEME_LABELS = { auto: "Thème : automatique", light: "Thème : clair", dark: "Thème : sombre" };
 

@@ -204,7 +204,8 @@ ton calendrier Garmin Connect, face à ce que tu as réellement fait :
    puis **Publier le calendrier**, et copie le lien proposé. Un agenda Google (« Adresse
    secrète au format iCal ») ou celui du club (lien `.ics` ou `webcal://`) marche aussi.
 2. Colle-le dans **Réglages → Calendrier** : Foulée le lit une première fois, puis ajoute
-   la vue **Calendrier** juste après l'Accueil.
+   la vue **Calendrier** juste après l'Accueil. (Elle arrive aussi quand tu te relies au
+   relais du club, comme coach ou comme élève : les séances proposées par le coach y sont.)
 
 Ce que tu obtiens :
 
@@ -236,7 +237,7 @@ Garmin Connect (une nouvelle publication donne un nouveau lien).
 
 | Vue | Contenu |
 |---|---|
-| Accueil | Bonjour (photo, poste du jour, objectif), forme du jour face à tes habitudes, ta semaine (avec les séances prévues si ton calendrier est relié), tes allures selon ta VMA (tableau du club, piste, test VAMEVAL), Body Battery de la journée, records |
+| Accueil | Bonjour (photo, poste du jour, objectif), forme du jour face à tes habitudes (chaque signal avec sa petite courbe : FC de repos face à ta moyenne 30 jours, VFC dans ta zone habituelle, sommeil face à ton besoin…), ta semaine (avec les séances prévues si ton calendrier est relié), tes allures selon ta VMA (tableau du club, piste, test VAMEVAL), Body Battery de la journée, records |
 | Calendrier | Si tu as relié ton calendrier d'entraînement : ta prochaine course (compte à rebours) et tes prochaines séances, puis le mois jour par jour, séances prévues face aux séances faites |
 | Aujourd'hui | Nuit, VFC, FC de repos, Body Battery au réveil, stress, km sur 7 jours, fraîcheur, dernière séance |
 | Entraînement | Km par semaine, forme et fatigue (charge chronique, aiguë, fraîcheur, ratio), zones FC et d'allure, liste des séances |
@@ -244,7 +245,7 @@ Garmin Connect (une nouvelle publication donne un nouveau lien).
 | Séance | Résumé, exercices de renfo (avec la carte du corps et l'équilibre avant / arrière de la séance), effet d'entraînement (jauges aérobie et anaérobie de Garmin), carte, courbes synchronisées (FC, allure, altitude, cadence…), autres mesures (dynamique de course, puissance, respiration…), tours ou découpage au km |
 | Récup & postes | Comparaison d'un poste de travail à l'autre, sommeil, VFC, FC de repos, nuage sommeil → VFC, calendrier |
 | Cap semi de Paris | Compte à rebours, allure cible, fractions rapides face à l'allure cible, volume, charge, zones, VO2max |
-| Mon club | Si tu l'as coché dans les Réglages : ton club FFA (coordonnées, site, carte), ta licence, et son classement sur athle.fr en un clic |
+| Mon club | Si tu l'as coché dans les Réglages : ton club FFA (avec son logo si tu l'as importé), coordonnées, site, carte, ta licence, et son classement sur athle.fr en un clic |
 | Withings | Si tu as relié ton compte : dernière pesée et composition corporelle, dernière tension (avec les repères de la Société européenne d'hypertension), dernière nuit, activité, puis les courbes de chaque appareil |
 
 **Tout se modifie** : bouton « Modifier la vue », puis glisse les tuiles, change
@@ -321,7 +322,9 @@ Les **Réglages** contiennent :
   ta licence (« N° Club », 6 chiffres) ; colle la fiche « Coordonnées et contacts »
   de la page du club sur athle.fr pour que Foulée en tire le président, l'adresse, le
   téléphone, l'e-mail et le site ; ajoute ta licence si tu veux un rappel un mois avant
-  sa fin ;
+  sa fin ; « Fier de ton club ? » : importe son logo (PNG à fond transparent de
+  préférence, 500 × 500 pixels conseillés), affiché dans « Mon club » et, si ton coach
+  fait partie du club, sur la page « Mon coach » ;
 - **Profil de coureur** et **Objectif course** ;
 - **Horaires de travail** : bureau, 2x8 matin / soir (selon la parité des
   semaines), 3x8, 5x8 (cycle en jours) ou cycle personnalisé, avec les heures de
@@ -383,8 +386,8 @@ donc rien sur athle.fr, il prépare les liens que ton navigateur ouvre. Les sais
 suivent celles de la FFA (du 1er septembre au 31 août). Chaque profil a son club.
 
 **Sauvegarde des réglages** : chaque installation (le PC, le serveur) garde ses
-propres réglages. « Exporter mes réglages » les met dans un fichier (avec tes vues et
-ta photo) ; « Importer des réglages… » les reprend sur l'autre installation. La clé
+propres réglages. « Exporter mes réglages » les met dans un fichier (avec tes vues,
+ta photo et le logo de ton club) ; « Importer des réglages… » les reprend sur l'autre installation. La clé
 Garmin, les mots de passe et le jeton GitHub n'y figurent jamais.
 
 ## 4. Utiliser Foulée avec Claude Desktop
@@ -640,7 +643,13 @@ ton adresse, par exemple `https://relais.mon-club.com`.
 
 **Ce que voit l'élève** (page « Mon coach ») : les séances proposées, bloc par bloc avec ses allures (et dans
 sa vue « Calendrier », en pointillé bleu, face à ce qu'il fait), la conversation avec son coach, et ce qu'il
-partage. **Messages** : une conversation par élève, le fil du groupe (le coach y épingle ses annonces) et un
+partage. Chaque séance proposée se télécharge en **fichier .fit pour la montre** (« Pour ma montre ») : chaque
+bloc devient une étape, les répétitions une boucle, les % de VMA une fourchette d'allure calculée avec la VMA
+de l'élève (± 3 %), la zone de FC une cible de FC. Montre branchée en USB, le fichier se copie dans le
+dossier `GARMIN\NewFiles` ; débranchée, la montre la range dans Entraînement → Entraînements. (L'API
+officielle de Garmin ne fait que lire : rien ne part vers Garmin Connect sans toi.) Le coach peut télécharger
+le même fichier, avec les allures de l'élève, depuis sa fiche. Si l'élève répond « oui » à « Ton coach
+fait-il partie de ton club ? » (Réglages → Coach et élèves), le logo du club s'affiche sur la carte du coach. **Messages** : une conversation par élève, le fil du groupe (le coach y épingle ses annonces) et un
 fil sous chaque séance ; Foulée relève les nouveautés toutes les minutes (badge dans la colonne). L'extrait
 part après chaque synchro.
 

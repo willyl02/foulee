@@ -4,6 +4,7 @@ import * as api from "./api.js";
 import * as F from "./format.js";
 import { icon } from "./icons.js";
 import { avatar, blocksHtml, dayLabel, fail, loading, mountThread, statusChip, sportIcon } from "./coach-ui.js";
+import { clubLogoURL } from "./settings-club.js";
 
 const CHOICES = [
   ["seances", "Tes séances des 4 dernières semaines", "En résumé : date, sport, distance, durée, allure, FC, charge, effet d'entraînement, tours, renfo, ta description. Jamais celles venues de Strava."],
@@ -28,7 +29,11 @@ function proposal(p, vma) {
     <header><span class="co-ico">${sportIcon(p.sport)}</span><div><b>${F.escape(p.titre)}</b><span>${F.escape(dayLabel(p.date))}${p.sport_label ? ` · ${F.escape(p.sport_label)}` : ""}</span></div>${statusChip(p.statut)}</header>
     ${blocksHtml(p.blocs, vma)}
     ${p.consigne ? `<p class="co-consigne">« ${F.escape(p.consigne)} »</p>` : ""}
-    ${href ? `<div class="inline-actions" style="margin:8px 0 0"><a class="btn btn-small" href="${href}">${icon("activity")}Ma séance : ${F.escape(p.seance.nom || "voir")}</a></div>` : ""}
+    <div class="inline-actions" style="margin:8px 0 0">
+      ${href ? `<a class="btn btn-small" href="${href}">${icon("activity")}Ma séance : ${F.escape(p.seance.nom || "voir")}</a>` : ""}
+      ${p.statut !== "fait" && p.statut !== "manque" ? `<a class="btn btn-small btn-ghost" href="/api/coach/seances/${p.id}.fit" download title="Fichier d'entraînement Garmin, avec tes allures">${icon("download")}Pour ma montre (.fit)</a>
+        <button type="button" class="btn btn-small btn-ghost" data-fit-help>${icon("info")}Comment ?</button>` : ""}
+    </div>
   </article>`;
 }
 
@@ -43,6 +48,10 @@ export async function renderMyCoach(ctx) {
   const props = data.propositions || [];
   const upcoming = props.filter((p) => p.date >= today);
   const past = props.filter((p) => p.date < today).reverse();
+  // Le coach fait partie du club de l'élève (Réglages → Coach et élèves) : le logo du club sur sa carte
+  const sameClub = Boolean(ctx.info?.meme_club);
+  const clubLogo = sameClub ? clubLogoURL(ctx.boot?.club_logo) : null;
+  const clubName = sameClub ? (ctx.boot?.club?.nom || "") : "";
 
   page.innerHTML = `${ctx.head(`<h1>Mon coach</h1>`, `<span>Relais <b>${F.escape(host)}</b> · ton identifiant : <code>${F.escape(me.identifiant)}</code></span>`)}
     ${ctx.tabs("coach")}
@@ -51,11 +60,18 @@ export async function renderMyCoach(ctx) {
     <div class="co-grid2">
       <div class="co-page">
         <section class="coach-card co-coachcard">${avatar(coachName, { size: "lg" })}<div><h2>${F.escape(coachName)}</h2>
-            <span class="muted">${data.coach?.derniere_connexion ? `passé sur le relais ${F.escape(F.relative(data.coach.derniere_connexion))}` : "ton coach"}</span></div>
+            <span class="muted">${data.coach?.derniere_connexion ? `passé sur le relais ${F.escape(F.relative(data.coach.derniere_connexion))}` : "ton coach"}${clubName ? ` · ${F.escape(clubName)}` : ""}</span></div>
+          ${clubLogo ? `<img class="co-club-logo" src="${clubLogo}" alt="Logo du club${clubName ? ` ${F.escape(clubName)}` : ""}" title="${F.escape(first)} fait partie de ton club${clubName ? ` : ${F.escape(clubName)}` : ""}">` : ""}
           <div class="co-actions"><a class="btn btn-small" href="#/coach/messages?fil=groupe">${icon("club")}Fil du groupe</a></div></section>
         <section class="coach-card"><h2>${icon("calendar")}Séances proposées par ${F.escape(first)} ${upcoming.length ? `<span class="co-count">${upcoming.length}</span>` : ""}</h2>
           ${upcoming.length ? upcoming.map((p) => proposal(p, data.vma_kmh)).join("") : `<p class="co-empty">Rien de prévu pour l'instant.</p>`}
           ${upcoming.length ? `<p class="hint" style="margin:10px 0 0">Elles sont aussi dans ta vue « Calendrier », en pointillé bleu.${data.vma_kmh ? ` Allures calculées avec ta VMA (${F.dec1(data.vma_kmh)} km/h).` : " Indique ta VMA dans Réglages → Profil pour voir tes allures."}</p>` : ""}
+          <div class="co-fit-help" data-fit-box hidden><b>${icon("download")}Mettre la séance sur ta montre</b>
+            <ol><li>Télécharge le fichier <b>.fit</b> (bouton « Pour ma montre »). Il contient chaque bloc, avec <b>tes</b> allures en fourchette ou la zone de FC.</li>
+              <li>Branche ta montre Garmin à l'ordinateur en USB et ouvre-la dans l'Explorateur de fichiers.</li>
+              <li>Copie le fichier dans le dossier <code>GARMIN\\NewFiles</code> de la montre.</li>
+              <li>Débranche la montre : la séance apparaît dans <b>Entraînement → Entraînements</b>.</li></ol>
+            <p>Pas de câble sous la main ? Recopie la séance dans Garmin Connect (Entraînement → Entraînements → Créer), bloc par bloc.</p></div>
           ${past.length ? `<details class="co-past"><summary>Les 2 dernières semaines (${past.length})</summary>${past.map((p) => proposal(p, data.vma_kmh)).join("")}</details>` : ""}
         </section>
       </div>
@@ -69,6 +85,11 @@ export async function renderMyCoach(ctx) {
       </div>
     </div>`;
 
+  page.querySelectorAll("[data-fit-help]").forEach((b) => b.addEventListener("click", () => {
+    const box = page.querySelector("[data-fit-box]");
+    box.hidden = !box.hidden;
+    if (!box.hidden) box.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }));
   mountThread(page.querySelector("[data-thread]"), {
     fil: `eleve-${me.id}`, role: "eleve", style: "bubbles", toast, onRead: () => ctx.poke(),
     placeholder: `Écrire à ${first}…`, empty: `Une question sur une séance, une douleur, un empêchement ? Écris à ${first}.`,

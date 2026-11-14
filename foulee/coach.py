@@ -30,6 +30,7 @@ TIMEOUT = 20
 META_URL = "relais_adresse"
 META_ACCOUNT = "relais_compte"
 META_SINCE = "relais_relie_le"
+META_SAME_CLUB = "relais_meme_club"  # « Ton coach fait-il partie de ton club ? » (élève) : le logo du club sur « Mon coach »
 
 
 class CoachError(RuntimeError):
@@ -108,7 +109,8 @@ def status(conn: sqlite3.Connection) -> dict:
     url = db.get_meta(conn, META_URL)
     if not (account and url and linked()):
         return {"relie": False, "adresse": url}
-    return {"relie": True, "adresse": url, "compte": account, "relie_le": db.get_meta(conn, META_SINCE)}
+    return {"relie": True, "adresse": url, "compte": account, "relie_le": db.get_meta(conn, META_SINCE),
+            "meme_club": same_club(conn)}
 
 
 def light(conn: sqlite3.Connection) -> dict | None:
@@ -117,7 +119,27 @@ def light(conn: sqlite3.Connection) -> dict | None:
     if not info.get("relie"):
         return None
     account = info["compte"]
-    return {"role": account.get("role"), "nom": account.get("nom"), "coach": (account.get("coach") or {}).get("nom")}
+    return {"role": account.get("role"), "nom": account.get("nom"), "coach": (account.get("coach") or {}).get("nom"),
+            "meme_club": info["meme_club"]}
+
+
+def same_club(conn: sqlite3.Connection) -> bool:
+    return db.get_meta(conn, META_SAME_CLUB) == "1"
+
+
+def set_same_club(conn: sqlite3.Connection, yes: bool) -> dict:
+    """La réponse de l'élève à « Ton coach fait-il partie de ton club ? »."""
+    info = status(conn)
+    if not info.get("relie"):
+        raise CoachError("Ce profil n'est relié à aucun relais.", 401)
+    if info["compte"].get("role") != "eleve":
+        raise CoachError("Cette question concerne les élèves.", 400)
+    if yes:
+        db.set_meta(conn, META_SAME_CLUB, "1")
+    else:
+        db.delete_meta(conn, META_SAME_CLUB)
+    conn.commit()
+    return status(conn)
 
 
 def _save(conn: sqlite3.Connection, url: str, token: str, account: dict) -> None:
@@ -125,7 +147,19 @@ def _save(conn: sqlite3.Connection, url: str, token: str, account: dict) -> None
     db.set_meta(conn, META_URL, url)
     db.set_meta(conn, META_ACCOUNT, json.dumps(_public(account), ensure_ascii=False))
     db.set_meta(conn, META_SINCE, db.now_iso())
+    calendar_view(conn, True)
     conn.commit()
+
+
+def calendar_view(conn: sqlite3.Connection, linked: bool) -> None:
+    """La vue « Calendrier » vient avec le mode coach ou élève (comme avec le calendrier Garmin), et repart avec
+    lui seulement si aucun calendrier Garmin n'est relié. Le mode démo garde la sienne."""
+    from . import calendrier, config, views
+
+    if linked:
+        views.sync_calendar_view(conn, True)
+    elif not calendrier.linked() and not config.is_demo():
+        views.sync_calendar_view(conn, False)
 
 
 def _public(account: dict) -> dict:
@@ -135,10 +169,11 @@ def _public(account: dict) -> dict:
 
 def forget(conn: sqlite3.Connection) -> None:
     vault.delete_secret("relais")
-    for key in (META_ACCOUNT, META_SINCE, "relais_accord", "relais_envoye_le", "relais_propositions"):
+    for key in (META_ACCOUNT, META_SINCE, META_SAME_CLUB, "relais_accord", "relais_envoye_le", "relais_propositions"):
         db.delete_meta(conn, key)
     if conn.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'calendar_events'").fetchone():
         conn.execute("DELETE FROM calendar_events WHERE uid LIKE 'coach:%'")  # séances proposées par le coach
+    calendar_view(conn, False)
     conn.commit()  # l'adresse reste : on la repropose à la prochaine connexion
 
 
@@ -192,6 +227,7 @@ def refresh(conn: sqlite3.Connection) -> dict:
     """Relit le compte sur le relais (nom du coach, rôle) ; une session fermée délie le profil."""
     data = _authed(conn, "GET", "/api/v1/moi")
     db.set_meta(conn, META_ACCOUNT, json.dumps(_public(data["compte"]), ensure_ascii=False))
+    calendar_view(conn, True)  # profils reliés avant que la vue vienne avec le mode coach ou élève
     conn.commit()
     return status(conn)
 
@@ -390,6 +426,27 @@ def store_proposals(conn: sqlite3.Connection, items: list[dict]) -> None:
                                          "\n".join(lines)[:2000] or None, None, "seance",
                                          item.get("sport") if item.get("sport") in metrics.SPORTS else None,
                                          f"coach:{item['id']}", stamp))
+
+
+def workout_file(conn: sqlite3.Connection, proposal_id: int, student_id: int | None = None) -> tuple[str, bytes]:
+    """Le fichier FIT d'une séance proposée : pour l'élève, avec sa VMA ; pour le coach, avec celle de l'élève."""
+    from . import workout_fit
+
+    if student_id is None:
+        items = json.loads(db.get_meta(conn, META_PROPOSALS) or "[]")
+        vma = db.get_settings(conn).get("vma_kmh")
+    else:
+        page = _authed(conn, "GET", f"/api/v1/eleves/{int(student_id)}/fiche")
+        items = page.get("propositions") or []
+        vma = (page.get("profil") or {}).get("vma_kmh")
+    item = next((i for i in items if i.get("id") == proposal_id), None)
+    if not item:
+        raise CoachError("Cette séance proposée n'est plus là : elle a été supprimée, ou elle date de plus de "
+                         "deux semaines. Ouvre « Mon coach » pour recharger la liste.", 404)
+    try:
+        return workout_fit.file_name(item), workout_fit.build(item, vma)
+    except workout_fit.WorkoutError as exc:
+        raise CoachError(str(exc), 400) from None
 
 
 def pace_for(vma_kmh: float | None, pct: float | None) -> str | None:

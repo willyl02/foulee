@@ -172,6 +172,7 @@ function dayPanel(iso, d, today) {
         <p class="aplan-meta">${F.escape(planMeta(p))}</p>
         ${p.description ? `<p class="aplan-desc">${F.escape(p.description)}</p>` : ""}
         ${p.coach ? `<a class="aplan-coach" href="#/coach">${icon("user")}Le détail et tes allures dans « Mon coach »</a>` : ""}
+        ${p.coach && p.coach_id ? `<a class="aplan-coach" href="/api/coach/seances/${p.coach_id}.fit" download>${icon("download")}Le fichier pour ta montre (.fit)</a>` : ""}
         ${done ? `<button type="button" class="aplan-done" data-act="${F.escape(done.id)}">${activityLine(done)}<b>${F.escape(done.nom || done.sport_label)}</b><small>${F.escape(done.duree)}</small>${icon("right")}</button>` : ""}
       </article>`;
     }).join("") : none ? `<p class="aday-none">${none}</p>` : ""}

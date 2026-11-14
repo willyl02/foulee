@@ -33,9 +33,20 @@ export async function coachPanel(box, boot, { toast, onChange }) {
         <button class="btn btn-ghost" type="button" data-logout>${icon("power")}Se déconnecter</button>
         ${a.role === "eleve" && info.local ? `<button class="btn btn-ghost btn-danger" type="button" data-leave>${icon("trash")}Quitter le groupe</button>` : ""}
       </div>
+      ${a.role === "eleve" ? sameClub() : ""}
       <div data-extra></div>
       <p class="hint" data-status aria-live="polite"></p>`;
   };
+
+  // « Ton coach fait-il partie de ton club ? » : si oui, le logo du club s'affiche sur « Mon coach »
+  const sameClub = () => `<div class="co-sameclub">
+      <div><b>Ton coach fait-il partie de ton club ?</b>
+        <span class="hint">Si oui, le logo de ton club s'affiche sur la page « Mon coach ».${boot.club_logo ? "" : ` Importe-le d'abord dans <a href="#/reglages?section=club">Réglages → Mon club</a>, rubrique « Fier de ton club ? ».`}</span></div>
+      <div class="segmented" role="group" aria-label="Ton coach fait-il partie de ton club ?">
+        <button type="button" data-same-club="1" aria-pressed="${Boolean(info.meme_club)}">Oui</button>
+        <button type="button" data-same-club="0" aria-pressed="${!info.meme_club}">Non</button>
+      </div>
+    </div>`;
 
   const choose = (mode) => `
     <div class="segmented" role="group" aria-label="Comment te relier">
@@ -113,6 +124,17 @@ export async function coachPanel(box, boot, { toast, onChange }) {
       } catch (err) { status.textContent = err.message; }
       button.disabled = false;
     });
+    box.querySelectorAll("[data-same-club]").forEach((b) => b.addEventListener("click", async () => {
+      const yes = b.dataset.sameClub === "1";
+      if (yes === Boolean(info.meme_club)) return;
+      try {
+        info = await api.put("/api/coach/meme-club", { oui: yes });
+        box.querySelectorAll("[data-same-club]").forEach((x) => x.setAttribute("aria-pressed", String((x.dataset.sameClub === "1") === yes)));
+        toast(yes ? (boot.club_logo ? "Noté : le logo de ton club s'affiche sur « Mon coach »." : "Noté. Ajoute le logo de ton club dans Réglages → Mon club pour le voir sur « Mon coach ».")
+          : "Noté : plus de logo du club sur « Mon coach ».");
+        onChange?.();
+      } catch (err) { status.textContent = err.message; }
+    }));
     box.querySelector("[data-logout]").addEventListener("click", async () => {
       if (!window.confirm("Se déconnecter du relais ? Tu pourras te reconnecter avec ton identifiant et ton mot de passe.")) return;
       try {

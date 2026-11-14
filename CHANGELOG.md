@@ -4,6 +4,31 @@ Les versions « bêta » (par exemple 0.4.0b1) sont des avant-premières : elles
 sur le canal bêta (Réglages → Mises à jour → « Recevoir les versions bêta »), puis sortent en
 version stable une fois éprouvées.
 
+## 0.8.0b4 — 14 novembre 2026 (bêta)
+
+- **La séance du coach sur la montre** : chaque séance proposée se télécharge en fichier **.fit** (« Pour ma
+  montre », dans « Mon coach » et dans le détail du jour de la vue « Calendrier ») : chaque bloc devient une
+  étape, les répétitions une boucle, les % de VMA une fourchette d'allure calculée avec la VMA de l'élève, la
+  zone de FC une cible de FC. Montre branchée en USB, il se copie dans `GARMIN\NewFiles`. « Comment ? » rappelle
+  la marche à suivre. Le coach télécharge le même fichier, avec les allures de l'élève, depuis sa fiche. (L'API
+  officielle de Garmin ne fait que lire : rien n'est envoyé à Garmin Connect.)
+- **La vue « Calendrier » arrive avec le relais** : se relier comme élève ou comme coach l'ajoute (comme le
+  calendrier Garmin) ; elle repart à la déconnexion seulement si aucun calendrier Garmin n'est relié. Un
+  profil déjà relié la reçoit en ouvrant « Mon coach » ou « Mes élèves ».
+- **La forme du jour en petites courbes** : sur l'Accueil, la tuile s'élargit et grandit d'une rangée (l'objectif
+  cède un cran de largeur) ; chaque signal a sa courbe : la FC de repos sur 30 jours face à ta moyenne, la
+  VFC sur 30 nuits dans ta zone habituelle (fond vert), le sommeil face à ton besoin, le score de sommeil et la
+  Body Battery face à leurs repères, la fraîcheur avec la zone de charge productive, la SpO2. Le dernier point
+  prend la couleur de l'état ; survoler un point donne sa date et sa valeur. Un Accueil que tu as arrangé
+  autrement n'est pas touché.
+- **« Fier de ton club ? »** (Réglages → Mon club) : importe le logo du club (PNG à fond transparent de
+  préférence, 500 × 500 pixels conseillés) ; il s'affiche en tête de « Mon club » et, si tu réponds « Oui » à
+  « Ton coach fait-il partie de ton club ? » (Réglages → Coach et élèves), sur la carte de ton coach. La
+  transparence est gardée, les marges transparentes retirées ; sur fond sombre, une plaque claire le garde
+  lisible. Il voyage avec l'export des réglages.
+- Le relais nomme « Échauffement » et « Retour au calme » les blocs laissés sans nom.
+- Réglages sur téléphone : le bloc « Profil et logo » ne déborde plus de l'écran.
+
 ## 0.8.0b3 — 14 novembre 2026 (bêta)
 
 - Foulée Coach : un fil encore vide (sous une séance, ou la conversation avec un nouvel élève) restait sur

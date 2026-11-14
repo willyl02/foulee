@@ -508,8 +508,12 @@ details.token .key-row { margin-top: 6px; }
 .form-verdict.moyen svg { color: var(--warn); }
 .form-verdict.alerte { background: color-mix(in srgb, var(--bad) 11%, var(--surface)); }
 .form-verdict.alerte svg { color: var(--bad); }
-.signals { display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 8px; }
-.signal { display: grid; gap: 1px; align-content: start; padding: 6px 9px 7px 10px; border-radius: 9px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--hair);
+/* Les signaux sur deux rangées équilibrées (--n colonnes, posé par l'interface), jamais plus étroits que 132 px ;
+   la tuile s'agrandit-elle, les petites courbes prennent la hauteur en plus. */
+.form-day { min-height: 100%; }
+.signals { display: grid; grid-template-columns: repeat(auto-fill, minmax(max(132px, calc((100% - (var(--n, 5) - 1) * 8px) / var(--n, 5))), 1fr));
+  gap: 8px; flex: 1 1 auto; }
+.signal { display: flex; flex-direction: column; gap: 1px; padding: 6px 9px 7px 10px; border-radius: 9px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--hair);
   border-left: 4px solid var(--base); min-width: 0; }
 .signal.bon { border-left-color: var(--good); }
 .signal.moyen { border-left-color: var(--warn); }
@@ -676,6 +680,7 @@ dialog:has(.dlg-wide) { width: min(860px, calc(100vw - 32px)); }
 .zb-handle:focus-visible { outline: 2px solid var(--focus); }
 .profile-grid { display: grid; grid-template-columns: minmax(240px, 300px) minmax(0, 1fr); gap: 20px; align-items: start; }
 .profile-photo { display: grid; justify-items: start; gap: 8px; }
+@media (max-width: 900px) { .profile-grid { grid-template-columns: minmax(0, 1fr); } }  /* après la règle générale */
 .profile-photo > img { width: 96px; height: 96px; border-radius: 50%; object-fit: cover; box-shadow: 0 0 0 1px var(--hair); }
 .photo-empty { display: grid; place-items: center; width: 96px; height: 96px; border-radius: 50%; background: var(--surface-2); color: var(--muted); }
 .photo-empty svg { width: 40px; height: 40px; }
@@ -683,7 +688,7 @@ dialog:has(.dlg-wide) { width: min(860px, calc(100vw - 32px)); }
 .photo-empty.small svg { width: 20px; height: 20px; }
 .cropper { display: grid; gap: 8px; padding: 12px; border-radius: 12px; background: var(--surface-2); }
 .cropper canvas { width: 200px; height: 200px; border-radius: 50%; cursor: grab; touch-action: none; box-shadow: 0 0 0 1px var(--hair); }
-.logo-pick { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; }
+.logo-pick { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(92px, 100%), 1fr)); gap: 8px; }
 .logo-pick button { display: grid; justify-items: center; gap: 5px; padding: 9px 6px; border-radius: 10px; border: 1px solid var(--hair); background: var(--surface); cursor: pointer; font-size: 12.5px; }
 .logo-pick button img { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; }
 .logo-pick button[aria-checked="true"] { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
@@ -1044,12 +1049,45 @@ a.chip:hover { box-shadow: inset 0 0 0 1px var(--base); }
 .club-panel input.filled { animation: club-filled 1.8s ease-out; }
 .club-save { margin: 4px 0 8px; }
 
+/* « Fier de ton club ? » : le logo du club. Sur fond sombre, une plaque claire garde lisibles les logos aux
+   traits foncés (la plupart, faits pour le papier). */
+:root { --logo-plate: transparent; --logo-pad: 0px; }
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) { --logo-plate: #eef2f0; --logo-pad: 5px; }
+}
+:root[data-theme="dark"] { --logo-plate: #eef2f0; --logo-pad: 5px; }
+.club-logo-box { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 16px; align-items: center;
+  margin-top: 6px; padding: 14px 16px; border-radius: 12px; background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--hair); }
+.club-logo-box b { font-size: 15.5px; }
+.club-logo-box .hint { margin: 4px 0 10px; }
+.club-logo-box .inline-actions { margin: 0; }
+.club-logo-preview { width: 96px; height: 96px; border-radius: 12px; display: grid; place-items: center; overflow: hidden;
+  background: repeating-conic-gradient(#e4e8e6 0% 25%, #ffffff 0% 50%) 50% / 14px 14px; box-shadow: inset 0 0 0 1px var(--hair); }
+.club-logo-preview img { max-width: 84px; max-height: 84px; object-fit: contain; }
+.club-logo-preview.empty { background: var(--surface); color: var(--muted); }
+.club-logo-preview.empty svg { width: 34px; height: 34px; }
+.club-logo-status { margin: 8px 0 0 !important; }
+.club-logo-status:empty { display: none; }
+.club-logo-status.error { color: var(--bad); }
+.club-logo { flex: none; width: 72px; height: 72px; object-fit: contain; box-sizing: border-box;
+  padding: var(--logo-pad); border-radius: 12px; background: var(--logo-plate); }
+.co-club-logo { flex: none; width: 52px; height: 52px; object-fit: contain; box-sizing: border-box;
+  padding: var(--logo-pad); border-radius: 10px; background: var(--logo-plate); }
+.co-sameclub { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px;
+  margin: 14px 0 4px; padding: 12px 14px; border-radius: 10px; background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--hair); }
+.co-sameclub > div:first-child { display: grid; gap: 2px; min-width: 0; flex: 1 1 260px; }
+.co-sameclub .hint { margin: 0; }
+
 @media (max-width: 900px) {
   .grid > .tile--club { height: auto; min-height: 120px; }
   .grid > .tile--club .tile-body.scroll { overflow: visible; }
   .club-cols { grid-template-columns: 1fr; }
   .club-head { align-items: flex-start; }
   .club-badge { width: 42px; height: 42px; }
+  .club-logo { width: 56px; height: 56px; }
+  .club-logo-box { grid-template-columns: 72px minmax(0, 1fr); gap: 12px; padding: 12px; }
+  .club-logo-preview { width: 72px; height: 72px; }
+  .club-logo-preview img { max-width: 62px; max-height: 62px; }
   .club-badge svg { width: 22px; height: 22px; }
   .club-title h2, .club-empty h2 { font-size: 23px; }
   .club-actions .btn { flex: 1 1 auto; }
@@ -1994,3 +2032,24 @@ a.co-pl:hover { box-shadow: inset 3px 0 0 var(--good), 0 0 0 1px var(--base); }
   .co-kpi b { font-size: 24px; }
   .co-head .head-tools { width: 100%; }
 }
+
+.co-fit-help { margin: 10px 0 0; padding: 10px 14px; border-radius: 10px; background: var(--surface-2); font-size: 14px; color: var(--ink-2); }
+.co-fit-help > b { display: flex; align-items: center; gap: 7px; color: var(--ink); }
+.co-fit-help > b svg { width: 16px; height: 16px; }
+.co-fit-help li b { color: var(--ink); }
+.co-fit-help ol { margin: 6px 0; padding-left: 20px; }
+.co-fit-help li { margin: 3px 0; }
+.co-fit-help p { margin: 4px 0 0; }
+
+/* forme du jour : la petite courbe de chaque signal */
+.signal-chart { display: block; width: 100%; flex: 1 1 34px; height: auto; min-height: 30px; max-height: 120px; margin-top: 6px; overflow: visible; }
+.signal-chart .mc-line { fill: none; stroke: var(--ink-2); stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; opacity: .8; }
+.signal-chart .mc-dot { stroke-width: 7; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.signal-chart .mc-hit { stroke: transparent; stroke-width: 9; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.signal-chart .mc-hit:hover { stroke: var(--ink-2); stroke-width: 5; }
+.signal-chart .mc-band { fill: var(--good); opacity: .16; }
+.signal-chart .mc-ref { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
+.signal-chart .mc-zero { stroke: var(--hair); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.signal-chart .mc-bar { fill: var(--base); }
+.signal-chart .mc-bar:hover { fill: var(--ink-2); }
+.signal-legend { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }

@@ -145,7 +145,7 @@ def test_foulee_coach_and_student_end_to_end(relay):
     with db.session() as conn:
         info = coach.login(conn, url, "william", PASSWORD)
         assert info["relie"] and info["compte"]["role"] == "coach"
-        assert coach.light(conn) == {"role": "coach", "nom": "William L.", "coach": None}
+        assert coach.light(conn) == {"role": "coach", "nom": "William L.", "coach": None, "meme_club": False}
         # Le jeton est dans le coffre, jamais dans la base ni dans l'état renvoyé à l'interface
         token = vault.get_secret("relais")
         assert token and token not in json.dumps(info)

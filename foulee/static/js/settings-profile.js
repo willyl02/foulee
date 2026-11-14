@@ -134,6 +134,7 @@ export function transferPanel(box, boot, { toast, onImported }) {
       <label class="check"><input type="checkbox" value="reglages" checked>Les réglages (VMA, FC, objectif, horaires, zones…)</label>
       <label class="check"><input type="checkbox" value="vues" checked>Les vues (même nom = remplacée, les autres sont ajoutées)</label>
       <label class="check"><input type="checkbox" value="photo" checked>La photo de profil</label>
+      <label class="check"><input type="checkbox" value="logo" checked>Le logo du club</label>
       <div class="inline-actions"><button class="btn btn-primary" type="button" data-go>${icon("check")}Importer</button>
         <button class="btn btn-ghost" type="button" data-cancel>Annuler</button><span class="hint" data-file-name></span></div>
     </fieldset>
@@ -153,6 +154,7 @@ export function transferPanel(box, boot, { toast, onImported }) {
     }
     parts.hidden = false;
     parts.querySelector('[value="photo"]').closest("label").hidden = !data.photo;
+    parts.querySelector('[value="logo"]').closest("label").hidden = !data.logo_club;
     parts.querySelector('[value="vues"]').closest("label").hidden = !data.vues;
     box.querySelector("[data-file-name]").textContent = `${file.name} : Foulée ${data.version || "?"}, exporté le ${F.dateTime(data.exporte_le)}`;
   });
@@ -161,7 +163,7 @@ export function transferPanel(box, boot, { toast, onImported }) {
     const chosen = [...parts.querySelectorAll("input:checked")].filter((c) => !c.closest("label").hidden).map((c) => c.value);
     try {
       const report = await api.post("/api/reglages/import", { donnees: data, parties: chosen });
-      toast(`Importé : ${report.reglages} réglage(s), ${report.vues} vue(s)${report.photo ? ", la photo" : ""}.${report.ignores.length ? ` Ignoré : ${report.ignores.join(", ")}.` : ""}`);
+      toast(`Importé : ${report.reglages} réglage(s), ${report.vues} vue(s)${report.photo ? ", la photo" : ""}${report.logo ? ", le logo du club" : ""}.${report.ignores.length ? ` Ignoré : ${report.ignores.join(", ")}.` : ""}`);
       parts.hidden = true;
       onImported?.();
     } catch (err) { toast(`Import impossible : ${err.message}`, { error: true }); }

@@ -65,6 +65,75 @@ export const profil = {
 };
 
 // -------------------------------------------------------------- forme du jour
+const STATE_COLOR = { bon: "var(--good)", moyen: "var(--warn)", alerte: "var(--bad)" };
+
+/** La petite courbe d'un signal : ses derniers jours, sa moyenne, sa fourchette ou son repère. */
+function miniChart(g, state) {
+  const vals = g.valeurs || [];
+  const n = vals.length;
+  const nums = vals.filter(F.isNum);
+  if (n < 2 || nums.length < 2) return "";
+  const W = 100;
+  const H = 34;
+  const pad = 3;
+  let lo = Math.min(...nums);
+  let hi = Math.max(...nums);
+  const take = (v) => { if (F.isNum(v)) { lo = Math.min(lo, v); hi = Math.max(hi, v); } };
+  take(g.moyenne); take(g.seuil); (g.bande || []).forEach((b) => b && b.forEach(take)); (g.bande_fixe || []).forEach(take);
+  if (g.zero) take(0);
+  if (g.type === "barres") {
+    lo = F.isNum(g.min) ? g.min : Math.max(0, lo - (hi - lo || hi * 0.1) * 1.5);
+    hi = F.isNum(g.max) ? Math.max(g.max, hi) : hi;
+  } else {
+    const margin = (hi - lo || 1) * 0.12;
+    lo -= margin;
+    hi += margin;
+  }
+  const y = (v) => (H - pad - ((v - lo) / (hi - lo || 1)) * (H - 2 * pad)).toFixed(2);
+  const step = (W - 2 * pad) / (n - 1);
+  const x = (i) => (pad + i * step).toFixed(2);
+  const color = STATE_COLOR[state] || "var(--ink-2)";
+  const days = (i) => F.dateShort(F.isoDate(F.addDays(F.parseDate(g.debut), i)));
+  let out = "";
+  if (g.bande_fixe) out += `<rect x="0" width="${W}" y="${y(g.bande_fixe[1])}" height="${(y(g.bande_fixe[0]) - y(g.bande_fixe[1])).toFixed(2)}" class="mc-band"/>`;
+  if (g.bande) {  // la fourchette jour par jour, en morceaux là où elle manque
+    let part = [];
+    const flush = () => {
+      if (part.length > 1) out += `<path class="mc-band" d="M${part.map((i) => `${x(i)} ${y(g.bande[i][1])}`).join("L")}L${[...part].reverse().map((i) => `${x(i)} ${y(g.bande[i][0])}`).join("L")}Z"/>`;
+      part = [];
+    };
+    g.bande.forEach((b, i) => { if (b) part.push(i); else flush(); });
+    flush();
+  }
+  if (g.zero) out += `<line x1="0" x2="${W}" y1="${y(0)}" y2="${y(0)}" class="mc-zero"/>`;
+  if (F.isNum(g.moyenne)) out += `<line x1="0" x2="${W}" y1="${y(g.moyenne)}" y2="${y(g.moyenne)}" class="mc-ref"/>`;
+  if (F.isNum(g.seuil)) out += `<line x1="0" x2="${W}" y1="${y(g.seuil)}" y2="${y(g.seuil)}" class="mc-ref"/>`;
+  if (g.type === "barres") {
+    const bw = ((W - 2 * pad) / n) * 0.66;
+    const base = y(lo);
+    vals.forEach((v, i) => {
+      if (!F.isNum(v)) return;
+      const cx = pad + ((W - 2 * pad) / n) * (i + 0.5);
+      out += `<rect x="${(cx - bw / 2).toFixed(2)}" width="${bw.toFixed(2)}" y="${y(v)}" height="${Math.max(0.6, base - y(v)).toFixed(2)}" rx="0.6"
+        class="mc-bar" ${i === n - 1 ? `style="fill:${color}"` : ""}><title>${F.escape(`${days(i)} : ${g.affiches[i]}`)}</title></rect>`;
+    });
+  } else {
+    let d = "";
+    let pen = false;
+    vals.forEach((v, i) => {
+      if (!F.isNum(v)) { pen = false; return; }
+      d += `${pen ? "L" : "M"}${x(i)} ${y(v)}`;
+      pen = true;
+    });
+    out += `<path d="${d}" class="mc-line"/>`;
+    vals.forEach((v, i) => { if (F.isNum(v)) out += `<path d="M${x(i)} ${y(v)}h0" class="mc-hit"><title>${F.escape(`${days(i)} : ${g.affiches[i]}`)}</title></path>`; });
+    const last = vals.length - 1;
+    if (F.isNum(vals[last])) out += `<path d="M${x(last)} ${y(vals[last])}h0" class="mc-dot" style="stroke:${color}"/>`;
+  }
+  return `<svg class="signal-chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${F.escape(g.legende || "")}">${out}</svg>
+    <span class="signal-legend">${F.escape(g.legende || "")}</span>`;
+}
+
 export const forme = {
   title: () => "Forme du jour",
   async render(body, p, ctx) {
@@ -75,10 +144,11 @@ export const forme = {
     body.classList.add("scroll");
     body.innerHTML = `<div class="form-day">
       <p class="form-verdict ${d.verdict || ""}" title="${F.escape(d.note)}">${icon(STATE_ICON[d.verdict] || "info")}<span>${F.escape(d.resume)}</span></p>
-      <div class="signals">${d.signaux.map((s) => `<div class="signal ${s.etat || ""}" title="${F.escape(`${s.label} : ${s.affiche}${s.reference ? ` (${s.reference})` : ""}`)}">
+      <div class="signals" style="--n:${d.signaux.length > 4 ? Math.ceil(d.signaux.length / 2) : d.signaux.length}">${d.signaux.map((s) => `<div class="signal ${s.etat || ""}" title="${F.escape(`${s.label} : ${s.affiche}${s.reference ? ` (${s.reference})` : ""}`)}">
           <span class="signal-label">${F.escape(s.label)}${s.date && s.date !== today ? ` <small>au ${F.escape(F.dateShort(s.date))}</small>` : ""}</span>
           <b class="signal-value">${F.escape(s.affiche)}</b>
           <span class="signal-note">${F.escape(s.explication || s.reference || "")}</span>
+          ${s.graphe ? miniChart(s.graphe, s.etat) : ""}
         </div>`).join("")}</div>
       <p class="hint form-note">${F.escape(d.note)}</p>
     </div>`;
@@ -442,8 +512,8 @@ export const club = {
     ].filter(([, value]) => value);
     body.classList.add("scroll");
     body.innerHTML = `<div class="club">
-        <header class="club-head">
-          <span class="club-badge">${icon("club")}</span>
+        <header class="club-head${ctx.boot.club_logo ? " with-logo" : ""}">
+          ${ctx.boot.club_logo ? `<img class="club-logo" src="/api/club/logo?v=${ctx.boot.club_logo}" alt="Logo du club">` : `<span class="club-badge">${icon("club")}</span>`}
           <div class="club-title">
             <h2>${F.escape(c.nom || "Mon club")}</h2>
             <p><span class="nw">N° de club <b>${F.escape(c.numero)}</b></span> · <span class="nw">Saison ${F.escape(c.saison_label)}</span>${c.ville ? ` · <span class="nw">${F.escape(c.ville)}</span>` : ""}</p>

@@ -281,6 +281,7 @@ def create_app() -> FastAPI:
                 "categories_tuiles": views.TILE_CATEGORIES, "categories_metriques": metrics.CATEGORIES,
                 "objectif": analysis.objective(settings), "profil_fc": analysis.hr_profile(conn, settings),
                 "club": club.summary(settings.get("club")), "club_licences": club.LICENCE_TYPES,
+                "club_logo": club.logo_version(),  # date du logo (pour l'adresse de l'image), ou None
                 "garmin_profil": analysis.garmin_profile(conn),
                 "planning": schedule.describe(settings["horaires"]),
                 "modeles_horaires": schedule.MODELES,
@@ -586,6 +587,29 @@ def create_app() -> FastAPI:
             raise HTTPException(400, str(exc)) from exc
         return {**users_state(request), "supprime": report}
 
+    # « Fier de ton club ? » : le logo du club, rangé avec les données du profil
+    @app.get("/api/club/logo")
+    def get_club_logo():
+        path = club.logo_path()
+        if not path.exists():
+            raise HTTPException(404, "Pas de logo de club")
+        return FileResponse(path, media_type="image/png",
+                            headers={"Cache-Control": "no-cache", "X-Content-Type-Options": "nosniff"})
+
+    @app.put("/api/club/logo")
+    async def put_club_logo(request: Request) -> dict:
+        if int(request.headers.get("content-length") or 0) > club.LOGO_MAX_UPLOAD:
+            raise HTTPException(413, "Image trop lourde : 5 Mo au plus.")
+        data = await request.body()
+        try:
+            return club.save_logo(data)
+        except club.LogoError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+    @app.delete("/api/club/logo")
+    def delete_club_logo() -> dict:
+        return club.delete_logo()
+
     @app.post("/api/club/fiche")
     def club_sheet(payload: dict = Body(...)) -> dict:
         """Lit la fiche « Coordonnées et contacts » copiée depuis la page du club sur athle.fr."""
@@ -673,16 +697,17 @@ def create_app() -> FastAPI:
 
     # ------------------------------------------------------- export / import
     @app.get("/api/reglages/export")
-    def export_settings(vues: int = 1, photo: int = 1) -> JSONResponse:
+    def export_settings(vues: int = 1, photo: int = 1, logo: int = 1) -> JSONResponse:
         with db.session(readonly=True) as conn:
-            data = reglages.export(conn, with_views=bool(vues), with_photo=bool(photo))
+            data = reglages.export(conn, with_views=bool(vues), with_photo=bool(photo), with_logo=bool(logo))
         machine = "pc" if sys.platform == "win32" else "serveur"
         name = f"foulee-reglages-{machine}-{date.today().isoformat()}.json"
         return JSONResponse(data, headers={"Content-Disposition": f'attachment; filename="{name}"'})
 
     @app.post("/api/reglages/import")
     def import_settings(payload: dict = Body(...)) -> dict:
-        parts = {p for p in payload.get("parties") or ["reglages", "vues", "photo"] if p in ("reglages", "vues", "photo")}
+        known = ("reglages", "vues", "photo", "logo")
+        parts = {p for p in payload.get("parties") or known if p in known}
         with db.session() as conn:
             try:
                 report = reglages.import_(conn, payload.get("donnees"), parts=parts)
@@ -1415,7 +1440,8 @@ def create_app() -> FastAPI:
         try:
             with db.session() as conn:
                 calendrier.forget(conn)
-                views.sync_calendar_view(conn, False)
+                # la vue reste si le profil est relié au relais (mode coach ou élève)
+                views.sync_calendar_view(conn, db.get_meta(conn, coach.META_ACCOUNT) is not None)
                 conn.commit()
         except sqlite3.OperationalError:
             raise HTTPException(503, busy_db) from None
@@ -1473,6 +1499,11 @@ def create_app() -> FastAPI:
             return coach_info(request, conn)
         return coach_call(run)
 
+    @app.put("/api/coach/meme-club")
+    def coach_same_club(request: Request, payload: dict = Body(...)) -> dict:
+        return coach_call(lambda conn: {**coach.set_same_club(conn, bool(payload.get("oui"))),
+                                        "local": bool(request.state.local)})
+
     @app.delete("/api/coach")
     def coach_logout(request: Request) -> dict:
         return coach_call(lambda conn: {**coach.logout(conn), "local": bool(request.state.local)})
@@ -1507,6 +1538,20 @@ def create_app() -> FastAPI:
     def coach_my_page(request: Request) -> dict:
         """Page « Mon coach » de l'élève (relit le relais, envoie l'extrait s'il date)."""
         return coach_call(coach.my_page)
+
+    def fit_response(name: str, data: bytes) -> Response:
+        return Response(data, media_type="application/vnd.ant.fit",
+                        headers={"Content-Disposition": f'attachment; filename="{name}"', "Cache-Control": "no-store"})
+
+    @app.get("/api/coach/seances/{proposal_id}.fit")
+    def coach_workout_fit(proposal_id: int) -> Response:
+        """La séance proposée, en fichier d'entraînement pour la montre (élève : avec sa VMA)."""
+        return fit_response(*coach_call(lambda conn: coach.workout_file(conn, proposal_id)))
+
+    @app.get("/api/coach/eleves/{student_id}/seances/{proposal_id}.fit")
+    def coach_student_workout_fit(student_id: int, proposal_id: int) -> Response:
+        """Côté coach : la même séance, avec les allures de cet élève."""
+        return fit_response(*coach_call(lambda conn: coach.workout_file(conn, proposal_id, student_id)))
 
     @app.get("/api/coach/accord")
     def coach_accord(request: Request) -> dict:

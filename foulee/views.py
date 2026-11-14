@@ -30,8 +30,9 @@ TILE_TYPES: list[dict[str, Any]] = [
     },
     {
         "type": "forme", "label": "Forme du jour", "icone": "heart", "categorie": "Accueil",
-        "description": "FC de repos, VFC, sommeil, Body Battery, fraîcheur : chacun face à tes habitudes.",
-        "taille": {"w": 8, "h": 2}, "params": [],
+        "description": "FC de repos, VFC, sommeil, Body Battery, fraîcheur : chacun face à tes habitudes, avec "
+                       "sa petite courbe des dernières semaines.",
+        "taille": {"w": 9, "h": 3}, "params": [],
     },
     {
         "type": "allures", "label": "Allures selon ta VMA", "icone": "run", "categorie": "Accueil",
@@ -298,7 +299,7 @@ TILE_TYPES: list[dict[str, Any]] = [
     },
 ]
 TILE_INDEX = {t["type"]: t for t in TILE_TYPES}
-WIDTHS = (3, 4, 6, 8, 12)
+WIDTHS = (3, 4, 6, 8, 9, 12)
 ICONS = ["home", "sun", "activity", "map", "moon", "flag", "heart", "chart", "calendar", "star", "bolt", "layers",
          "run", "trophy", "clock", "user", "club", "scale", "dumbbell"]
 CLUB_VIEW = "club"
@@ -326,8 +327,8 @@ def home_view() -> dict:
         "id": "accueil", "name": "Accueil", "icon": "home",
         "spec": {"tuiles": [
             _tile("profil", 12, 1),
-            _tile("forme", 8, 2),
-            _tile("objectif", 4, 2),
+            _tile("forme", 9, 3),
+            _tile("objectif", 3, 3),
             _tile("semaine", 12, 2),
             _tile("allures", 12, 3),
             _tile("journee", 6, 2, donnee="body_battery"),
@@ -499,6 +500,7 @@ def ensure_default_views(conn: sqlite3.Connection) -> None:
         db.set_meta(conn, "vue_seance_renfo", "1")
         db.set_meta(conn, "vue_effet_entrainement", "1")
         db.set_meta(conn, "vue_renfo_equilibre", "1")
+        db.set_meta(conn, "vue_forme_large", "1")
         conn.commit()
         return
     if db.get_meta(conn, "vue_seance_renfo") is None:
@@ -535,6 +537,24 @@ def ensure_default_views(conn: sqlite3.Connection) -> None:
                  db.now_iso()),
             )
         db.set_meta(conn, "vue_accueil", "1")
+        conn.commit()
+    if db.get_meta(conn, "vue_forme_large") is None:
+        # 0.8 : la forme du jour s'élargit et grandit d'une rangée (ses petites courbes), l'objectif cède un cran
+        # de largeur, si l'Accueil a encore les tailles d'origine (8 × 2 et 4 × 2) ; une page arrangée autrement
+        # n'est pas touchée
+        row = conn.execute("SELECT spec FROM views WHERE id = 'accueil'").fetchone()
+        if row:
+            spec = json.loads(row["spec"])
+            tiles = spec.get("tuiles", [])
+            form = next((t for t in tiles if t.get("type") == "forme"), None)
+            goal = next((t for t in tiles if t.get("type") == "objectif"), None)
+            if form and goal and (form.get("w"), form.get("h"), goal.get("w"), goal.get("h")) == (8, 2, 4, 2) and \
+                    abs(tiles.index(form) - tiles.index(goal)) == 1:
+                form.update(w=9, h=3)
+                goal.update(w=3, h=3)
+                conn.execute("UPDATE views SET spec = ?, updated_at = ? WHERE id = 'accueil'",
+                             (json.dumps(spec, ensure_ascii=False), db.now_iso()))
+        db.set_meta(conn, "vue_forme_large", "1")
         conn.commit()
     if db.get_meta(conn, "renfo_vue") is None and sync_renfo_view(conn):
         # 0.6 : exercices retrouvés par la mise à niveau de la base, la vue « Renfo » sans attendre une synchro

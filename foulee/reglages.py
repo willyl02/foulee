@@ -126,7 +126,8 @@ def apply(conn: sqlite3.Connection, changes: dict, *, merge: bool = False) -> tu
 
 
 # ------------------------------------------------------------- export / import
-def export(conn: sqlite3.Connection, *, with_views: bool = True, with_photo: bool = True) -> dict:
+def export(conn: sqlite3.Connection, *, with_views: bool = True, with_photo: bool = True,
+           with_logo: bool = True) -> dict:
     settings = db.get_settings(conn)
     data: dict[str, Any] = {
         "foulee_reglages": EXPORT_FORMAT, "version": __version__, "exporte_le": db.now_iso(),
@@ -136,16 +137,18 @@ def export(conn: sqlite3.Connection, *, with_views: bool = True, with_photo: boo
         data["vues"] = [{k: v[k] for k in ("id", "name", "icon", "position", "spec")} for v in views.list_views(conn)]
     if with_photo and profile.photo_path().exists():
         data["photo"] = base64.b64encode(profile.photo_path().read_bytes()).decode("ascii")
+    if with_logo and club.logo_path().exists():
+        data["logo_club"] = base64.b64encode(club.logo_path().read_bytes()).decode("ascii")
     return data
 
 
 def import_(conn: sqlite3.Connection, data: Any, *, parts: set[str] | None = None) -> dict:
-    """Reprend un export. parts : {"reglages", "vues", "photo"} (tout par défaut).
+    """Reprend un export. parts : {"reglages", "vues", "photo", "logo"} (tout par défaut).
     Les vues de même identifiant sont remplacées, les autres ajoutées ; aucune vue n'est supprimée."""
     if not isinstance(data, dict) or data.get("foulee_reglages") != EXPORT_FORMAT:
         raise SettingsError("Ce fichier n'est pas un export de réglages Foulée.")
-    parts = parts or {"reglages", "vues", "photo"}
-    report: dict[str, Any] = {"reglages": 0, "vues": 0, "photo": False, "ignores": [], "recalcul": False}
+    parts = parts or {"reglages", "vues", "photo", "logo"}
+    report: dict[str, Any] = {"reglages": 0, "vues": 0, "photo": False, "logo": False, "ignores": [], "recalcul": False}
     if "reglages" in parts and isinstance(data.get("reglages"), dict):
         changes = {}
         for key, value in data["reglages"].items():
@@ -171,5 +174,11 @@ def import_(conn: sqlite3.Connection, data: Any, *, parts: set[str] | None = Non
             report["photo"] = True
         except (binascii.Error, ValueError) as exc:
             report["ignores"].append(f"photo ({exc})")
+    if "logo" in parts and data.get("logo_club"):
+        try:
+            club.save_logo(base64.b64decode(data["logo_club"], validate=True))
+            report["logo"] = True
+        except (binascii.Error, ValueError) as exc:
+            report["ignores"].append(f"logo du club ({exc})")
     return report
 
