@@ -4,6 +4,15 @@ Les versions « bêta » (par exemple 0.4.0b1) sont des avant-premières : elles
 sur le canal bêta (Réglages → Mises à jour → « Recevoir les versions bêta »), puis sortent en
 version stable une fois éprouvées.
 
+## 0.8.1b3 — 15 novembre 2026 (bêta)
+
+- **Un logo fixe pour Foulée** : un F tracé avec les deux traits de la balise, blanc en haut, rouge au milieu.
+  Il est désormais l'icône de l'onglet, du titre de la fenêtre, de la barre des tâches, du programme et de ses
+  raccourcis, de l'icône près de l'horloge et de l'appli sur le téléphone, quel que soit le profil. La photo ou
+  le logo choisi dans Réglages → Profil et logo reste en haut de la colonne de gauche, à côté de « Foulée ».
+- **La rubrique active**, dans la colonne de gauche, est marquée d'un trait rouge à gauche et de son icône en
+  rouge, à la place du petit badge balise.
+
 ## 0.8.1b2 — 15 novembre 2026 (bêta)
 
 - **Foulée dans sa propre fenêtre** : l'interface s'ouvre désormais dans une fenêtre à part, sans barre

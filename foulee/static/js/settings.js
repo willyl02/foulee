@@ -36,7 +36,7 @@ export function renderSettings(page, boot, { onSaved, onProfile, refreshBoot, to
     <div class="settings settings-system">
       <section data-section="profil">
         <h2>Profil et logo</h2>
-        <p class="intro">Ton prénom et ta photo s'affichent sur l'accueil ; le logo choisi remplace celui de Foulée dans la colonne et l'onglet du navigateur. Chaque choix s'enregistre tout de suite.</p>
+        <p class="intro">Ton prénom et ta photo s'affichent sur l'accueil ; le logo choisi s'affiche à côté de « Foulée », en haut de la colonne (l'icône de la fenêtre et de la barre des tâches reste celle de Foulée). Chaque choix s'enregistre tout de suite.</p>
         <div data-profile></div>
         <div class="access" data-access></div>
       </section>

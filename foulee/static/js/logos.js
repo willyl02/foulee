@@ -25,18 +25,25 @@ export function brandMark(profil, size = 28) {
   return logoSVG(profil?.logo, size);
 }
 
-/** Icône de l'onglet du navigateur, assortie au logo choisi. */
-export function setFavicon(profil) {
+// Le logo fixe de l'application, « Balise F » : un F tracé avec les deux traits de la balise, blanc en
+// haut, rouge au milieu. Onglet, titre de la fenêtre, barre des tâches, téléphone : partout le même,
+// quel que soit le profil (foulee/icon.py dessine le même pour Windows et les icônes PNG).
+export const APP_ICON = '<rect width="32" height="32" rx="7" fill="#182020"/>'
+  + '<rect x="8" y="6" width="5.5" height="20" rx="1.2" fill="#fff"/><rect x="8" y="6" width="16.5" height="5.5" rx="1.2" fill="#fff"/>'
+  + '<rect x="8" y="14.5" width="12.5" height="5.5" rx="1.2" fill="#d3263a"/>';
+
+export function appIconSVG(size = 28) {
+  return `<svg class="logo" viewBox="0 0 32 32" width="${size}" height="${size}" aria-hidden="true">${APP_ICON}</svg>`;
+}
+
+/** Icône de l'onglet et de la fenêtre : toujours le logo de Foulée (la photo reste dans le menu). */
+export function setFavicon() {
   let link = document.querySelector('link[rel="icon"]');
   if (!link) {
     link = document.createElement("link");
     link.rel = "icon";
     document.head.appendChild(link);
   }
-  if (profil?.logo === "photo" && profil.photo) {
-    link.href = `/api/profil/photo?v=${profil.photo_maj || 0}`;
-    return;
-  }
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">${(LOGOS[profil?.logo] || LOGOS.foulee).svg}</svg>`;
-  link.href = `data:image/svg+xml,${encodeURIComponent(svg)}`;
+  const href = `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">${APP_ICON}</svg>`)}`;
+  if (link.getAttribute("href") !== href) link.href = href;
 }

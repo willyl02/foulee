@@ -194,7 +194,7 @@ function closeMenu() { $("#rail").classList.remove("open"); }
 function renderBrand() {
   const profil = state.boot.profil || {};
   document.querySelectorAll(".brand-mark").forEach((box) => { box.innerHTML = brandMark(profil, box.dataset.size ? Number(box.dataset.size) : 28); });
-  setFavicon(profil);
+  setFavicon();
 }
 
 /** Recharge l'état du serveur (après un réglage qui touche l'en-tête, les horaires…). */
@@ -232,7 +232,7 @@ function renderNav() {
   const nav = $("#nav");
   nav.innerHTML = state.views.map((v, i) => `<button class="nav-item" type="button" data-id="${F.escape(v.id)}" data-index="${i}"
       ${v.id === state.viewId && !isOtherPage() ? 'aria-current="page"' : ""} ${state.editing ? 'draggable="true"' : ""}>
-      ${icon(v.icon)}<span>${F.escape(v.name)}</span><span class="blaze" aria-hidden="true"></span></button>`).join("")
+      ${icon(v.icon)}<span>${F.escape(v.name)}</span></button>`).join("")
     + `<button class="nav-item nav-add" type="button" data-new>${icon("plus")}<span>Nouvelle vue</span></button>`
     + (state.boot?.coach ? `<a class="nav-item nav-coach" href="#/coach" ${location.hash.startsWith("#/coach") ? 'aria-current="page"' : ""}>${icon(state.boot.coach.role === "coach" ? "club" : "user")}<span>${coachPageLabel(state.boot.coach)}</span><span class="co-badge nav-badge" data-coach-unread ${coachUnread() ? "" : "hidden"}>${coachUnread()}</span></a>` : "");
   nav.querySelectorAll("[data-id]").forEach((b) => {

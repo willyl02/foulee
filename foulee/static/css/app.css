@@ -122,11 +122,13 @@ a { color: inherit; }
 }
 .nav-item svg { width: 18px; height: 18px; flex: none; }
 .nav-item:hover { background: var(--surface-2); color: var(--ink); }
-.nav-item[aria-current="page"] { background: var(--surface); color: var(--ink); font-weight: 600; box-shadow: 0 0 0 1px var(--hair); }
-.nav-item[aria-current="page"] .blaze { margin-left: auto; }
-.nav-item .blaze { display: none; width: 18px; height: 13px; padding: 2px 3px; gap: 1.5px; }
-.nav-item .blaze::before, .nav-item .blaze::after { height: 3px; }
-.nav-item[aria-current="page"] .blaze { display: inline-flex; }
+.nav-item { position: relative; }
+/* Rubrique active : fond éclairci et trait rouge de la balise à gauche, icône en rouge */
+.nav-item[aria-current="page"] { background: var(--surface); color: var(--ink); font-weight: 600; }
+.nav-item[aria-current="page"]::before {
+  content: ""; position: absolute; left: 0; top: 7px; bottom: 7px; width: 3px; border-radius: 3px; background: var(--gr-red);
+}
+.nav-item[aria-current="page"] svg { color: var(--gr-red); }
 .nav-add { color: var(--muted); }
 .nav-item.dragging { opacity: 0.4; }
 
