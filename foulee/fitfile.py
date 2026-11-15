@@ -56,6 +56,34 @@ def _num(value: Any) -> float | None:
     return number if number == number else None
 
 
+def vo2max_of(messages: dict, sport: str | None = None) -> float | None:
+    """La VO2max que la montre a écrite dans la séance (message « max_met_data » du FIT), en ml/kg/min.
+
+    L'API personnelle de Garmin ne la donne pas ; la montre, elle, l'enregistre dans le fichier de la séance
+    quand elle l'estime (course à pied, et vélo avec capteur de puissance). Celle du même sport que la séance
+    d'abord, la plus récente ; None si la séance n'en contient pas."""
+    found = []
+    for message in messages.get("max_met_data_mesgs") or []:
+        value = _num(message.get("vo2_max"))
+        if value is None or not 10 <= value <= 100:
+            continue
+        kind = str(message.get("sport") or "").lower()
+        when = message.get("update_time")
+        found.append((kind == (sport or "") or not kind, when.timestamp() if isinstance(when, datetime) else 0, value))
+    return round(max(found)[2], 1) if found else None
+
+
+def read_vo2max(data: bytes) -> float | None:
+    """Seulement la VO2max d'un fichier FIT déjà sur le disque (relecture des anciennes séances)."""
+    decoder = Decoder(Stream.from_byte_array(bytearray(data)))
+    if not decoder.is_fit():
+        return None
+    messages, _errors = decoder.read(enable_crc_check=False)
+    sessions = messages.get("session_mesgs") or []
+    sport = str((sessions[0] if sessions else {}).get("sport") or "").lower() or None
+    return vo2max_of(messages, sport)
+
+
 def decode(data: bytes) -> dict:
     """Décode un FIT (octets bruts) en dictionnaire de courbes, tours et résumé."""
     decoder = Decoder(Stream.from_byte_array(bytearray(data)))
@@ -145,6 +173,7 @@ def decode(data: bytes) -> dict:
     return {
         "sport": sport,
         "sub_sport": sub_sport,
+        "vo2max": vo2max_of(messages, sport),
         "start_utc": start.strftime("%Y-%m-%d %H:%M:%S"),
         "streams": streams,
         "laps": laps,

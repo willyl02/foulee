@@ -30,11 +30,14 @@ def make_jwt(lifetime: int = 86400) -> str:
     return f"{enc({'alg': 'none'})}.{enc({'exp': int(time.time()) + lifetime})}.signature"
 
 
-def make_fit(start: dt.datetime, minutes: int = 20, speed: float = 3.2) -> bytes:
-    """Petite séance de course : 1 point par seconde, deux tours."""
+def make_fit(start: dt.datetime, minutes: int = 20, speed: float = 3.2, vo2max: float | None = None) -> bytes:
+    """Petite séance de course : 1 point par seconde, deux tours ; avec la VO2max estimée par la montre si donnée."""
     enc = Encoder()
     enc.write_mesg({"mesg_num": MN["FILE_ID"], "manufacturer": "garmin", "product": 1, "time_created": start,
                     "type": "activity", "serial_number": 42})
+    if vo2max:  # comme une Forerunner : message « max_met_data », un pour la course
+        enc.write_mesg({"mesg_num": MN["MAX_MET_DATA"], "update_time": start, "vo2_max": vo2max, "sport": "running",
+                        "sub_sport": "generic", "max_met_category": "generic"})
     total = minutes * 60
     for i in range(total):
         fast = total // 2 <= i < total // 2 + 180
@@ -70,6 +73,7 @@ class FakeGarmin:
         self.revoked = False  # jetons déjà délivrés refusés (401), comme après la suppression de la clé
         self.fail_status: int | None = None  # panne de Garmin : ce code pour toute lecture
         self.intraday_calls: list[tuple[str, str]] = []  # journées demandées (FC, sommeil, VFC)
+        self.vo2max: float | None = None  # VO2max écrite par la montre dans les FIT (absente de l'API)
         self.activities = []
         for i in range(activities):
             day = self.today - dt.timedelta(days=i * 4)
@@ -294,7 +298,7 @@ class FakeGarmin:
                     start = dt.datetime.strptime(activity["startTimeGMT"], "%Y-%m-%d %H:%M:%S").replace(tzinfo=dt.timezone.utc)
                     buffer = io.BytesIO()
                     with zipfile.ZipFile(buffer, "w") as archive:
-                        archive.writestr(f"{parts[-1]}_ACTIVITY.fit", make_fit(start))
+                        archive.writestr(f"{parts[-1]}_ACTIVITY.fit", make_fit(start, vo2max=fake.vo2max))
                     body = buffer.getvalue()
                     self.send_response(200)
                     self.send_header("Content-Type", "application/x-zip-compressed")

@@ -319,8 +319,9 @@ def store_activity_streams(conn: sqlite3.Connection, activity_id: str, decoded: 
              lap.get("elev_loss_m"), lap.get("intensity")),
         )
     conn.execute(
-        "UPDATE activities SET has_streams = 1, fit_path = COALESCE(?, fit_path), updated_at = ? WHERE id = ?",
-        (fit_path, db.now_iso(), activity_id),
+        "UPDATE activities SET has_streams = 1, fit_path = COALESCE(?, fit_path), vo2max = COALESCE(?, vo2max), "
+        "updated_at = ? WHERE id = ?",
+        (fit_path, decoded.get("vo2max"), db.now_iso(), activity_id),
     )
     update_activity_derived(conn, activity_id, settings, hrp, streams=decoded["streams"])
 

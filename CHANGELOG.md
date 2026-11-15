@@ -4,6 +4,24 @@ Les versions « bêta » (par exemple 0.4.0b1) sont des avant-premières : elles
 sur le canal bêta (Réglages → Mises à jour → « Recevoir les versions bêta »), puis sortent en
 version stable une fois éprouvées.
 
+## 0.8.1b5 — 15 novembre 2026 (bêta)
+
+- **VO2max** : la tuile « VO2max estimée par Garmin » était vide, l'API personnelle de Garmin ne la donnant
+  pas. Foulée la lit désormais dans le fichier FIT de chaque séance, où la montre l'écrit ; les anciennes
+  séances déjà téléchargées sont relues petit à petit (une soixantaine par synchro).
+- **Nouvelles séances plus vite** : entre deux synchros complètes (3 h par défaut), Foulée guette toutes les
+  20 minutes (un seul appel à Garmin) et lance la synchro Garmin dès qu'une nouvelle séance est arrivée dans
+  Garmin Connect. Sur le PC comme sur un serveur. Les synchros automatiques se faisaient bien : le délai
+  venait des 3 heures d'écart, et du moment où la montre envoie la séance à Garmin Connect.
+- **Sélecteur de période** : il ne changeait rien sur plusieurs vues (Entraînement, Récup & postes,
+  Objectifs, Withings, une partie de Renfo), dont les tuiles avaient chacune leur période fixe. Elles suivent
+  désormais la période de la vue, et chaque vue a la sienne à l'ouverture (6 mois pour Entraînement, Récup
+  et Objectifs, 90 jours pour Renfo), retenue vue par vue. Le sélecteur n'apparaît que là où il change
+  quelque chose, et une tuile à période fixe porte un petit cadenas. Une période changée à la main est gardée.
+- **Logo** : l'ancienne balise est remplacée partout par le F : la page « Foulée est injoignable » du
+  téléphone (Tailscale coupé), les pages de connexion par le réseau local, la page de bienvenue, et le logo
+  par défaut en haut du menu (les logos au choix passent sur fond sombre).
+
 ## 0.8.1b4 — 15 novembre 2026 (bêta)
 
 - **Objectifs** : « Cap semi de Paris » devient la vue « Objectifs », le centre de tes objectifs. L'objectif

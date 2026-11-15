@@ -62,7 +62,9 @@ Ensuite, Foulée tourne en arrière-plan avec son **icône près de l'horloge** 
 flèche « ^ » si Windows la range) : un clic ouvre l'interface, un clic droit propose
 **Synchroniser maintenant**, **Lancer au démarrage de Windows** et **Quitter Foulée**.
 Tant qu'il tourne, la synchro se fait toute seule, **toutes les 3 heures** par défaut
-(au réveil du PC si elle a été manquée ; rythme réglable, voir plus bas). Relancer
+(au réveil du PC si elle a été manquée ; rythme réglable, voir plus bas), et entre deux,
+Foulée **guette tes nouvelles séances** : toutes les 20 minutes, un seul appel léger à
+Garmin, et la synchro part dès qu'une séance arrive dans Garmin Connect. Relancer
 Foulée depuis le menu Démarrer rouvre simplement l'interface.
 
 L'interface s'ouvre dans **sa propre fenêtre**, sans barre d'adresse, d'onglets ni de favoris (le mode
@@ -269,7 +271,18 @@ la tuile les affiche (un appel par jour), puis gardées dans ta base.
 source, Garmin et Withings, de 30 minutes à 12 heures (3 heures par défaut). 3 heures est
 un bon compromis : séances, nuits et pesées arrivent dans la journée sans solliciter
 Garmin et Withings pour rien ; plus rapproché, Foulée redemande sans cesse des données qui
-n'ont pas bougé. Pour une donnée tout de suite, le bouton **Synchroniser** suffit.
+n'ont pas bougé. Pour une donnée tout de suite, le bouton **Synchroniser** suffit. Les
+nouvelles séances, elles, n'attendent pas : la veille (toutes les 20 minutes, un appel)
+lance la synchro Garmin dès qu'une séance arrive dans Garmin Connect.
+
+**VO2max** : l'API personnelle de Garmin ne la donne pas ; ta montre l'écrit dans le
+fichier FIT de chaque séance où elle l'estime, et Foulée l'y lit (les anciennes séances
+déjà téléchargées sont relues petit à petit, une soixantaine par synchro).
+
+**Période des vues** : le sélecteur 7 j… 2 ans règle les tuiles de la vue, et chaque vue
+garde la sienne (Entraînement, Récup & postes, Objectifs : 6 mois à l'ouverture ; Renfo :
+90 jours). Il n'apparaît que là où il change quelque chose. Une tuile à période fixe
+(réglage « Période » de la tuile) porte un petit cadenas avec sa période.
 
 **Pastilles de connexion** : en haut à droite de chaque vue (dans la barre du haut
 sur téléphone), une pastille par source branchée sur le profil (Garmin, Withings, Strava,
