@@ -53,7 +53,14 @@ def is_packaged() -> bool:
 def _local_base() -> Path:
     if sys.platform == "win32":
         return Path(os.environ.get("LOCALAPPDATA") or (Path.home() / "AppData" / "Local")) / "Foulee"
+    if sys.platform == "darwin":  # Mac : le dossier des applications de l'utilisateur
+        return Path.home() / "Library" / "Application Support" / "Foulee"
     return Path(os.environ.get("XDG_CONFIG_HOME") or (Path.home() / ".config")) / "foulee"
+
+
+def is_desktop() -> bool:
+    """Un ordinateur de bureau (Windows, Mac) : l'application avec son icône, plutôt qu'un serveur."""
+    return sys.platform in ("win32", "darwin")
 
 
 # --------------------------------------------------- configuration utilisateur
@@ -107,7 +114,7 @@ def save_user_config(changes: dict) -> dict:
 def default_data_dir() -> Path:
     if not is_packaged():
         return PROJECT_ROOT / "data"
-    if sys.platform == "win32":
+    if sys.platform in ("win32", "darwin"):
         return _local_base() / "donnees"
     return Path(os.environ.get("XDG_DATA_HOME") or (Path.home() / ".local" / "share")) / "foulee"
 

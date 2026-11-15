@@ -36,7 +36,7 @@ export function systemSections(boot) {
   if (boot.utilisateur && !boot.utilisateur.principal) {
     // Le reste concerne toute l'installation : c'est l'affaire de l'utilisateur principal
     const head = (boot.utilisateurs || []).find((u) => u.principal);
-    parts.push(`<section data-section="installation"><h2>Installation</h2><p class="intro">Mises à jour, dossier des données${boot.machine === "pc" ? ", Claude Desktop, démarrage avec Windows" : ", accès par le réseau local"} : ces réglages concernent toute l'installation. Ils se règlent depuis le profil de l'utilisateur principal${head ? `, ${F.escape(head.prenom)}` : ""}.</p></section>`);
+    parts.push(`<section data-section="installation"><h2>Installation</h2><p class="intro">Mises à jour, dossier des données${boot.machine === "pc" ? ", Claude Desktop, lancement à l'ouverture de session" : ", accès par le réseau local"} : ces réglages concernent toute l'installation. Ils se règlent depuis le profil de l'utilisateur principal${head ? `, ${F.escape(head.prenom)}` : ""}.</p></section>`);
     return parts.join("");
   }
   if (local) {
@@ -386,16 +386,18 @@ async function appPanel(box, { toast }) {
     return;
   }
   box.innerHTML = `
-    ${info.demarrage_windows === null ? "" : `<label class="check"><input type="checkbox" data-startup ${info.demarrage_windows ? "checked" : ""}>Lancer Foulée à l'ouverture de session Windows</label>`}
+    ${info.demarrage_windows === null ? "" : `<label class="check"><input type="checkbox" data-startup ${info.demarrage_windows ? "checked" : ""}>Lancer Foulée à l'ouverture de session ${info.systeme === "mac" ? "(Mac)" : "Windows"}</label>`}
     ${info.fenetre ? `<fieldset class="app-window">
       <legend>Ouvrir Foulée</legend>
       <label class="radio"><input type="radio" name="fenetre" value="application" ${info.fenetre === "application" ? "checked" : ""}>
-        <span><b>Dans une fenêtre à part</b><small>Sa propre fenêtre et son icône dans la barre des tâches, sans barre d'adresse, d'onglets ni de favoris (avec Microsoft Edge).${info.fenetre_possible ? "" : " Edge est introuvable sur ce PC : Foulée s'ouvrira dans ton navigateur."}</small></span></label>
+        <span><b>Dans une fenêtre à part</b><small>${info.systeme === "mac"
+          ? `Sa propre fenêtre, sans barre d'adresse, d'onglets ni de favoris (avec Google Chrome ou Microsoft Edge ; Safari n'a pas ce mode).${info.fenetre_possible ? "" : " Ni Chrome ni Edge sur ce Mac : Foulée s'ouvrira dans ton navigateur."}`
+          : `Sa propre fenêtre et son icône dans la barre des tâches, sans barre d'adresse, d'onglets ni de favoris (avec Microsoft Edge).${info.fenetre_possible ? "" : " Edge est introuvable sur ce PC : Foulée s'ouvrira dans ton navigateur."}`}</small></span></label>
       <label class="radio"><input type="radio" name="fenetre" value="navigateur" ${info.fenetre === "navigateur" ? "checked" : ""}>
         <span><b>Dans mon navigateur</b><small>Un onglet de ton navigateur habituel.</small></span></label>
-      <p class="computed">Ça vaut pour l'icône près de l'horloge, celle du Bureau et le menu Démarrer : la prochaine fois que tu ouvres Foulée. Fermer la fenêtre n'arrête pas Foulée.</p>
+      <p class="computed">${info.systeme === "mac" ? "Ça vaut pour l'icône de la barre des menus et le Launchpad" : "Ça vaut pour l'icône près de l'horloge, celle du Bureau et le menu Démarrer"} : la prochaine fois que tu ouvres Foulée. Fermer la fenêtre n'arrête pas Foulée.</p>
     </fieldset>` : ""}
-    <p class="computed">Tant que Foulée tourne, la synchro se fait toute seule, au rythme choisi dans « Synchro et calculs » (toutes les 3 heures par défaut). Pour l'arrêter : clic droit sur son icône près de l'horloge, puis « Quitter Foulée ».</p>`;
+    <p class="computed">Tant que Foulée tourne, la synchro se fait toute seule, au rythme choisi dans « Synchro et calculs » (toutes les 3 heures par défaut). Pour l'arrêter : ${info.systeme === "mac" ? "clic sur son icône dans la barre des menus, en haut à droite" : "clic droit sur son icône près de l'horloge"}, puis « Quitter Foulée ».</p>`;
   box.querySelectorAll('input[name="fenetre"]').forEach((input) => input.addEventListener("change", async () => {
     try {
       const res = await api.put("/api/app", { fenetre: input.value });
@@ -442,7 +444,7 @@ async function phonePanel(body, { toast }) {
           ${ready ? `<button class="btn btn-primary" type="button" data-phone-on>${icon("check")}Activer l'accès depuis mon téléphone</button>` : ""}
           ${recheck}
         </div>
-        ${ready ? `<p class="computed">Si Windows demande « Autoriser cette application à apporter des modifications ? », réponds « Oui » : c'est Tailscale.</p>` : ""}`;
+        ${ready && !/Mac/.test(navigator.platform) ? `<p class="computed">Si Windows demande « Autoriser cette application à apporter des modifications ? », réponds « Oui » : c'est Tailscale.</p>` : ""}`;
     } else {
       body.innerHTML = `<div class="phone-on">
           <img class="phone-qr" src="/api/telephone/qr.svg?v=${encodeURIComponent(info.nom)}" alt="QR code de l'adresse" width="150" height="150">

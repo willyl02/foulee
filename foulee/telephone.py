@@ -46,6 +46,11 @@ def cli() -> str | None:
             path = Path(base or "") / "Tailscale" / "tailscale.exe"
             if base and path.exists():
                 return str(path)
+    if sys.platform == "darwin":  # pragma: no cover - Mac : l'appli Tailscale fait aussi office de commande
+        for path in (Path("/Applications/Tailscale.app/Contents/MacOS/Tailscale"), Path("/usr/local/bin/tailscale"),
+                     Path("/opt/homebrew/bin/tailscale")):
+            if path.exists():
+                return str(path)
     return None
 
 

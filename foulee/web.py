@@ -272,7 +272,7 @@ def create_app() -> FastAPI:
         if request.state.profil_requis:  # « Qui es-tu ? » : rien des données de personne
             return {"app": "Foulée", "version": __version__, "demo": config.is_demo(), "profil_requis": True,
                     "utilisateurs": utilisateurs.cards(), "acces": "local" if request.state.local else "reseau",
-                    "machine": "pc" if sys.platform == "win32" else "serveur", "retours": retours.info(),
+                    "machine": "pc" if config.is_desktop() else "serveur", "retours": retours.info(),
                     "demarre_le": STARTED_AT}
         me = request.state.profil
         with db.session() as conn:
@@ -295,7 +295,7 @@ def create_app() -> FastAPI:
                 "synchro": sync_module.last_sync_info(conn), "cle": vault.has_key() or config.is_demo(),
                 "connexions": sync_module.connections(conn),
                 "dossier_donnees": str(config.data_dir()),
-                "machine": "pc" if sys.platform == "win32" else "serveur",
+                "machine": "pc" if config.is_desktop() else "serveur",
                 "acces": "local" if request.state.local else "reseau",
                 "installation": updates.mode(),
                 "application": app.state.quit is not None,
@@ -744,7 +744,7 @@ def create_app() -> FastAPI:
     def export_settings(vues: int = 1, photo: int = 1, logo: int = 1) -> JSONResponse:
         with db.session(readonly=True) as conn:
             data = reglages.export(conn, with_views=bool(vues), with_photo=bool(photo), with_logo=bool(logo))
-        machine = "pc" if sys.platform == "win32" else "serveur"
+        machine = "pc" if config.is_desktop() else "serveur"
         name = f"foulee-reglages-{machine}-{date.today().isoformat()}.json"
         return JSONResponse(data, headers={"Content-Disposition": f'attachment; filename="{name}"'})
 
@@ -1663,7 +1663,7 @@ def create_app() -> FastAPI:
     # -------------------------------------------------- dossier des données
     @app.get("/api/dossier")
     def folder_status(anciennes: int = 0) -> dict:
-        info = {**datadir.describe(), "choix_fenetre": sys.platform == "win32"}
+        info = {**datadir.describe(), "choix_fenetre": config.is_desktop()}  # fenêtre « Choisir un dossier »
         if anciennes:
             info["anciennes"] = datadir.previous_installs()
         return info
@@ -1678,8 +1678,8 @@ def create_app() -> FastAPI:
     def folder_pick(request: Request, payload: dict = Body(default={})) -> dict:
         require_local(request)
         require_principal(request)
-        if sys.platform != "win32":
-            raise HTTPException(404, "La fenêtre de choix n'existe que sur le PC.")
+        if not config.is_desktop():
+            raise HTTPException(404, "La fenêtre de choix n'existe que sur l'ordinateur (Windows ou Mac).")
         return {"chemin": datadir.pick_folder(payload.get("depart"))}
 
     @app.put("/api/dossier")
@@ -1718,6 +1718,8 @@ def create_app() -> FastAPI:
         running = app.state.quit is not None
         return {
             "application": running,
+            "systeme": "mac" if sys.platform == "darwin" else "windows" if sys.platform == "win32" else "serveur",
+            # (« demarrage_windows » : le nom d'origine du réglage, gardé ; sur Mac, l'ouverture de session)
             "demarrage_windows": desktop.startup_enabled() if running and desktop.startup_supported() else None,
             "synchro_auto_heures": desktop.SYNC_EVERY // 3600 if running else None,  # rythme par défaut
             "fenetre": desktop.window_mode() if running else None,  # « Ouvrir Foulée » : fenêtre à part ou navigateur
@@ -1736,14 +1738,14 @@ def create_app() -> FastAPI:
         require_principal(request)
         if "demarrage_windows" in payload:
             if app.state.quit is None or not desktop.startup_supported():
-                raise HTTPException(404, "Réglage propre à l'application Windows.")
+                raise HTTPException(404, "Réglage propre à l'application (Windows ou Mac).")
             try:
                 desktop.set_startup(bool(payload["demarrage_windows"]))
             except OSError as exc:
                 raise HTTPException(500, f"Réglage impossible : {exc}") from exc
         if "fenetre" in payload:
             if app.state.quit is None:
-                raise HTTPException(404, "Réglage propre à l'application Windows.")
+                raise HTTPException(404, "Réglage propre à l'application (Windows ou Mac).")
             try:
                 desktop.set_window_mode(str(payload["fenetre"]))
             except ValueError as exc:

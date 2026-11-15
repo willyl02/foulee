@@ -9,7 +9,9 @@ C'est ce que lancent le menu Démarrer et le raccourci du Bureau (« foulee app 
   est prise en compte) ;
 - une seule copie à la fois : relancer Foulée ouvre simplement l'interface.
 
-Ailleurs que sous Windows (ou avec --sans-icone), même chose sans l'icône.
+Sur Mac, la même chose avec une icône dans la barre des menus (en haut à droite), sans icône dans le Dock ;
+« Lancer à l'ouverture de session » passe par un LaunchAgent. Sur un serveur (ou avec --sans-icone), même
+chose sans l'icône.
 """
 
 from __future__ import annotations
@@ -152,6 +154,8 @@ def app_browser() -> str | None:
     custom = os.environ.get("FOULEE_NAVIGATEUR_APP")
     if custom is not None:
         return custom if custom and Path(custom).exists() else None
+    if sys.platform == "darwin":
+        return _mac_app_browser()
     if sys.platform != "win32":
         return None
     bases = [os.environ.get(v) for v in ("ProgramFiles(x86)", "ProgramFiles", "ProgramW6432", "LOCALAPPDATA")]
@@ -161,6 +165,19 @@ def app_browser() -> str | None:
             return found
         for base in filter(None, bases):
             path = Path(base) / vendor / product / "Application" / exe
+            if path.exists():
+                return str(path)
+    return None
+
+
+MAC_BROWSERS = ("Microsoft Edge", "Google Chrome", "Brave Browser", "Chromium")
+
+
+def _mac_app_browser() -> str | None:
+    """Mac : Edge, Chrome, Brave ou Chromium s'ils sont installés (Safari n'a pas de mode application)."""
+    for root in (Path("/Applications"), Path.home() / "Applications"):
+        for name in MAC_BROWSERS:
+            path = root / f"{name}.app" / "Contents" / "MacOS" / name
             if path.exists():
                 return str(path)
     return None
@@ -260,14 +277,58 @@ def launch_command(*extra: str) -> str:
 
 
 def startup_supported() -> bool:
-    """Lancement à l'ouverture de session : Windows seulement, et jamais pendant les tests."""
-    return sys.platform == "win32" and os.environ.get("FOULEE_TEST") != "1"
+    """Lancement à l'ouverture de session : Windows et Mac (application installée), jamais pendant les tests."""
+    if os.environ.get("FOULEE_TEST") == "1" and not os.environ.get("FOULEE_LAUNCH_AGENTS"):
+        return False
+    if sys.platform == "darwin":
+        return mac_app_bundle() is not None or bool(os.environ.get("FOULEE_LAUNCH_AGENTS"))
+    return sys.platform == "win32"
+
+
+# ---------------------------------------------------------------- Mac
+LAUNCH_AGENT = "fr.foulee.app"
+
+
+def mac_app_bundle() -> Path | None:
+    """Le Foulee.app qui contient ce Python (None hors de l'application Mac)."""
+    for parent in Path(sys.executable).resolve().parents:
+        if parent.suffix == ".app":
+            return parent
+    return None
+
+
+def mac_launcher() -> str:
+    bundle = mac_app_bundle()
+    return str(bundle / "Contents" / "MacOS" / "Foulee") if bundle else sys.executable
+
+
+def launch_agent_file() -> Path:
+    folder = Path(os.environ.get("FOULEE_LAUNCH_AGENTS") or (Path.home() / "Library" / "LaunchAgents"))
+    return folder / f"{LAUNCH_AGENT}.plist"
+
+
+def _mac_set_startup(enabled: bool) -> None:
+    """Un LaunchAgent qui lance Foulée (sans ouvrir l'interface) à l'ouverture de session."""
+    import plistlib
+
+    path = launch_agent_file()
+    if not enabled:
+        path.unlink(missing_ok=True)
+        return
+    program = [mac_launcher(), "--demarrage"] if mac_app_bundle() else [sys.executable, "-m", "foulee", "app",
+                                                                         "--demarrage"]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "wb") as handle:
+        plistlib.dump({"Label": LAUNCH_AGENT, "ProgramArguments": program, "RunAtLoad": True,
+                       "ProcessType": "Interactive", "LimitLoadToSessionType": "Aqua"}, handle)
 
 
 def startup_enabled() -> bool:  # pragma: no cover - Windows uniquement
     """Foulée se lance-t-il à l'ouverture de session (et Windows ne l'a-t-il pas désactivé) ?"""
     if not startup_supported():
         return False
+    if sys.platform == "darwin":
+        return launch_agent_file().exists()
     import winreg
 
     try:
@@ -286,6 +347,9 @@ def startup_enabled() -> bool:  # pragma: no cover - Windows uniquement
 
 
 def set_startup(enabled: bool) -> None:  # pragma: no cover - Windows uniquement
+    if sys.platform == "darwin":
+        _mac_set_startup(enabled)
+        return
     import winreg
 
     with winreg.CreateKey(winreg.HKEY_CURRENT_USER, RUN_KEY) as key:
@@ -436,12 +500,16 @@ def show_error(message: str) -> None:
         import ctypes
 
         ctypes.windll.user32.MessageBoxW(None, message, "Foulée", 0x10 | 0x40000)  # erreur, premier plan
+    elif sys.platform == "darwin" and os.environ.get("FOULEE_TEST") != "1":  # pragma: no cover - Mac
+        text = message.replace("\\", "\\\\").replace('"', '\\"')
+        subprocess.run(["osascript", "-e", f'display alert "Foulée" message "{text}" as critical'],
+                       capture_output=True, timeout=600)
     else:
         print(message, file=sys.stderr)
 
 
 def tray_available() -> bool:
-    if sys.platform != "win32":
+    if sys.platform not in ("win32", "darwin"):
         return False
     try:
         import pystray  # noqa: F401
@@ -601,14 +669,22 @@ class DesktopApp:
             pystray.MenuItem("Synchroniser maintenant", lambda icon, item: self.sync_now(),
                              enabled=lambda item: self.can_sync()),
             pystray.Menu.SEPARATOR,
-            pystray.MenuItem("Lancer au démarrage de Windows", lambda icon, item: self.toggle_startup(),
-                             checked=lambda item: startup_enabled()),
+            pystray.MenuItem("Lancer à l'ouverture de session" if sys.platform == "darwin"
+                             else "Lancer au démarrage de Windows", lambda icon, item: self.toggle_startup(),
+                             checked=lambda item: startup_enabled(), visible=startup_supported()),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("Quitter Foulée", lambda icon, item: self.stop()),
         )
         self.icon = pystray.Icon("Foulee", draw(64), f"Foulée {__version__}", menu)
 
         def ready(icon) -> None:
+            if sys.platform == "darwin":  # Mac : seulement l'icône de la barre des menus, rien dans le Dock
+                try:
+                    from AppKit import NSApplication
+
+                    NSApplication.sharedApplication().setActivationPolicy_(1)  # « accessoire »
+                except Exception:
+                    LOG.debug("Politique d'activation inchangée", exc_info=True)
             icon.visible = True
             if self.after_update:
                 self.notify(f"Foulée {__version__} est installé.")

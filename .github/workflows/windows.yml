@@ -1,11 +1,14 @@
-# Application Windows : tests sous Windows, installateur Foulee-Setup-<version>.exe, essai complet
-# (installation, relance, Claude, mise à jour, désinstallation), puis publication sur GitHub.
+# Applications Windows et Mac : tests sous Windows et sous macOS, installateur Foulee-Setup-<version>.exe et
+# son essai complet (installation, relance, Claude, mise à jour, désinstallation), Foulee-<version>-mac-arm64.dmg
+# (Apple Silicon) et -mac-intel.dmg et leur essai (installation, démarrage, ouverture de session, Claude, arrêt),
+# puis publication sur GitHub. L'application Mac n'est pas signée par Apple (signature « ad hoc ») : macOS
+# demande une autorisation au premier lancement.
 #
 # Publier = changer le numéro de version (foulee/__init__.py, pyproject.toml, CHANGELOG.md) :
 # - une bêta (0.5.0b1, a ou rc aussi) poussée sur la branche beta devient une pré-version ;
 # - une version finale (0.5.0) poussée sur main devient la version stable.
 # Tant que la version publiée existe déjà, un envoi ne coûte qu'une petite vérification.
-name: Windows
+name: Windows et Mac
 
 on:
   push:
@@ -139,17 +142,67 @@ jobs:
           path: build/out/*
           if-no-files-found: error
 
+  mac:
+    name: Application Mac (${{ matrix.label }})
+    needs: version
+    if: needs.version.outputs.build == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            label: Apple Silicon
+            arch: arm64
+          - runner: macos-15-intel
+            label: Intel
+            arch: intel
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Tests (macOS)
+        if: matrix.arch == 'arm64'
+        run: |
+          uv sync --frozen
+          uv run --frozen pytest -q -p no:cacheprovider -rfE 2>&1 | tee tests.log
+          code=${PIPESTATUS[0]}
+          if [ "$code" -ne 0 ]; then
+            summary=$(grep -E '^(FAILED|ERROR) ' tests.log | cut -c1-400; tail -1 tests.log)
+            summary="${summary//'%'/'%25'}"; summary="${summary//$'\n'/'%0A'}"
+            echo "::error title=Tests macOS (résumé)::$summary"
+            exit "$code"
+          fi
+      - name: Construction
+        run: bash packaging/build_mac.sh 2>&1 | tee build.log
+      - name: Essai de l'application
+        run: bash packaging/smoke_mac.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Foulee-Mac-${{ matrix.arch }}
+          path: build/out/*
+          if-no-files-found: error
+
   publication:
     name: Publication
-    needs: [version, tests, installateur]
+    needs: [version, tests, installateur, mac]
     if: needs.version.outputs.publish == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: Foulee-Setup
-          path: out
+          path: artefacts
+      - name: Fichiers de la version
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          cp artefacts/Foulee-Setup/* out/
+          cp artefacts/Foulee-Mac-*/Foulee-*.dmg out/
+          # Une seule liste d'empreintes pour Windows et Mac (Foulée la lit avant toute mise à jour)
+          cat artefacts/Foulee-Mac-*/SHA256SUMS-mac-*.txt >> out/SHA256SUMS.txt
+          cat out/SHA256SUMS.txt
+          ls -la out
       - name: Version GitHub
         env:
           GH_TOKEN: ${{ github.token }}

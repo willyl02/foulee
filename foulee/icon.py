@@ -8,6 +8,7 @@ static/js/logos.js). Les bords tombent pile sur les pixels : même en 16 × 16, 
 
     python -m foulee.icon Foulee.ico          # l'icône Windows multi-tailles
     python -m foulee.icon --png foulee/static/icons   # les PNG du manifeste et de l'iPhone
+    python -m foulee.icon --iconset Foulee.iconset    # l'icône Mac (puis : iconutil -c icns Foulee.iconset)
 """
 
 from __future__ import annotations
@@ -84,11 +85,32 @@ def write_png_icons(folder: str | Path) -> list[Path]:
     return written
 
 
+def write_iconset(folder: str | Path) -> Path:
+    """Le dossier .iconset de l'application Mac (iconutil en fait Foulee.icns). Les icônes du Mac remplissent un
+    carré arrondi un peu plus petit que l'image : on laisse la marge habituelle."""
+    from PIL import Image
+
+    folder = Path(folder)
+    folder.mkdir(parents=True, exist_ok=True)
+    for size in (16, 32, 128, 256, 512):
+        for scale in (1, 2):
+            pixels = size * scale
+            inner = round(pixels * 0.8)
+            canvas = Image.new("RGBA", (pixels, pixels), (0, 0, 0, 0))
+            logo = draw(inner)
+            canvas.paste(logo, ((pixels - inner) // 2, (pixels - inner) // 2), logo)
+            name = f"icon_{size}x{size}{'@2x' if scale == 2 else ''}.png"
+            canvas.save(folder / name, format="PNG")
+    return folder
+
+
 if __name__ == "__main__":
     import sys
 
     args = sys.argv[1:]
-    if args[:1] == ["--png"]:
+    if args[:1] == ["--iconset"]:
+        print(write_iconset(args[1] if len(args) > 1 else "Foulee.iconset"))
+    elif args[:1] == ["--png"]:
         for written in write_png_icons(args[1] if len(args) > 1 else "foulee/static/icons"):
             print(written)
     else:
