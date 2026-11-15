@@ -1,5 +1,6 @@
 """L'application Mac, simulée sur n'importe quel système : dossiers, Trousseau, ouverture de session, mises à jour."""
 
+import os
 import plistlib
 import sys
 import types
@@ -49,7 +50,8 @@ def test_without_keychain_a_protected_file(mac, monkeypatch):
                                                                       delete_password=refuse))
     monkeypatch.delenv("FOULEE_COFFRE")
     assert vault.set_key("GCDC_cle-de-test").startswith("fichier protégé")
-    assert vault._plain_file().stat().st_mode & 0o777 == 0o600
+    if os.name == "posix":  # (les droits Unix n'ont pas de sens quand ce test tourne sous Windows)
+        assert vault._plain_file().stat().st_mode & 0o777 == 0o600
     assert vault.get_key() == "GCDC_cle-de-test"
     assert vault.delete_key() and not vault._plain_file().exists()
 
