@@ -4,6 +4,27 @@ Les versions « bêta » (par exemple 0.4.0b1) sont des avant-premières : elles
 sur le canal bêta (Réglages → Mises à jour → « Recevoir les versions bêta »), puis sortent en
 version stable une fois éprouvées.
 
+## 0.8.1b4 — 15 novembre 2026 (bêta)
+
+- **Objectifs** : « Cap semi de Paris » devient la vue « Objectifs », le centre de tes objectifs. L'objectif
+  principal (compte à rebours, temps visé, allure cible, part de ta VMA) et des **objectifs secondaires**
+  (courses de préparation, un 10 km pour se tester, un trail) : ajouter, modifier, supprimer, et l'étoile pour
+  en faire l'objectif principal. Sous chaque secondaire, l'équivalence de son temps visé sur la distance du
+  principal (Riegel : « ≈ 1:24:57 au semi »). Les courses de ton calendrier qui ne sont pas encore des objectifs
+  sont proposées. Une fois passés, les objectifs gardent ton temps, retrouvé dans les séances du jour, face au
+  temps visé. Aussi dans Réglages → Objectifs.
+- **Accueil** : la tuile « Objectifs » montre le principal, resserré, et dessous les secondaires à venir (la
+  liste défile s'il y en a beaucoup), sans changer de taille.
+- **Renfo : exercices pour rééquilibrer** (vue Renfo, sous l'équilibre avant / arrière) : combien de séries
+  ajouter pour viser 1:1,5, par semaine et par séance, et lesquelles, famille par famille (la paire la plus en
+  retard d'abord, le bas du corps en tête), avec le dosage, la consigne et le matériel (sans matériel d'abord).
+- **Le coach voit l'équilibre avant / arrière du renfo** de ses élèves : sur « Mes élèves » (« Renfo 1 : 0,8 »,
+  et son verdict) et sur la fiche (rapport, jauge, tendance semaine par semaine, paire par paire, ce qu'il peut
+  lui dire, et « Lui en parler » avec un message tout prêt à relire). Il voit aussi ses objectifs secondaires,
+  et la « Prochaine course » du groupe tient compte de tous les objectifs. Le relais se met à jour seul la nuit.
+- Le coach voit enfin la chaîne de chaque exercice (« Avant », « Arrière ») dans le détail d'une séance de renfo.
+- Claude Desktop : l'outil « objectif » donne aussi les objectifs secondaires et les passés.
+
 ## 0.8.1b3 — 15 novembre 2026 (bêta)
 
 - **Un logo fixe pour Foulée** : un F tracé avec les deux traits de la balise, blanc en haut, rouge au milieu.

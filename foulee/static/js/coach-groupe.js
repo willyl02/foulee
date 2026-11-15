@@ -46,6 +46,7 @@ function card(s) {
     </dl>
     <p class="co-goal">${icon("flag")}${goal ? `<span><b>${F.escape(goal.nom)}</b>${goal.temps_cible ? ` · ${F.escape(goal.temps_cible)}` : ""}</span>${goal.dans_jours != null ? `<span class="co-chip blue">${countdown(goal.dans_jours)}</span>` : ""}`
       : `<span class="muted">pas d'objectif partagé</span>`}</p>
+    ${s.renfo ? `<p class="co-goal co-renfo" title="Renfo des 4 dernières semaines : séries devant : derrière (cible du coureur 1:1 à 1:2)">${icon("balance")}<span>Renfo <b>${F.escape(s.renfo.ratio_texte)}</b></span><span class="eq-pill z-${F.escape(s.renfo.zone)}">${F.escape(s.renfo.verdict)}</span></p>` : ""}
     <div class="co-actions">
       <a class="btn btn-small" href="#/coach/eleve/${s.id}">${icon("user")}Fiche</a>
       <a class="btn btn-small btn-ghost" href="#/coach/messages?fil=eleve-${s.id}">${icon("chat")}Message</a>
@@ -59,12 +60,13 @@ function kpis(students) {
   const planned = students.reduce((a, s) => a + (s.semaine?.prevues || 0), 0);
   const plannedDone = students.reduce((a, s) => a + (s.semaine?.faites || 0), 0);
   const unread = students.filter((s) => s.non_lus);
-  const races = students.filter((s) => s.objectif?.dans_jours >= 0).sort((a, b) => a.objectif.dans_jours - b.objectif.dans_jours);
+  const next = (s) => s.prochain || s.objectif;  // le plus proche de ses objectifs (relais 0.8.1 et plus)
+  const races = students.filter((s) => next(s)?.dans_jours >= 0).sort((a, b) => next(a).dans_jours - next(b).dans_jours);
   const watch = students.filter((s) => s.alerte);
   return `<div class="co-kpis">
     <div class="co-kpi"><small>Séances cette semaine</small><b>${done}</b><span>${planned ? `${plannedDone} sur ${planned} prévues faites` : "rien de prévu"}</span></div>
     <div class="co-kpi"><small>Messages non lus</small><b>${unread.reduce((a, s) => a + s.non_lus, 0)}</b><span>${unread.length ? F.escape(unread.map((s) => s.nom.split(" ")[0]).join(", ")) : "tout est lu"}</span></div>
-    <div class="co-kpi"><small>Prochaine course</small><b>${races.length ? countdown(races[0].objectif.dans_jours) : "–"}</b><span>${races.length ? F.escape(`${races[0].nom.split(" ")[0]} · ${races[0].objectif.nom}`) : "aucun objectif daté"}</span></div>
+    <div class="co-kpi"><small>Prochaine course</small><b>${races.length ? countdown(next(races[0]).dans_jours) : "–"}</b><span>${races.length ? F.escape(`${races[0].nom.split(" ")[0]} · ${next(races[0]).nom}`) : "aucun objectif daté"}</span></div>
     <div class="co-kpi${watch.length ? " warn" : ""}"><small>À surveiller</small><b>${watch.length}</b><span>${watch.length ? F.escape(watch.map((s) => `${s.nom.split(" ")[0]} : ${s.alerte}`).join(", ")) : "personne"}</span></div>
   </div>`;
 }

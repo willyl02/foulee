@@ -514,9 +514,15 @@ def fractions_rapides(debut: str | None = None, fin: str | None = None) -> dict[
 
 @mcp.tool(annotations=READ)
 def objectif() -> dict[str, Any]:
-    """Objectif course des réglages : date, jours restants, temps cible, allure cible, % de VMA."""
+    """Objectifs de l'utilisateur. « principal » : l'objectif principal (date, jours restants, temps visé, allure
+    cible, % de VMA) ; « secondaires » : les autres à venir (courses de préparation…), avec l'équivalence de Riegel
+    de leur temps visé sur la distance du principal ; « passes » : les objectifs passés, avec le temps réalisé
+    retrouvé dans les séances du jour. Pour les modifier : modifier_reglages avec « objectif » (le principal) ou
+    « objectifs_secondaires » (la liste complète, chacun avec nom, date, distance_km, temps_cible, d_plus_m, note)."""
+    from . import objectifs
+
     with db.session(readonly=True) as conn:
-        return analysis.objective(db.get_settings(conn))
+        return objectifs.overview(conn, db.get_settings(conn))
 
 
 # ------------------------------------------------------------- accueil

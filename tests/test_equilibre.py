@@ -187,22 +187,24 @@ def test_tiles_added_once_to_the_views_already_in_place(garmin):
 
     with db.session() as conn:  # une installation neuve : les deux tuiles sont déjà là
         assert tiles(conn, "seance")[:3] == ["seance_resume", "seance_renfo", "seance_effet"]
-        assert tiles(conn, "renfo")[:3] == ["renfo", "renfo_equilibre", "renfo_exercices"]
-        for view_id, kind in (("seance", "seance_effet"), ("renfo", "renfo_equilibre")):
+        assert tiles(conn, "renfo")[:4] == ["renfo", "renfo_equilibre", "renfo_conseils", "renfo_exercices"]
+        for view_id, kinds in (("seance", {"seance_effet"}), ("renfo", {"renfo_equilibre", "renfo_conseils"})):
             spec = json.loads(conn.execute("SELECT spec FROM views WHERE id = ?", (view_id,)).fetchone()[0])
-            spec["tuiles"] = [t for t in spec["tuiles"] if t["type"] != kind]
+            spec["tuiles"] = [t for t in spec["tuiles"] if t["type"] not in kinds]
             conn.execute("UPDATE views SET spec = ? WHERE id = ?", (json.dumps(spec), view_id))
         db.delete_meta(conn, "vue_effet_entrainement")  # une base d'avant la 0.7.0b3
         db.delete_meta(conn, "vue_renfo_equilibre")
-    with db.session() as conn:
+        db.delete_meta(conn, "vue_renfo_conseils")  # d'avant la 0.8.1b4
+    with db.session() as conn:  # l'équilibre revient sous les muscles, les exercices pour rééquilibrer juste dessous
         assert tiles(conn, "seance")[:3] == ["seance_resume", "seance_renfo", "seance_effet"]
-        assert tiles(conn, "renfo")[:3] == ["renfo", "renfo_equilibre", "renfo_exercices"]
-        for view_id, kind in (("seance", "seance_effet"), ("renfo", "renfo_equilibre")):  # retirées à la main
+        assert tiles(conn, "renfo")[:4] == ["renfo", "renfo_equilibre", "renfo_conseils", "renfo_exercices"]
+        for view_id, kinds in (("seance", {"seance_effet"}), ("renfo", {"renfo_equilibre", "renfo_conseils"})):
             spec = json.loads(conn.execute("SELECT spec FROM views WHERE id = ?", (view_id,)).fetchone()[0])
-            spec["tuiles"] = [t for t in spec["tuiles"] if t["type"] != kind]
+            spec["tuiles"] = [t for t in spec["tuiles"] if t["type"] not in kinds]  # retirées à la main
             conn.execute("UPDATE views SET spec = ? WHERE id = ?", (json.dumps(spec), view_id))
     with db.session() as conn:
-        assert "seance_effet" not in tiles(conn, "seance") and "renfo_equilibre" not in tiles(conn, "renfo")
+        assert "seance_effet" not in tiles(conn, "seance")
+        assert not {"renfo_equilibre", "renfo_conseils"} & set(tiles(conn, "renfo"))
 
 
 def test_tile_types():

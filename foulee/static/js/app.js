@@ -20,23 +20,24 @@ import * as G from "./tiles-agenda.js";
 import * as R from "./tiles-renfo.js";
 import * as T from "./tiles-effet.js";
 import * as D from "./tiles-data.js";
+import * as O from "./goals.js";
 import * as H from "./tiles-home.js";
 import * as W from "./tiles-withings.js";
 
 const RENDERERS = {
   kpi: D.kpi, serie: D.serie, charge: D.charge, zones: D.zones, calendrier: D.calendrier, nuage: D.nuage,
-  postes: D.postes, objectif: D.objectif, fractions: D.fractions, note: D.note,
+  postes: D.postes, objectif: O.objectif, objectifs: O.objectifs, fractions: D.fractions, note: D.note,
   activites: A.activites, derniere_seance: A.derniere_seance, seance_resume: A.seance_resume,
   seance_carte: A.seance_carte, seance_courbes: A.seance_courbes, seance_tours: A.seance_tours,
   seance_mesures: A.seance_mesures,
-  renfo: R.renfo, renfo_exercices: R.renfo_exercices, seance_renfo: R.seance_renfo, renfo_equilibre: R.renfo_equilibre,
+  renfo: R.renfo, renfo_exercices: R.renfo_exercices, seance_renfo: R.seance_renfo, renfo_equilibre: R.renfo_equilibre, renfo_conseils: R.renfo_conseils,
   seance_effet: T.seance_effet,
   profil: H.profil, forme: H.forme, allures: H.allures, semaine: H.semaine, records: H.records, journee: H.journee,
   club: H.club, withings: W.withings, agenda: G.agenda, a_venir: G.a_venir,
 };
 const PERIODS = [[7, "7 j"], [30, "30 j"], [90, "90 j"], [180, "6 mois"], [365, "1 an"], [730, "2 ans"]];
 // Tuiles qui ne dépendent pas de la période : une vue faite seulement de celles-ci se passe du sélecteur
-const TIMELESS = new Set(["profil", "club", "withings", "agenda", "a_venir"]);
+const TIMELESS = new Set(["profil", "club", "withings", "agenda", "a_venir", "objectif", "objectifs"]);
 const WIDTHS = [3, 4, 6, 8, 9, 12];
 const THEMES = ["auto", "light", "dark"];
 const THEME_LABELS = { auto: "Thème : automatique", light: "Thème : clair", dark: "Thème : sombre" };
@@ -403,6 +404,15 @@ function makeContext(token) {
       } catch (err) {
         toast(err.message, { error: true });
       }
+    },
+    /** La vue qui contient une tuile de ce type (pour un lien « Gérer »), ou undefined. */
+    viewWith: (type) => state.views.find((v) => v.spec.tuiles.some((t) => t.type === type))?.id,
+    /** Les objectifs ont changé (centre de gestion) : l'objectif principal sert à d'autres tuiles. */
+    goalsChanged: (res, principalChanged) => {
+      state.boot.reglages = res.reglages;
+      state.boot.objectif = res.objectif;
+      api.clearCache();
+      if (principalChanged) renderView();
     },
     meta: (key) => state.catalog[key] || state.boot.metriques.find((m) => m.key === key) || { key, label: key, fmt: "num", unit: "" },
     sportLabel: (s) => E.sportLabel(s, state.boot.sports),

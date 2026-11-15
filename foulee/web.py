@@ -46,14 +46,15 @@ from . import (
     access,
     analysis,
     calendrier,
-    club,
     claude_desktop,
+    club,
     coach,
     config,
     datadir,
     db,
     keyinput,
     metrics,
+    objectifs,
     profile,
     reglages,
     renfo,
@@ -398,7 +399,46 @@ def create_app() -> FastAPI:
     @app.get("/api/objective")
     def get_objective() -> dict:
         with db.session(readonly=True) as conn:
-            return analysis.objective(db.get_settings(conn))
+            settings = db.get_settings(conn)
+            data = analysis.objective(settings)
+            data["secondaires"] = [g for g in (objectifs.describe(x, settings) for x in
+                                               settings.get("objectifs_secondaires") or []) if g]
+            return data
+
+    # ----------------------------------------------------------- objectifs
+    @app.get("/api/objectifs")
+    def get_goals() -> dict:
+        with db.session(readonly=True) as conn:
+            return objectifs.overview(conn, db.get_settings(conn))
+
+    def _save_goals(change) -> dict:
+        with db.session() as conn:
+            try:
+                patch = change(db.get_settings(conn))
+                settings, _ = reglages.apply(conn, patch)
+            except (objectifs.GoalError, reglages.SettingsError) as exc:
+                raise HTTPException(400, str(exc)) from exc
+            except LookupError as exc:
+                raise HTTPException(404, str(exc)) from exc
+            return {**objectifs.overview(conn, settings), "objectif": analysis.objective(settings),
+                    "reglages": settings}
+
+    @app.post("/api/objectifs")
+    def add_goal(payload: dict = Body(...)) -> dict:
+        """Nouvel objectif ; {"principal": true} pour en faire l'objectif principal."""
+        return _save_goals(lambda s: objectifs.add(s, payload))
+
+    @app.put("/api/objectifs/{goal_id}")
+    def update_goal(goal_id: str, payload: dict = Body(...)) -> dict:
+        return _save_goals(lambda s: objectifs.update(s, goal_id, payload))
+
+    @app.delete("/api/objectifs/{goal_id}")
+    def delete_goal(goal_id: str) -> dict:
+        return _save_goals(lambda s: objectifs.remove(s, goal_id))
+
+    @app.post("/api/objectifs/{goal_id}/principal")
+    def promote_goal(goal_id: str) -> dict:
+        return _save_goals(lambda s: objectifs.promote(s, goal_id))
 
     # -------------------------------------------------------------- accueil
     @app.get("/api/forme")

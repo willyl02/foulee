@@ -1227,7 +1227,7 @@ def objective(settings: dict) -> dict:
     target_s = parse_hms(goal.get("temps_cible", ""))
     distance = float(goal.get("distance_km") or 0)
     result: dict[str, Any] = {"nom": goal.get("nom"), "date": goal.get("date"), "distance_km": distance,
-                              "temps_cible": goal.get("temps_cible")}
+                              "temps_cible": goal.get("temps_cible"), "d_plus_m": goal.get("d_plus_m")}
     try:
         race_day = to_date(goal.get("date"))
         days_left = (race_day - date.today()).days

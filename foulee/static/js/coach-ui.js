@@ -194,7 +194,7 @@ function bubble(m, { role, fil, style }) {
  * Un fil (conversation, fil du groupe ou fil d'une séance) : la liste et la zone d'écriture.
  * style « bubbles » (messagerie) ou « comments » (sous une séance, fil du groupe).
  */
-export function mountThread(box, { fil, role, style = "bubbles", placeholder = "Écrire un message…", toast, onRead, empty = "Pas encore de message." }) {
+export function mountThread(box, { fil, role, style = "bubbles", placeholder = "Écrire un message…", toast, onRead, empty = "Pas encore de message.", draft = "" }) {
   let messages = [];
   let alive = true;
   let loaded = false;  // un fil vide doit aussi remplacer « Chargement… »
@@ -251,6 +251,7 @@ export function mountThread(box, { fil, role, style = "bubbles", placeholder = "
 
   const grow = () => { area.style.height = "auto"; area.style.height = `${Math.min(area.scrollHeight, 180)}px`; };
   area.addEventListener("input", grow);
+  if (draft) { area.value = draft; requestAnimationFrame(grow); }  // un brouillon proposé (fiche élève) : à relire, puis Envoyer
   area.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); form.requestSubmit(); }
   });

@@ -363,8 +363,9 @@ def _shared_session(conn: sqlite3.Connection, row: sqlite3.Row, accord: dict) ->
     sets = []
     for e in conn.execute("SELECT * FROM exercises WHERE activity_id = ? ORDER BY idx", (row["id"],)):
         info = renfo.describe(dict(e))
+        chain = info["chaine"] or {}
         sets.append({"exercice": info["nom"], "series": info["series"], "reps": info["repetitions"],
-                     "kg": info["charge_max_kg"], "chaine": (info["chaine"] or {}).get("court")})
+                     "kg": info["charge_max_kg"], "chaine": chain.get("chaine_nom"), "famille": chain.get("famille")})
     if sets:
         item["renfo"] = sets
     if accord.get("gps") and row["has_streams"]:
@@ -377,7 +378,7 @@ def _shared_session(conn: sqlite3.Connection, row: sqlite3.Row, accord: dict) ->
 def snapshot(conn: sqlite3.Connection, accord: dict, today: date | None = None) -> dict:
     """L'extrait des 4 dernières semaines, selon l'accord. Jamais les séances venues de Strava (ses règles
     l'interdisent), jamais de clé ni de jeton."""
-    from . import calendrier
+    from . import calendrier, objectifs
 
     today = today or date.today()
     since = (today - timedelta(days=SHARE_DAYS)).isoformat()
@@ -393,7 +394,9 @@ def snapshot(conn: sqlite3.Connection, accord: dict, today: date | None = None) 
         settings = db.get_settings(conn)
         goal = settings.get("objectif") if isinstance(settings.get("objectif"), dict) else None
         out["profil"] = {"vma_kmh": settings.get("vma_kmh"), "fc_max": settings.get("fc_max"),
-                         "objectif": goal if goal and goal.get("nom") else None}
+                         "objectif": {k: goal.get(k) for k in ("nom", "date", "distance_km", "temps_cible", "d_plus_m")}
+                         if goal and goal.get("nom") else None,
+                         "objectifs": objectifs.shared(settings, today)}
     wanted = (["sleep_s", "sleep_score", "hrv_night", "resting_hr"] if accord.get("sante") else []) + \
         (["weight_kg"] if accord.get("poids") else [])
     if wanted:

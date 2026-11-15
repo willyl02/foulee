@@ -242,14 +242,14 @@ Garmin Connect (une nouvelle publication donne un nouveau lien).
 
 | Vue | Contenu |
 |---|---|
-| Accueil | Bonjour (photo, poste du jour, objectif), forme du jour face à tes habitudes (chaque signal avec sa petite courbe : FC de repos face à ta moyenne 30 jours, VFC dans ta zone habituelle, sommeil face à ton besoin…), ta semaine (avec les séances prévues si ton calendrier est relié), tes allures selon ta VMA (tableau du club, piste, test VAMEVAL), Body Battery de la journée, records |
+| Accueil | Bonjour (photo, poste du jour, objectif), objectifs (le principal, et dessous les secondaires à venir), forme du jour face à tes habitudes (chaque signal avec sa petite courbe : FC de repos face à ta moyenne 30 jours, VFC dans ta zone habituelle, sommeil face à ton besoin…), ta semaine (avec les séances prévues si ton calendrier est relié), tes allures selon ta VMA (tableau du club, piste, test VAMEVAL), Body Battery de la journée, records |
 | Calendrier | Si tu as relié ton calendrier d'entraînement : ta prochaine course (compte à rebours) et tes prochaines séances, puis le mois jour par jour, séances prévues face aux séances faites |
 | Aujourd'hui | Nuit, VFC, FC de repos, Body Battery au réveil, stress, km sur 7 jours, fraîcheur, dernière séance |
 | Entraînement | Km par semaine, forme et fatigue (charge chronique, aiguë, fraîcheur, ratio), zones FC et d'allure, liste des séances |
-| Renfo | Dès ta première séance de renfo détaillée : muscles travaillés (carte du corps face et dos, séries par muscle), régularité face à ton objectif, équilibre avant / arrière (rapport 1:x, paire par paire, semaine après semaine), chaque exercice et sa progression, temps, séries et tonnage par semaine, séances |
+| Renfo | Dès ta première séance de renfo détaillée : muscles travaillés (carte du corps face et dos, séries par muscle), régularité face à ton objectif, équilibre avant / arrière (rapport 1:x, paire par paire, semaine après semaine), exercices pour rééquilibrer (combien de séries ajouter pour viser 1:1,5, et lesquels), chaque exercice et sa progression, temps, séries et tonnage par semaine, séances |
 | Séance | Résumé, exercices de renfo (avec la carte du corps et l'équilibre avant / arrière de la séance), effet d'entraînement (jauges aérobie et anaérobie de Garmin), carte, courbes synchronisées (FC, allure, altitude, cadence…), autres mesures (dynamique de course, puissance, respiration…), tours ou découpage au km |
 | Récup & postes | Comparaison d'un poste de travail à l'autre, sommeil, VFC, FC de repos, nuage sommeil → VFC, calendrier |
-| Cap semi de Paris | Compte à rebours, allure cible, fractions rapides face à l'allure cible, volume, charge, zones, VO2max |
+| Objectifs | Le centre de tes objectifs : le principal (compte à rebours, temps visé, allure cible, part de ta VMA) et les secondaires (courses de préparation…), avec l'équivalence de leur temps sur la distance du principal, les courses de ton calendrier à ajouter d'un clic, les objectifs passés et ton temps réalisé ; puis fractions rapides face à l'allure cible, volume, charge, zones, VO2max |
 | Mon club | Si tu l'as coché dans les Réglages : ton club FFA (avec son logo si tu l'as importé), coordonnées, site, carte, ta licence, et son classement sur athle.fr en un clic |
 | Withings | Si tu as relié ton compte : dernière pesée et composition corporelle, dernière tension (avec les repères de la Société européenne d'hypertension), dernière nuit, activité, puis les courbes de chaque appareil |
 
@@ -301,7 +301,9 @@ Foulée compare les séries : « 1 : 1,5 », c'est 1,5 série derrière pour 1 d
 cible du coureur va de 1:1 à 1:2 (la propulsion vient de la chaîne postérieure). La
 tuile « Renfo : équilibre avant / arrière » donne le rapport sur la période, paire
 par paire (bas du corps genou / hanche, haut du corps poussée / tirage, tronc, bras,
-bas de jambe) avec un conseil, et semaine après semaine ; la tuile « Exercices de
+bas de jambe) avec un conseil, et semaine après semaine ; la tuile « Renfo : exercices pour
+rééquilibrer », juste dessous, dit combien de séries ajouter pour viser 1:1,5 (par semaine et
+par séance) et lesquelles, famille par famille, avec dosage, consigne et matériel ; la tuile « Exercices de
 renfo » de la vue Séance donne celui de la séance, et une étiquette montre comment
 chaque exercice est compté. Les exercices « corps entier » comptent ½ de chaque côté ;
 le latéral et la rotation (planche latérale, bonds latéraux…) sont comptés à part.
@@ -656,11 +658,13 @@ ton adresse, par exemple `https://relais.mon-club.com`.
 
 **Ce que fait le coach** (page « Mes élèves ») :
 - le tableau de bord du groupe : pour chaque élève sa dernière séance, sa semaine jour par jour (fait, manqué,
-  prévu), sa charge sur 7 jours, sa VMA, son objectif et le compte à rebours, les messages non lus, et
-  l'alerte « 6 jours sans séance » ;
+  prévu), sa charge sur 7 jours, sa VMA, son objectif et le compte à rebours, l'équilibre avant / arrière de
+  son renfo, les messages non lus, et l'alerte « 6 jours sans séance » ;
 - la **fiche** d'un élève : sa semaine (son plan Garmin et les séances proposées, face à ce qu'il a fait,
   semaine après semaine), ses séances des 4 dernières semaines, son objectif et l'allure qui va avec, ses
-  séances proposées, sa forme (sommeil, VFC, FC au repos, poids) s'il la partage ;
+  objectifs secondaires, l'équilibre avant / arrière de son renfo (rapport, tendance, paire par paire, ce
+  que tu peux lui dire, et « Lui en parler » avec un message tout prêt), ses séances proposées, sa forme
+  (sommeil, VFC, FC au repos, poids) s'il la partage ;
 - chaque **séance** en détail : chiffres, tours, renfo, tracé simplifié (sans fond de carte), ce qui était
   proposé, et un **fil** pour en parler ;
 - **proposer une séance** à un ou plusieurs élèves : un déroulé en blocs (durée ou distance, répétitions,

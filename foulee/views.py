@@ -212,6 +212,14 @@ TILE_TYPES: list[dict[str, Any]] = [
         "params": [{"key": "periode", "label": "Période (jours)", "kind": "periode", "default": "herite"}],
     },
     {
+        "type": "renfo_conseils", "label": "Renfo : exercices pour rééquilibrer", "icone": "dumbbell",
+        "categorie": "Entraînement",
+        "description": "Selon ton équilibre avant / arrière : combien de séries ajouter pour viser 1:1,5, et quels "
+                       "exercices choisir (avec ou sans matériel), le bas du corps d'abord.",
+        "taille": {"w": 12, "h": 3},
+        "params": [{"key": "periode", "label": "Période (jours)", "kind": "periode", "default": "herite"}],
+    },
+    {
         "type": "seance_renfo", "label": "Séance : exercices de renfo", "icone": "dumbbell", "categorie": "Séances",
         "description": "Les exercices de la séance choisie (séries, répétitions, charge), les muscles travaillés "
                        "et l'équilibre avant / arrière de la séance. La tuile s'efface pour les séances sans renfo.",
@@ -261,9 +269,17 @@ TILE_TYPES: list[dict[str, Any]] = [
         ],
     },
     {
-        "type": "objectif", "label": "Objectif course", "icone": "flag", "categorie": "Entraînement",
-        "description": "Compte à rebours et allure cible de ton objectif (voir Réglages).",
+        "type": "objectif", "label": "Objectifs", "icone": "flag", "categorie": "Entraînement",
+        "description": "Ton objectif principal (compte à rebours, temps visé, allure cible) et, en dessous, tes "
+                       "objectifs secondaires à venir.",
         "taille": {"w": 4, "h": 2}, "params": [],
+    },
+    {
+        "type": "objectifs", "label": "Mes objectifs (gestion)", "icone": "flag", "categorie": "Entraînement",
+        "description": "Le centre de tes objectifs : le principal, les secondaires (courses de préparation…), "
+                       "ajout, modification, « en faire l'objectif principal », les courses de ton calendrier, et "
+                       "les objectifs passés avec ton temps réalisé.",
+        "taille": {"w": 12, "h": 3}, "params": [],
     },
     {
         "type": "fractions", "label": "Fractions rapides", "icone": "bolt", "categorie": "Entraînement",
@@ -306,6 +322,7 @@ CLUB_VIEW = "club"
 WITHINGS_VIEW = "withings"
 RENFO_VIEW = "renfo"
 CALENDAR_VIEW = "calendrier"
+OBJECTIVES_VIEW = "objectifs"
 
 
 def _tile(kind: str, w: int | None = None, h: int | None = None, titre: str | None = None, **params: Any) -> dict:
@@ -401,20 +418,24 @@ def default_views() -> list[dict]:
                 _tile("calendrier", 6, 2, titre="Calendrier du sommeil", metrique="sleep_s", mois="6"),
             ]},
         },
-        {
-            "id": "cap-semi", "name": "Cap semi de Paris", "icon": "flag",
-            "spec": {"tuiles": [
-                _tile("objectif", 4, 2),
-                _tile("fractions", 8, 2, periode="120"),
-                _tile("serie", 6, 2, titre="Kilomètres par semaine", metriques=["act.distance_km"], style="barres",
-                      agregation="semaine", sport=pied, periode="120"),
-                _tile("charge", 6, 2, periode="120"),
-                _tile("zones", 6, 2, titre="Zones d'allure par semaine", zones="allure", groupe="semaine",
-                      sport=pied, periode="120"),
-                _tile("serie", 6, 2, titre="VO2max estimée par Garmin", metriques=["vo2max"], periode="365"),
-            ]},
-        },
+        objectives_view(),
     ]
+
+
+def objectives_view() -> dict:
+    """La vue « Objectifs » : le centre de gestion, puis ce qui mesure la préparation (allure cible des
+    fractions, volume, charge, zones d'allure, VO2max)."""
+    pied = "pied"
+    return {"id": OBJECTIVES_VIEW, "name": "Objectifs", "icon": "flag", "spec": {"tuiles": [
+        _tile("objectifs", 12, 3),
+        _tile("fractions", 12, 2, periode="120"),
+        _tile("serie", 6, 2, titre="Kilomètres par semaine", metriques=["act.distance_km"], style="barres",
+              agregation="semaine", sport=pied, periode="120"),
+        _tile("charge", 6, 2, periode="120"),
+        _tile("zones", 6, 2, titre="Zones d'allure par semaine", zones="allure", groupe="semaine", sport=pied,
+              periode="120"),
+        _tile("serie", 6, 2, titre="VO2max estimée par Garmin", metriques=["vo2max"], periode="365"),
+    ]}}
 
 
 # ------------------------------------------------------------------ validation
@@ -501,6 +522,8 @@ def ensure_default_views(conn: sqlite3.Connection) -> None:
         db.set_meta(conn, "vue_effet_entrainement", "1")
         db.set_meta(conn, "vue_renfo_equilibre", "1")
         db.set_meta(conn, "vue_forme_large", "1")
+        db.set_meta(conn, "vue_objectifs", "1")
+        db.set_meta(conn, "vue_renfo_conseils", "1")
         conn.commit()
         return
     if db.get_meta(conn, "vue_seance_renfo") is None:
@@ -556,9 +579,54 @@ def ensure_default_views(conn: sqlite3.Connection) -> None:
                              (json.dumps(spec, ensure_ascii=False), db.now_iso()))
         db.set_meta(conn, "vue_forme_large", "1")
         conn.commit()
+    if db.get_meta(conn, "vue_objectifs") is None:
+        migrate_objectives_view(conn)
+        db.set_meta(conn, "vue_objectifs", "1")
+        conn.commit()
+    if db.get_meta(conn, "vue_renfo_conseils") is None:
+        # 0.8.1 : les exercices pour rééquilibrer, juste sous l'équilibre avant / arrière de la vue « Renfo »
+        _insert_tile(conn, RENFO_VIEW, "renfo_conseils", 12, 3, after=("renfo_equilibre", "renfo"))
+        db.set_meta(conn, "vue_renfo_conseils", "1")
+        conn.commit()
     if db.get_meta(conn, "renfo_vue") is None and sync_renfo_view(conn):
         # 0.6 : exercices retrouvés par la mise à niveau de la base, la vue « Renfo » sans attendre une synchro
         conn.commit()
+
+
+def migrate_objectives_view(conn: sqlite3.Connection) -> None:
+    """0.8.1 : « Cap semi de Paris » devient « Objectifs » (le centre de gestion en tête, à la place de la petite
+    tuile de l'objectif ; les autres tuiles restent). Un nom changé à la main est gardé. Sans cette vue (supprimée),
+    la vue « Objectifs » arrive après « Entraînement » ; rien si une vue a déjà le centre des objectifs."""
+    rows = conn.execute("SELECT id, name, spec FROM views").fetchall()
+    if any(any(t.get("type") == "objectifs" for t in json.loads(r["spec"]).get("tuiles", [])) for r in rows):
+        return
+    old = next((r for r in rows if r["id"] == "cap-semi"), None)
+    if old:
+        spec = json.loads(old["spec"])
+        tiles = spec.setdefault("tuiles", [])
+        at = next((i for i, t in enumerate(tiles) if t.get("type") == "objectif"), None)
+        if at is None:
+            tiles.insert(0, _tile("objectifs", 12, 3))
+        else:
+            tiles[at] = _tile("objectifs", 12, 3)
+            nxt = tiles[at + 1] if at + 1 < len(tiles) else None
+            if nxt and nxt.get("type") == "fractions" and nxt.get("w") == 8:
+                nxt["w"] = 12  # elle partageait la rangée avec la petite tuile de l'objectif
+        name = "Objectifs" if old["name"] == "Cap semi de Paris" else old["name"]
+        new_id = OBJECTIVES_VIEW if not any(r["id"] == OBJECTIVES_VIEW for r in rows) else "cap-semi"
+        conn.execute("UPDATE views SET id = ?, name = ?, spec = ?, updated_at = ? WHERE id = 'cap-semi'",
+                     (new_id, name, json.dumps(spec, ensure_ascii=False), db.now_iso()))
+        return
+    view = objectives_view()
+    if any(r["id"] == view["id"] for r in rows):
+        view["id"] = "objectifs-2"
+    anchor = conn.execute("SELECT position FROM views WHERE id IN ('entrainement', 'accueil') "
+                          "ORDER BY id = 'accueil' LIMIT 1").fetchone()
+    position = (anchor["position"] + 1) if anchor else 0
+    conn.execute("UPDATE views SET position = position + 1 WHERE position >= ?", (position,))
+    conn.execute("INSERT INTO views(id, name, icon, position, spec, builtin, updated_at) VALUES (?, ?, ?, ?, ?, 1, ?)",
+                 (view["id"], view["name"], view["icon"], position, json.dumps(view["spec"], ensure_ascii=False),
+                  db.now_iso()))
 
 
 def reset_default_views(conn: sqlite3.Connection) -> None:
@@ -735,6 +803,7 @@ def renfo_view() -> dict:
     return {"id": RENFO_VIEW, "name": "Renfo", "icon": "dumbbell", "spec": {"tuiles": [
         _tile("renfo", 12, 4),
         _tile("renfo_equilibre", 12, 2),
+        _tile("renfo_conseils", 12, 3),
         _tile("renfo_exercices", 12, 3),
         _tile("serie", 6, 2, titre="Temps de renfo par semaine", metriques=["act.duration_s"], style="barres",
               agregation="semaine", sport="renfo", periode="180"),

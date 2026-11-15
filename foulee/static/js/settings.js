@@ -1,9 +1,10 @@
-// Page « Réglages » : profil et logo, utilisateurs, mon club, coureur, objectif, horaires, zones FC et d'allure,
+// Page « Réglages » : profil et logo, utilisateurs, mon club, coureur, objectifs, horaires, zones FC et d'allure,
 // synchro, vues, sauvegarde ; puis l'installation (clé Garmin, dossier, Claude Desktop, mises à jour :
 // voir system.js).
 import * as api from "./api.js";
 import * as F from "./format.js";
 import { icon } from "./icons.js";
+import { goalManager } from "./goals.js";
 import { clubPanel } from "./settings-club.js";
 import { profilePanel, transferPanel } from "./settings-profile.js";
 import { scheduleEditor } from "./settings-schedule.js";
@@ -11,20 +12,8 @@ import { hrZonesEditor, paceZonesEditor } from "./settings-zones.js";
 import { systemSections, wireSystem } from "./system.js";
 import { accessPanel, usersPanel } from "./users.js";
 
-const SEMI = 21.0975;
-const DISTANCES = [["5", "5 km"], ["10", "10 km"], [String(SEMI), "Semi-marathon"], ["42.195", "Marathon"], ["autre", "Autre distance"]];
-
-function hms(text) {
-  const parts = String(text || "").split(":").map(Number);
-  if (parts.some((n) => !Number.isFinite(n))) return null;
-  while (parts.length < 3) parts.unshift(0);
-  return parts[0] * 3600 + parts[1] * 60 + parts[2];
-}
-
 export function renderSettings(page, boot, { onSaved, onProfile, refreshBoot, toast, resetViews, startSync, section = null }) {
   const s = structuredClone(boot.reglages);
-  const goal = s.objectif || {};
-  const preset = DISTANCES.find(([v]) => Number(v) === Number(goal.distance_km));
   const hr = boot.profil_fc || {};
   const principal = boot.utilisateur?.principal !== false;
   const users = boot.utilisateurs || [];
@@ -64,16 +53,9 @@ export function renderSettings(page, boot, { onSaved, onProfile, refreshBoot, to
       </section>
 
       <section data-section="objectif">
-        <h2>Objectif course</h2>
-        <p class="intro">Il alimente le compte à rebours, l'allure cible et la tuile des fractions rapides.</p>
-        <div class="form-grid">
-          <label class="field"><span>Nom</span><input type="text" name="goal_nom" value="${F.escape(goal.nom || "")}"></label>
-          <label class="field"><span>Date</span><input type="date" name="goal_date" value="${F.escape(goal.date || "")}"></label>
-          <label class="field"><span>Distance</span><select name="goal_preset">${DISTANCES.map(([v, l]) => `<option value="${v}" ${(preset ? preset[0] : "autre") === v ? "selected" : ""}>${l}</option>`).join("")}</select></label>
-          <label class="field" data-custom-distance ${preset ? "hidden" : ""}><span>Distance (km)</span><input type="number" step="0.001" min="0.4" name="goal_distance" value="${F.escape(goal.distance_km ?? "")}"></label>
-          <label class="field"><span>Temps visé (h:mm:ss)</span><input type="text" name="goal_temps" value="${F.escape(goal.temps_cible || "")}" placeholder="1:25:00" pattern="^\\d{1,2}(:\\d{2}){1,2}$"></label>
-        </div>
-        <p class="computed" data-goal-computed></p>
+        <h2>Objectifs</h2>
+        <p class="intro">Ton objectif principal alimente le compte à rebours, l'allure cible et la tuile des fractions rapides ; les objectifs secondaires (courses de préparation…) s'affichent dessous, sur l'Accueil. Chaque changement s'enregistre tout de suite.</p>
+        <div data-goals></div>
       </section>
 
       <section data-section="horaires">
@@ -155,23 +137,18 @@ export function renderSettings(page, boot, { onSaved, onProfile, refreshBoot, to
   const schedule = scheduleEditor(page.querySelector("[data-schedule]"), s.horaires);
   const hrZones = hrZonesEditor(page.querySelector("[data-hr-zones]"), boot, profile);
   const paceZones = paceZonesEditor(page.querySelector("[data-pace-zones]"), boot, vma);
+  goalManager(page.querySelector("[data-goals]"), {
+    toast,
+    vma,
+    onChange: (res) => { boot.reglages = res.reglages; boot.objectif = res.objectif; },
+  }).catch((err) => { page.querySelector("[data-goals]").innerHTML = `<p class="hint">${F.escape(err.message)}</p>`; });
   transferPanel(page.querySelector("[data-transfer]"), boot, {
     toast,
     onImported: () => refreshBoot("sauvegarde"),
   });
 
   const refresh = (event) => {
-    const distance = val("goal_preset") === "autre" ? num("goal_distance") : Number(val("goal_preset"));
-    const secs = hms(val("goal_temps"));
-    const goalOut = form.querySelector("[data-goal-computed]");
-    if (distance && secs) {
-      const speed = (distance * 1000) / secs;
-      goalOut.innerHTML = `Allure cible <b>${F.pace(speed)} /km</b>, soit <b>${F.dec1(speed * 3.6)} km/h</b> et <b>${Math.round((speed * 3.6 / vma()) * 100)} %</b> de ta VMA.`;
-    } else {
-      goalOut.textContent = "Renseigne une distance et un temps visé (h:mm:ss) pour voir l'allure cible.";
-    }
     form.querySelector("[data-fractions]").innerHTML = `Fractions rapides : plus rapides que <b>${F.pace((vma() * (num("fractions") || 85)) / 100 / 3.6)} /km</b>.`;
-    form.querySelector("[data-custom-distance]").hidden = val("goal_preset") !== "autre";
     const name = event?.target?.name;
     if (name === "fc_max" || name === "fc_repos") hrZones.refresh();
     if (name === "vma_kmh") paceZones.refresh();
@@ -192,19 +169,12 @@ export function renderSettings(page, boot, { onSaved, onProfile, refreshBoot, to
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     const status = form.querySelector("[data-status]");
-    const secs = hms(val("goal_temps"));
-    if (val("goal_temps") && !secs) { status.textContent = "Temps visé illisible : utilise h:mm:ss, par exemple 1:25:00."; return; }
     const pace = paceZones.value();
     const payload = {
       vma_kmh: vma(),
       fc_max: num("fc_max"),
       fc_repos: num("fc_repos"),
       sexe: val("sexe"),
-      objectif: {
-        nom: val("goal_nom"), date: val("goal_date"),
-        distance_km: val("goal_preset") === "autre" ? num("goal_distance") : Number(val("goal_preset")),
-        temps_cible: val("goal_temps"),
-      },
       horaires: schedule.value(),
       zones_fc: hrZones.value(),
       zones_allure: pace,
@@ -316,7 +286,7 @@ function keepInView(page, target) {
 }
 
 // =============================================================== sommaire
-const JUMPS = [["profil", "Profil"], ["utilisateurs", "Utilisateurs"], ["club", "Club"], ["coureur", "Coureur"], ["objectif", "Objectif"], ["horaires", "Horaires"],
+const JUMPS = [["profil", "Profil"], ["utilisateurs", "Utilisateurs"], ["club", "Club"], ["coureur", "Coureur"], ["objectif", "Objectifs"], ["horaires", "Horaires"],
   ["zones-fc", "Zones FC"], ["zones", "Allures"], ["synchro", "Synchro"], ["sauvegarde", "Sauvegarde"], ["cle", "Clé Garmin"], ["withings", "Withings"], ["strava", "Strava"],
   ["calendrier", "Calendrier"], ["coach", "Coach"],
   ["dossier", "Données"], ["claude", "Claude"], ["app", "Application"], ["lan", "Réseau local"], ["maj", "Mises à jour"],

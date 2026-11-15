@@ -25,6 +25,7 @@ export async function renderMessages(ctx) {
   const pane = page.querySelector("[data-pane]");
   let threads = [];
   let current = params.get("fil");
+  let draft = coachSide ? (params.get("brouillon") || "").slice(0, 4000) : "";  // proposé par la fiche élève, une fois
   let mounted = null;
 
   const drawList = () => {
@@ -51,6 +52,8 @@ export async function renderMessages(ctx) {
     if (!t) return;
     current = fil;
     history.replaceState(null, "", `#/coach/messages?fil=${encodeURIComponent(fil)}`);
+    const text = fil === params.get("fil") ? draft : "";
+    draft = "";
     chat.classList.add("has-open");
     mounted?.stop();
     const seanceKey = t.genre === "seance" ? fil.split("-").slice(2).join("-") : null;
@@ -64,7 +67,7 @@ export async function renderMessages(ctx) {
     const style = t.genre === "eleve" ? "bubbles" : "comments";
     const first = coachSide ? t.titre.split(" ")[0] : (me.coach?.nom || "ton coach").split(" ")[0];
     mounted = mountThread(pane.querySelector("[data-thread]"), {
-      fil, role, style, toast,
+      fil, role, style, toast, draft: text,
       placeholder: t.genre === "groupe" ? "Écrire au groupe…" : t.genre === "eleve" ? `Écrire à ${first}…` : "Répondre sous cette séance…",
       empty: t.genre === "groupe" ? "Le fil du groupe est vide. Une annonce, un rendez-vous, un bravo ?" : "Pas encore de message.",
       onRead: () => {
@@ -72,7 +75,7 @@ export async function renderMessages(ctx) {
       },
     });
     drawList();
-    if (window.matchMedia("(pointer: fine)").matches) mounted.ready.then(() => mounted.focus());
+    if (window.matchMedia("(pointer: fine)").matches || text) mounted.ready.then(() => mounted.focus());
   };
 
   await loadList();
