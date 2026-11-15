@@ -8,7 +8,7 @@
 <meta name="theme-color" content="#182020">
 <title>Foulée · connexion</title>
 <style>
-  :root { --page: #f2f5f3; --surface: #ffffff; --ink: #15201b; --muted: #5d6b64; --hair: #d9e0dc; --bark: #4b3e34; --bad: #b02a2a; }
+  :root { --page: #f2f5f3; --surface: #ffffff; --ink: #15201b; --muted: #5d6b64; --hair: #d9e0dc; --bark: #182020; --bad: #b02a2a; }
   @media (prefers-color-scheme: dark) {
     :root { --page: #101614; --surface: #18201d; --ink: #e4ebe7; --muted: #9aa8a1; --hair: #2a3530; --bad: #ef6b6b; }
   }
@@ -17,9 +17,7 @@
          background: var(--page); color: var(--ink); font: 16px/1.5 system-ui, "Segoe UI", sans-serif; }
   form { width: min(360px, 100%); background: var(--surface); border: 1px solid var(--hair); border-radius: 14px; padding: 26px 24px 20px; }
   .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 22px; margin-bottom: 20px; }
-  .chip { width: 32px; height: 24px; border-radius: 5px; background: var(--bark); display: grid; align-content: center; gap: 2px; padding: 0 5px; }
-  .chip i { display: block; height: 6px; border-radius: 1px; background: #fff; }
-  .chip i + i { background: #d3263a; }
+  .chip { display: block; flex: none; }
   label { display: grid; gap: 6px; font-size: 14px; font-weight: 500; color: var(--muted); }
   input { font: inherit; padding: 10px 12px; border-radius: 9px; border: 1px solid var(--hair); background: var(--page); color: var(--ink); }
   button { margin-top: 16px; width: 100%; font: inherit; font-weight: 600; padding: 10px; border: 0; border-radius: 9px;
@@ -31,7 +29,7 @@
 </head>
 <body>
 <form id="login">
-  <div class="brand"><span class="chip" aria-hidden="true"><i></i><i></i></span>Foulée</div>
+  <div class="brand"><svg viewBox="0 0 32 32" width="32" height="32" class="chip" aria-hidden="true"><rect width="32" height="32" rx="7" fill="#182020"/><rect x="8" y="6" width="5.5" height="20" rx="1.2" fill="#fff"/><rect x="8" y="6" width="16.5" height="5.5" rx="1.2" fill="#fff"/><rect x="8" y="14.5" width="12.5" height="5.5" rx="1.2" fill="#d3263a"/></svg>Foulée</div>
   <label>Mot de passe<input type="password" name="password" autocomplete="current-password" required autofocus></label>
   <button type="submit">Entrer</button>
   <p class="msg" id="msg" role="alert"></p>

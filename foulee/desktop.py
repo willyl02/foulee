@@ -36,7 +36,7 @@ MUTEX_NAME = "Local\\Foulee-app"
 INSTANCE_FILE = "app.json"
 SYNC_EVERY = 3 * 3600          # rythme par défaut (Réglages → Synchro et calculs, voir sync.intervals)…
 RETRY_AFTER_FAILURE = 30 * 60  # …et pas plus d'un essai par demi-heure quand ça échoue
-CHECK_EVERY = 10 * 60          # on regarde l'heure régulièrement : la mise en veille fausse les minuteries
+CHECK_EVERY = 5 * 60           # on regarde l'heure régulièrement : la mise en veille fausse les minuteries
 FIRST_CHECK_DELAY = 60
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 APPROVED_KEY = r"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run"
@@ -345,6 +345,16 @@ class AutoSync:
         with db.session(readonly=True) as conn:
             return sync.due_sources(conn, now)
 
+    def watch(self) -> list[str]:
+        """Entre deux synchros complètes, toutes les 20 minutes : une nouvelle séance chez Garmin ? Alors on va la
+        chercher tout de suite (la montre l'envoie à Garmin Connect quand le téléphone se synchronise)."""
+        from . import sync
+
+        last_attempt = self.last_attempt.get(self._profile_key())
+        if last_attempt and self.clock() - last_attempt < RETRY_AFTER_FAILURE:
+            return []
+        return sync.watch_check(self.clock())
+
     def tick(self) -> dict | None:
         """Une vérification par profil : lance chaque synchro due et renvoie le dernier résultat."""
         entries = self.profiles()
@@ -362,7 +372,7 @@ class AutoSync:
         from .strava import cache as strava_cache
 
         strava_cache.purge_file()  # rien de Strava au-delà de 48 heures, même sans synchro due
-        sources = self.due()
+        sources = self.due() or self.watch()
         if not sources:
             return None
         from . import calendrier, db, sync, utilisateurs

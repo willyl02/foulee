@@ -37,7 +37,18 @@ const RENDERERS = {
 };
 const PERIODS = [[7, "7 j"], [30, "30 j"], [90, "90 j"], [180, "6 mois"], [365, "1 an"], [730, "2 ans"]];
 // Tuiles qui ne dépendent pas de la période : une vue faite seulement de celles-ci se passe du sélecteur
-const TIMELESS = new Set(["profil", "club", "withings", "agenda", "a_venir", "objectif", "objectifs"]);
+const PERIOD_LABEL = Object.fromEntries(PERIODS);
+/** La tuile a-t-elle une période (réglage « Période » de son type) ? */
+const hasPeriod = (tile) => (state.types[tile.type]?.params || []).some((p) => p.kind === "periode");
+/** … et suit-elle le sélecteur de la vue (plutôt qu'une période qui lui est propre) ? */
+const followsView = (tile) => hasPeriod(tile) && (!tile.params?.periode || tile.params.periode === "herite");
+/** La période de la vue : celle choisie sur cet appareil, sinon celle de la vue (Entraînement : 6 mois…), sinon 90 j. */
+function viewDays(view) {
+  const saved = Number(store(`foulee-period:${view.id}`));
+  if (PERIOD_LABEL[saved]) return saved;
+  if (PERIOD_LABEL[view.spec.periode]) return Number(view.spec.periode);
+  return Number(store("foulee-period")) || 90;
+}
 const WIDTHS = [3, 4, 6, 8, 9, 12];
 const THEMES = ["auto", "light", "dark"];
 const THEME_LABELS = { auto: "Thème : automatique", light: "Thème : clair", dark: "Thème : sombre" };
@@ -325,7 +336,9 @@ async function renderView() {
     return;
   }
   const needsActivity = view.spec.tuiles.some((t) => t.type.startsWith("seance_"));
-  const usesPeriod = state.editing || !view.spec.tuiles.length || view.spec.tuiles.some((t) => !TIMELESS.has(t.type));
+  // Le sélecteur ne s'affiche que s'il change quelque chose : au moins une tuile qui suit la période de la vue
+  const usesPeriod = state.editing || !view.spec.tuiles.length || view.spec.tuiles.some(followsView);
+  state.days = viewDays(view);
   const todayIso = F.isoDate(new Date());
   page.innerHTML = `
     <header class="head">
@@ -345,7 +358,8 @@ async function renderView() {
 
   page.querySelectorAll("[data-days]").forEach((b) => b.addEventListener("click", () => {
     state.days = Number(b.dataset.days);
-    store("foulee-period", String(state.days));
+    store(`foulee-period:${view.id}`, String(state.days));  // chaque vue garde la sienne
+    store("foulee-period", String(state.days));  // et la dernière choisie sert aux vues sans période
     renderView();
   }));
   page.querySelector("[data-edit]").addEventListener("click", () => { state.editing = !state.editing; renderNav(); renderView(); });
@@ -463,7 +477,10 @@ function renderTile(view, tile, index, ctx) {
   }
   const title = tile.titre || renderer.title(tile.params, ctx);
   el.setAttribute("aria-label", title);
-  el.innerHTML = `${renderer.ownHead ? "" : `<div class="tile-head"><h2 class="tile-title" title="${F.escape(title)}">${F.escape(title)}</h2><span class="tile-src" hidden></span><span class="tile-sub"></span></div>`}
+  // Une tuile à période fixe dans une vue qui a son sélecteur : on le dit, sinon le sélecteur semble en panne
+  const fixed = hasPeriod(tile) && !followsView(tile) && view.spec.tuiles.some(followsView)
+    ? `<span class="tile-fixed" title="Période propre à cette tuile : le sélecteur de la vue ne la change pas (Modifier la vue pour la changer).">${icon("lock")}${F.escape(PERIOD_LABEL[tile.params.periode] || `${tile.params.periode} j`)}</span>` : "";
+  el.innerHTML = `${renderer.ownHead ? "" : `<div class="tile-head"><h2 class="tile-title" title="${F.escape(title)}">${F.escape(title)}</h2>${fixed}<span class="tile-src" hidden></span><span class="tile-sub"></span></div>`}
     <div class="tile-body"></div>${state.editing ? tileTools() : ""}`;
   const body = el.querySelector(".tile-body");
   // Sources des chiffres (Garmin, Strava, Withings), d'après les réponses de chaque requête de la tuile

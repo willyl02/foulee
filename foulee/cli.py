@@ -261,6 +261,7 @@ def _sync_due(args: argparse.Namespace, targets: list[dict]) -> int:
                 continue  # une synchro est déjà en cours (« Synchroniser », premier import) : rien à ajouter
             with db.session(readonly=True) as conn:
                 due = sync.due_sources(conn)
+            due = due or sync.watch_check()  # une nouvelle séance chez Garmin : pas besoin d'attendre 3 heures
             if not due:
                 continue
             if not args.quiet:
