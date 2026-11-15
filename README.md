@@ -65,6 +65,11 @@ Tant qu'il tourne, la synchro se fait toute seule, **toutes les 3 heures** par d
 (au réveil du PC si elle a été manquée ; rythme réglable, voir plus bas). Relancer
 Foulée depuis le menu Démarrer rouvre simplement l'interface.
 
+L'interface s'ouvre dans **sa propre fenêtre**, sans barre d'adresse, d'onglets ni de favoris (le mode
+application de Microsoft Edge, toujours présent sous Windows 10 et 11 ; Chrome à défaut), avec son icône
+dans la barre des tâches. Tu préfères un onglet de ton navigateur ? **Réglages → Application → Ouvrir
+Foulée → Dans mon navigateur**. Fermer la fenêtre n'arrête pas Foulée, qui reste près de l'horloge.
+
 ### Tu avais installé Foulée avec l'archive (dossier `C:\Users\<toi>\Foulee`) ?
 
 1. Dans ce dossier, double-clique sur **`Desinstaller-Foulee.cmd`** et réponds **N**

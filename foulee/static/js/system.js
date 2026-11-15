@@ -387,7 +387,23 @@ async function appPanel(box, { toast }) {
   }
   box.innerHTML = `
     ${info.demarrage_windows === null ? "" : `<label class="check"><input type="checkbox" data-startup ${info.demarrage_windows ? "checked" : ""}>Lancer Foulée à l'ouverture de session Windows</label>`}
+    ${info.fenetre ? `<fieldset class="app-window">
+      <legend>Ouvrir Foulée</legend>
+      <label class="radio"><input type="radio" name="fenetre" value="application" ${info.fenetre === "application" ? "checked" : ""}>
+        <span><b>Dans une fenêtre à part</b><small>Sa propre fenêtre et son icône dans la barre des tâches, sans barre d'adresse, d'onglets ni de favoris (avec Microsoft Edge).${info.fenetre_possible ? "" : " Edge est introuvable sur ce PC : Foulée s'ouvrira dans ton navigateur."}</small></span></label>
+      <label class="radio"><input type="radio" name="fenetre" value="navigateur" ${info.fenetre === "navigateur" ? "checked" : ""}>
+        <span><b>Dans mon navigateur</b><small>Un onglet de ton navigateur habituel.</small></span></label>
+      <p class="computed">Ça vaut pour l'icône près de l'horloge, celle du Bureau et le menu Démarrer : la prochaine fois que tu ouvres Foulée. Fermer la fenêtre n'arrête pas Foulée.</p>
+    </fieldset>` : ""}
     <p class="computed">Tant que Foulée tourne, la synchro se fait toute seule, au rythme choisi dans « Synchro et calculs » (toutes les 3 heures par défaut). Pour l'arrêter : clic droit sur son icône près de l'horloge, puis « Quitter Foulée ».</p>`;
+  box.querySelectorAll('input[name="fenetre"]').forEach((input) => input.addEventListener("change", async () => {
+    try {
+      const res = await api.put("/api/app", { fenetre: input.value });
+      toast(res.fenetre === "application" ? "Foulée s'ouvrira dans sa propre fenêtre." : "Foulée s'ouvrira dans ton navigateur.");
+    } catch (err) {
+      toast(err.message, { error: true });
+    }
+  }));
   box.querySelector("[data-startup]")?.addEventListener("change", async (event) => {
     const wanted = event.target.checked;
     try {

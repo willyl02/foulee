@@ -1680,6 +1680,8 @@ def create_app() -> FastAPI:
             "application": running,
             "demarrage_windows": desktop.startup_enabled() if running and desktop.startup_supported() else None,
             "synchro_auto_heures": desktop.SYNC_EVERY // 3600 if running else None,  # rythme par défaut
+            "fenetre": desktop.window_mode() if running else None,  # « Ouvrir Foulée » : fenêtre à part ou navigateur
+            "fenetre_possible": bool(desktop.app_browser()) if running else None,
         }
 
     @app.get("/api/app")
@@ -1699,6 +1701,13 @@ def create_app() -> FastAPI:
                 desktop.set_startup(bool(payload["demarrage_windows"]))
             except OSError as exc:
                 raise HTTPException(500, f"Réglage impossible : {exc}") from exc
+        if "fenetre" in payload:
+            if app.state.quit is None:
+                raise HTTPException(404, "Réglage propre à l'application Windows.")
+            try:
+                desktop.set_window_mode(str(payload["fenetre"]))
+            except ValueError as exc:
+                raise HTTPException(400, str(exc)) from exc
         return app_info()
 
     @app.post("/api/app/quitter")

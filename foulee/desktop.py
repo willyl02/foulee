@@ -127,6 +127,78 @@ def url_for(port: int, page: str = "") -> str:
     return f"http://127.0.0.1:{port}/{page}"
 
 
+# ------------------------------------------------- ouvrir l'interface
+# « Ouvrir Foulée » (Réglages › Application) : dans une fenêtre à part (le mode application d'Edge, sans
+# barre d'adresse, d'onglets ni de favoris ; Chrome à défaut) ou dans un onglet du navigateur habituel.
+WINDOW_KEY = "fenetre"
+WINDOW_MODES = ("application", "navigateur")
+APP_BROWSERS = (("Microsoft", "Edge", "msedge.exe"), ("Google", "Chrome", "chrome.exe"))
+
+
+def window_mode() -> str:
+    mode = config.load_user_config().get(WINDOW_KEY)
+    return mode if mode in WINDOW_MODES else "application"
+
+
+def set_window_mode(mode: str) -> str:
+    if mode not in WINDOW_MODES:
+        raise ValueError(f"Mode inconnu : {mode}")
+    config.save_user_config({WINDOW_KEY: mode})
+    return mode
+
+
+def app_browser() -> str | None:
+    """Edge (toujours là sous Windows 10 et 11), sinon Chrome ; FOULEE_NAVIGATEUR_APP pour les tests."""
+    custom = os.environ.get("FOULEE_NAVIGATEUR_APP")
+    if custom is not None:
+        return custom if custom and Path(custom).exists() else None
+    if sys.platform != "win32":
+        return None
+    bases = [os.environ.get(v) for v in ("ProgramFiles(x86)", "ProgramFiles", "ProgramW6432", "LOCALAPPDATA")]
+    for vendor, product, exe in APP_BROWSERS:  # pragma: no cover - Windows
+        found = _app_path(exe)
+        if found:
+            return found
+        for base in filter(None, bases):
+            path = Path(base) / vendor / product / "Application" / exe
+            if path.exists():
+                return str(path)
+    return None
+
+
+def _app_path(exe: str) -> str | None:  # pragma: no cover - Windows
+    try:
+        import winreg
+
+        for root in (winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE):
+            try:
+                with winreg.OpenKey(root, rf"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\{exe}") as key:
+                    value = winreg.QueryValue(key, None)
+                if value and Path(value.strip('"')).exists():
+                    return value.strip('"')
+            except OSError:
+                continue
+    except ImportError:
+        pass
+    return None
+
+
+def open_url(url: str) -> str:
+    """Ouvre l'interface comme l'utilisateur l'a choisi ; renvoie le mode réellement utilisé."""
+    if window_mode() == "application":
+        exe = app_browser()
+        if exe:
+            try:
+                flags = {"creationflags": getattr(subprocess, "DETACHED_PROCESS", 0)} if sys.platform == "win32" else {}
+                subprocess.Popen([exe, f"--app={url}"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                 stderr=subprocess.DEVNULL, close_fds=True, **flags)
+                return "application"
+            except OSError as exc:
+                LOG.warning("Fenêtre à part impossible (%s) : onglet du navigateur à la place", exc)
+    webbrowser.open(url)
+    return "navigateur"
+
+
 # ------------------------------------------------------------------- réseau
 def bind_socket(preferred: int, tries: int = 20) -> socket.socket:
     """Réserve un port sur 127.0.0.1 : le port habituel, sinon un des suivants s'il est pris."""
@@ -390,7 +462,7 @@ class DesktopApp:
         return url_for(self.port or self.preferred_port, page)
 
     def open_ui(self, page: str = "") -> None:
-        webbrowser.open(self.url(page))
+        open_url(self.url(page))
 
     def notify(self, message: str) -> None:
         LOG.info("Notification : %s", message)
@@ -589,7 +661,7 @@ def main(*, port: int, at_login: bool, after_update: bool, no_browser: bool, no_
         # Déjà lancé : on se contente d'ouvrir l'interface de la copie qui tourne
         if not (at_login or after_update or no_browser):
             info = read_instance()
-            webbrowser.open(url_for(info["port"] if info else port))
+            open_url(url_for(info["port"] if info else port))
         return 0
     try:
         return DesktopApp(port=port, open_browser=not (at_login or after_update or no_browser),

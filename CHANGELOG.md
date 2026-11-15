@@ -4,6 +4,13 @@ Les versions « bêta » (par exemple 0.4.0b1) sont des avant-premières : elles
 sur le canal bêta (Réglages → Mises à jour → « Recevoir les versions bêta »), puis sortent en
 version stable une fois éprouvées.
 
+## 0.8.1b2 — 15 novembre 2026 (bêta)
+
+- **Foulée dans sa propre fenêtre** : l'interface s'ouvre désormais dans une fenêtre à part, sans barre
+  d'adresse, d'onglets ni de favoris, avec son icône dans la barre des tâches (le mode application de Microsoft
+  Edge, Chrome à défaut). Pour retrouver l'onglet du navigateur : Réglages → Application → « Ouvrir Foulée » →
+  « Dans mon navigateur ». Vaut pour l'icône près de l'horloge, celle du Bureau et le menu Démarrer.
+
 ## 0.8.1b1 — 15 novembre 2026 (bêta)
 
 - **Foulée sur ton téléphone, depuis ton PC** (Réglages → Foulée sur ton téléphone) : avec Tailscale installé

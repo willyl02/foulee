@@ -2073,3 +2073,13 @@ a.co-pl:hover { box-shadow: inset 3px 0 0 var(--good), 0 0 0 1px var(--base); }
 @media (max-width: 640px) {
   .phone-on { grid-template-columns: 1fr; }
 }
+
+/* Réglages › Application : « Ouvrir Foulée » dans une fenêtre à part ou dans le navigateur */
+.app-window { border: 0; margin: 14px 0 6px; padding: 0; display: grid; gap: 8px; }
+.app-window legend { font-weight: 600; font-size: 15px; margin-bottom: 4px; padding: 0; }
+.app-window .radio { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 10px; align-items: start; padding: 10px 12px;
+  border-radius: 10px; background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--hair); cursor: pointer; }
+.app-window .radio:has(input:checked) { box-shadow: inset 0 0 0 2px var(--accent, var(--ink)); }
+.app-window .radio input { margin: 3px 0 0; accent-color: var(--accent, var(--ink)); }
+.app-window .radio b { display: block; font-size: 15px; }
+.app-window .radio small { display: block; margin-top: 2px; font-size: 13.5px; color: var(--ink-2); line-height: 1.4; }
