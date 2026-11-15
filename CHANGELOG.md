@@ -4,6 +4,16 @@ Les versions « bêta » (par exemple 0.4.0b1) sont des avant-premières : elles
 sur le canal bêta (Réglages → Mises à jour → « Recevoir les versions bêta »), puis sortent en
 version stable une fois éprouvées.
 
+## 0.8.1b6 — 15 novembre 2026 (bêta)
+
+- **Foulée sur Mac** (bêta) : `Foulee-<version>-mac-arm64.dmg` (Apple Silicon) et `-mac-intel.dmg` (Intel),
+  à glisser dans Applications. Comme sur le PC : interface, synchro automatique et veille des nouvelles
+  séances, Claude Desktop, mises à jour toutes seules (Foulée télécharge le .dmg de ton processeur, vérifie
+  son empreinte, remplace l'application et se relance). Icône dans la barre des menus, lancement à
+  l'ouverture de session, fenêtre à part avec Chrome ou Edge, clé API dans le Trousseau, données dans
+  ~/Library/Application Support/Foulee. L'application n'est pas signée par Apple : au premier lancement,
+  Réglages Système → Confidentialité et sécurité → « Ouvrir quand même » (une seule fois).
+
 ## 0.8.1b5 — 15 novembre 2026 (bêta)
 
 - **VO2max** : la tuile « VO2max estimée par Garmin » était vide, l'API personnelle de Garmin ne la donnant

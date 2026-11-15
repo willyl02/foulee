@@ -179,8 +179,10 @@ def test_sync_summary():
 
 def test_app_endpoints_outside_the_application():
     client = TestClient(web.create_app())
-    assert client.get("/api/app").json() == {"application": False, "demarrage_windows": None,
-                                            "synchro_auto_heures": None, "fenetre": None, "fenetre_possible": None}
+    info = client.get("/api/app").json()
+    assert info.pop("systeme") in ("windows", "mac", "serveur")
+    assert info == {"application": False, "demarrage_windows": None, "synchro_auto_heures": None, "fenetre": None,
+                    "fenetre_possible": None}
     assert client.post("/api/app/quitter", headers=WRITE).status_code == 404
     assert client.put("/api/app", json={"demarrage_windows": True}, headers=WRITE).status_code == 404
 

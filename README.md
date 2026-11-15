@@ -10,7 +10,8 @@ disposition de deux façons :
 - un **serveur MCP pour Claude Desktop**, pour poser tes questions à Claude directement.
 
 Sur Windows, Foulée s'installe comme n'importe quel programme et tourne en
-arrière-plan, avec son icône près de l'horloge. Installé sur un serveur à la maison,
+arrière-plan, avec son icône près de l'horloge ; **sur Mac** (bêta), c'est une application à glisser dans
+Applications, avec son icône dans la barre des menus (section 1 bis). Installé sur un serveur à la maison,
 il s'ouvre aussi **sur ton téléphone**, de partout, comme une appli (section 9).
 
 **Présentation illustrée** (27 pages, avec le téléchargement, l'installation pas à pas
@@ -71,6 +72,40 @@ L'interface s'ouvre dans **sa propre fenêtre**, sans barre d'adresse, d'onglets
 application de Microsoft Edge, toujours présent sous Windows 10 et 11 ; Chrome à défaut), avec son icône
 dans la barre des tâches. Tu préfères un onglet de ton navigateur ? **Réglages → Application → Ouvrir
 Foulée → Dans mon navigateur**. Fermer la fenêtre n'arrête pas Foulée, qui reste près de l'horloge.
+
+## 1 bis. Installer Foulée sur Mac (bêta)
+
+L'application Mac fonctionne comme celle du PC : l'interface, la synchro automatique, Claude Desktop, les
+mises à jour toutes seules. Il faut macOS 11 (Big Sur) ou plus récent.
+
+1. Sur la page des versions (https://github.com/willyl02/foulee/releases), télécharge le `.dmg` de ton Mac :
+   **`Foulee-<version>-mac-arm64.dmg`** pour un Mac **Apple Silicon** (puce M1, M2, M3, M4…), ou
+   **`Foulee-<version>-mac-intel.dmg`** pour un Mac **Intel**. Pour savoir : menu Pomme (en haut à gauche) → **À propos de ce Mac**,
+   ligne « Puce » (Apple M…) ou « Processeur » (Intel).
+2. Ouvre le `.dmg` et **glisse Foulée sur le dossier Applications**. Éjecte ensuite le `.dmg`.
+3. **Premier lancement** : l'application n'est pas signée par Apple (il faudrait un abonnement développeur
+   payant), alors macOS refuse d'abord de l'ouvrir (« Foulée n'a pas été ouvert » ou « Apple ne peut pas
+   vérifier… »). Clique sur **Terminé** (pas sur « Placer dans la corbeille »), puis :
+   - ouvre **Réglages Système → Confidentialité et sécurité** ;
+   - tout en bas, à côté de « Foulée a été bloqué… », clique sur **Ouvrir quand même** ;
+   - confirme avec ton mot de passe (ou Touch ID), puis **Ouvrir**.
+
+   C'est à faire une seule fois : ensuite, Foulée s'ouvre normalement, et ses mises à jour aussi.
+   (Sur macOS 14 et plus ancien, un clic droit sur Foulée dans Applications → **Ouvrir** suffit aussi.)
+4. Foulée s'ouvre sur sa **page d'accueil**, comme sur Windows : ta clé API Garmin, le premier import, et
+   Claude Desktop si tu l'utilises.
+
+Ensuite, Foulée tourne en arrière-plan avec son **icône dans la barre des menus** (en haut à droite de
+l'écran, le F rouge et blanc ; pas d'icône dans le Dock) : **Ouvrir Foulée**, **Synchroniser maintenant**,
+**Lancer à l'ouverture de session** (conseillé : la synchro automatique en dépend) et **Quitter Foulée**.
+L'interface s'ouvre dans sa propre fenêtre si **Google Chrome** ou **Microsoft Edge** est installé (Safari
+n'a pas de mode application), sinon dans ton navigateur. Ta clé API Garmin est rangée dans le **Trousseau**
+de macOS. Tes données sont dans `~/Library/Application Support/Foulee/donnees`.
+
+**Désinstaller sur Mac** : quitte Foulée (barre des menus → Quitter Foulée), décoche avant « Lancer à
+l'ouverture de session », puis glisse **Foulée** d'Applications vers la Corbeille. Tes données restent dans
+`~/Library/Application Support/Foulee` : supprime ce dossier si tu n'en veux plus (et l'entrée « Foulee »
+du Trousseau, dans l'app Trousseau d'accès).
 
 ### Tu avais installé Foulée avec l'archive (dossier `C:\Users\<toi>\Foulee`) ?
 
@@ -493,7 +528,7 @@ l'installer par-dessus : c'est exactement ce que fait le bouton.
 
 ## 7. Désinstaller
 
-Paramètres de Windows → **Applications** → **Foulée** → **Désinstaller**. Foulée se
+Sur Mac : voir la fin de la section 1 bis. Sur Windows : Paramètres de Windows → **Applications** → **Foulée** → **Désinstaller**. Foulée se
 ferme, se retire de Claude Desktop et du démarrage de Windows, puis te demande s'il
 faut **effacer aussi tes données** (base, fichiers FIT, réglages, clé Garmin) :
 réponds « Non » pour les garder, par exemple pour réinstaller plus tard. Si tu as rangé
