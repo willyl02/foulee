@@ -179,13 +179,34 @@ def _token_urls() -> list[str]:
     return [forced.rstrip("/")] if forced else [TOKEN_URL, TOKEN_URL_ALT]
 
 
-def _token_post(params: dict, settings: dict) -> tuple[int, Any]:
-    """POST au service des jetons de Garmin ; si une adresse répond par une page web (pas du JSON), l'autre."""
-    form = {**params, "client_id": settings["client_id"], "client_secret": settings["client_secret"]}
-    status, data = 0, None
+def _token_variants(params: dict, settings: dict):
+    """Les façons d'appeler le service des jetons : chaque adresse publiée, identifiants de l'appli dans le
+    formulaire (la note PKCE de Garmin) ou en en-tête « Basic » (l'usage OAuth 2.0 courant)."""
+    basic = base64.b64encode(f"{settings['client_id']}:{settings['client_secret']}".encode()).decode()
     for url in _token_urls():
-        status, data = _call("POST", url, headers={"Accept": "application/json"}, form=form)
-        if status < 400 or isinstance(data, dict):
+        yield url, "formulaire", {"Accept": "application/json"}, \
+            {**params, "client_id": settings["client_id"], "client_secret": settings["client_secret"]}
+        yield url, "en-tête", {"Accept": "application/json", "Authorization": f"Basic {basic}"}, \
+            {**params, "client_id": settings["client_id"]}
+
+
+def _answered(status: int, data: Any) -> bool:
+    """Garmin a-t-il vraiment répondu (un jeton, ou un refus OAuth en JSON), et pas une page d'erreur web ?"""
+    return status < 400 or isinstance(data, dict)
+
+
+def _token_post(params: dict, settings: dict) -> tuple[int, Any]:
+    """POST au service des jetons ; tant qu'une variante répond par une page web d'erreur, la suivante. La bonne
+    est retenue (meta « garmin-jetons-variante ») pour les appels suivants."""
+    variants = list(_token_variants(params, settings))
+    remembered = vault.get_secret("relais-garmin-variante")
+    variants.sort(key=lambda v: f"{v[0]} {v[1]}" != remembered)
+    status, data = 0, None
+    for url, kind, headers, form in variants:
+        status, data = _call("POST", url, headers=headers, form=form)
+        if _answered(status, data):
+            if f"{url} {kind}" != remembered:
+                vault.set_secret("relais-garmin-variante", f"{url} {kind}")
             break
     return status, data
 
@@ -223,13 +244,22 @@ def _reason(data: Any) -> str:
 def check_app() -> dict:
     """« foulee relais garmin tester » : Garmin reconnaît-il le Client ID et le Client Secret enregistrés ?
 
-    On demande un jeton avec un jeton de renouvellement bidon : des identifiants faux sont refusés comme tels
-    (401, invalid_client) ; des identifiants justes, pour le jeton seulement (400, invalid_grant)."""
+    On demande un jeton avec un jeton de renouvellement bidon, de chaque façon possible : des identifiants faux
+    sont refusés comme tels (401, invalid_client) ; des identifiants justes, pour le jeton seulement (400,
+    invalid_grant). Rien n'est jamais affiché du secret, que sa longueur."""
     settings = _settings()
-    status, data = _token_post({"grant_type": "refresh_token", "refresh_token": "essai-foulee"}, settings)
-    reason = _reason(data)
-    ok = status != 401 and "client" not in reason.lower()
-    return {"ok": ok, "http": status, "motif": reason, "client_id": settings["client_id"],
+    tries = []
+    for url, kind, headers, form in _token_variants({"grant_type": "refresh_token", "refresh_token": "essai-foulee"},
+                                                    settings):
+        status, data = _call("POST", url, headers=headers, form=form)
+        reason = _reason(data)
+        good = _answered(status, data) and status != 401 and "client" not in reason.lower()
+        tries.append({"adresse": urlsplit(url).hostname, "identifiants": kind, "http": status, "motif": reason,
+                      "ok": good})
+        if good:
+            vault.set_secret("relais-garmin-variante", f"{url} {kind}")
+            break
+    return {"ok": any(t["ok"] for t in tries), "essais": tries, "client_id": settings["client_id"],
             "secret": len(settings["client_secret"]), "retour": redirect_uri(settings)}
 
 

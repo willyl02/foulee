@@ -682,7 +682,9 @@ def _relay_garmin(args: argparse.Namespace) -> int:
             _say(str(exc))
             return 1
         _say(f"Client ID {result['client_id']}, Client Secret de {result['secret']} caractères.")
-        _say(f"Réponse de Garmin : HTTP {result['http']} {result['motif']}".rstrip())
+        for attempt in result["essais"]:
+            _say(f"  {'✓' if attempt['ok'] else '·'} {attempt['adresse']}, identifiants en {attempt['identifiants']} : "
+                 f"HTTP {attempt['http']} {attempt['motif']}".rstrip())
         if result["ok"]:
             _say("✓ Garmin reconnaît l'appli : Client ID et Client Secret sont bons.")
             _say(f"  Vérifie aussi chez Garmin l'« OAuth redirect URL » : {result['retour']}")

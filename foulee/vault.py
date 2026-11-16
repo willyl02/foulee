@@ -49,6 +49,7 @@ SECRETS = {
     # et la clé qui chiffre, dans sa base, les autorisations Garmin des élèves
     "relais-garmin-appli": ("relais-garmin-appli", "relais-garmin-appli", None),
     "relais-garmin-cle": ("relais-garmin-cle", "relais-garmin-cle", None),
+    "relais-garmin-variante": ("relais-garmin-variante", "relais-garmin-variante", None),  # façon d'appeler Garmin qui marche
 }
 # un exemplaire par profil (l'appli Strava : un pour l'installation)
 PER_PROFILE = {"garmin", "withings", "strava", "calendrier", "relais"}
