@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Foulée · Confidentialité</title>
+<meta name="description" content="Politique de confidentialité de Foulée / Foulée privacy policy.">
+<style>
+  :root { color-scheme: light dark; --ink: #15201b; --muted: #5d6a64; --page: #f2f5f3; --card: #fcfdfc; --hair: #dce3df;
+    --red: #d3263a; }
+  @media (prefers-color-scheme: dark) {
+    :root { --ink: #e8eeeb; --muted: #a7b3ad; --page: #101614; --card: #182020; --hair: #2a3532; --red: #ff6b7d; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 32px 16px; background: var(--page); color: var(--ink);
+    font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; background: var(--card); border: 1px solid var(--hair); border-radius: 14px;
+    padding: 28px 26px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 19px; margin-bottom: 18px; }
+  .brand svg { width: 28px; height: 28px; }
+  h1 { font-size: 24px; margin: 0 0 4px; line-height: 1.25; }
+  h2 { font-size: 18px; margin: 26px 0 8px; }
+  .lang { font-size: 14px; color: var(--muted); margin: 0 0 18px; }
+  .lang a, a { color: var(--red); }
+  p, li { color: var(--muted); }
+  p b, li b { color: var(--ink); }
+  ul { padding-left: 20px; }
+  hr { border: 0; border-top: 1px solid var(--hair); margin: 36px 0; }
+  .date { font-size: 14px; color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <div class="brand">
+    <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="#182020"/>
+      <rect x="8" y="6" width="5.5" height="20" rx="1.2" fill="#fff"/><rect x="8" y="6" width="16.5" height="5.5" rx="1.2" fill="#fff"/>
+      <rect x="8" y="14.5" width="12.5" height="5.5" rx="1.2" fill="#d3263a"/></svg>
+    Foulée
+  </div>
+
+  <h1 id="en">Privacy policy</h1>
+  <p class="lang">English · <a href="#fr">Français plus bas</a></p>
+  <p class="date">Last updated: 16 November 2026</p>
+
+  <p><b>Foulée</b> is a free, open-source, non-commercial application for runners and their club coach
+  (source code: <a href="https://github.com/willyl02/foulee">github.com/willyl02/foulee</a>). It has no
+  advertising, no user tracking or analytics, and no data is ever sold or shared for marketing.</p>
+
+  <h2>1. Data stays on your own computer</h2>
+  <p>Foulée is installed on each user's own computer (Windows or Mac) or home server. The sport and health data it
+  downloads from the user's own accounts (Garmin Connect through the user's personal API key, and optionally
+  Withings and Strava) is stored <b>only on that machine</b>. It is not sent to the Foulée project or to anyone
+  else. Access keys are kept in the operating system's credential store (Windows Credential Manager, macOS
+  Keychain).</p>
+
+  <h2>2. Sending workouts to Garmin Connect (Garmin Training API)</h2>
+  <p>When a user chooses to link Foulée to Garmin Connect, Garmin asks for their consent. Foulée then only
+  <b>sends</b> structured workouts (for example, a session proposed by the club coach, with the user's own
+  target paces) to the user's Garmin Connect calendar, so that the watch can download them.</p>
+  <ul>
+    <li>Stored for this purpose: the Garmin authorization token, the Garmin user ID, and the workouts sent.
+      The token is stored encrypted on the club relay server (section 3) and never shared.</li>
+    <li>Foulée does not read any Garmin device data through this access.</li>
+    <li>The user can unlink at any time, in Foulée or in Garmin Connect (connected apps). The token is then
+      deleted from the relay.</li>
+  </ul>
+
+  <h2>3. The club relay (coach and athletes)</h2>
+  <p>A coach and their athletes can exchange through a small relay server run for the club. It stores only:
+  accounts (username, hashed password), invitation codes, messages, the workouts proposed by the coach, the
+  Garmin authorization of section 2, and the extract each athlete chooses, box by box, to share with their coach
+  (summary of the last 4 weeks of sessions, goals, VMA; GPS, sleep, HRV and weight only if the athlete opts in).
+  When an athlete leaves the group, their account and everything they shared are deleted from the relay.</p>
+
+  <h2>4. Service providers</h2>
+  <ul>
+    <li><b>Oracle Cloud Infrastructure</b>: hosts the relay server (virtual machine).</li>
+    <li><b>Cloudflare</b>: carries HTTPS traffic to the relay (Cloudflare Tunnel); it does not store the data.</li>
+    <li><b>GitHub</b>: hosts the source code, the downloads and this page; no user data.</li>
+    <li><b>Optional, chosen by the user:</b> the user may connect their own local Foulée to the Claude Desktop app
+      (Anthropic) on their computer to analyse their data. This is the user's own choice and their own account;
+      Foulée itself sends nothing to any AI provider.</li>
+  </ul>
+
+  <h2>5. Your rights</h2>
+  <p>Under the GDPR, you can ask to access, correct or delete your data held on the relay, or unlink Garmin at any
+  time. Data on your own computer is under your control: uninstalling Foulée and deleting its data folder
+  removes it. Contact: <a href="mailto:william.lequin@gmail.com">william.lequin@gmail.com</a>, or an issue on
+  <a href="https://github.com/willyl02/foulee/issues">GitHub</a>.</p>
+
+  <hr>
+
+  <h1 id="fr">Politique de confidentialité</h1>
+  <p class="lang">Français · <a href="#en">English above</a></p>
+  <p class="date">Dernière mise à jour : 16 novembre 2026</p>
+
+  <p><b>Foulée</b> est une application gratuite, libre et non commerciale, pour les coureurs et le coach de leur
+  club (code source : <a href="https://github.com/willyl02/foulee">github.com/willyl02/foulee</a>). Pas de
+  publicité, pas de pistage ni de mesure d'audience, et aucune donnée n'est vendue ni cédée.</p>
+
+  <h2>1. Tes données restent chez toi</h2>
+  <p>Foulée s'installe sur ton ordinateur (Windows ou Mac) ou ton serveur. Les données sport et santé qu'il
+  récupère sur tes propres comptes (Garmin Connect avec ta clé API personnelle ; Withings et Strava si tu les
+  relies) sont rangées <b>uniquement sur cette machine</b>. Elles ne partent ni vers le projet Foulée ni vers qui
+  que ce soit. Les clés d'accès vont dans le coffre du système (Gestionnaire d'identification de Windows,
+  Trousseau du Mac).</p>
+
+  <h2>2. Envoyer des séances vers Garmin Connect (Training API de Garmin)</h2>
+  <p>Si tu relies Foulée à Garmin Connect, Garmin te demande ton accord. Foulée ne fait alors qu'<b>envoyer</b>
+  des séances structurées (par exemple une séance proposée par ton coach, avec tes allures) dans ton calendrier
+  Garmin Connect, pour que ta montre les récupère.</p>
+  <ul>
+    <li>Conservés pour cela : l'autorisation Garmin (jeton), ton identifiant Garmin et les séances envoyées. Le
+      jeton est chiffré sur le relais du club (point 3) et n'est jamais partagé.</li>
+    <li>Foulée ne lit aucune donnée de ta montre par cet accès.</li>
+    <li>Tu peux délier à tout moment, dans Foulée ou dans Garmin Connect (applications connectées) : le jeton est
+      alors effacé du relais.</li>
+  </ul>
+
+  <h2>3. Le relais du club (coach et élèves)</h2>
+  <p>Un coach et ses élèves échangent par un petit serveur tenu pour le club. Il ne garde que : les comptes
+  (identifiant, mot de passe chiffré), les codes d'invitation, les messages, les séances proposées par le coach,
+  l'autorisation Garmin du point 2, et l'extrait que chaque élève choisit, case par case, de partager avec son
+  coach (résumé de ses séances des 4 dernières semaines, objectifs, VMA ; GPS, sommeil, VFC et poids seulement
+  s'il le veut). Quand un élève quitte le groupe, son compte et tout ce qu'il a partagé sont effacés du relais.</p>
+
+  <h2>4. Prestataires</h2>
+  <ul>
+    <li><b>Oracle Cloud Infrastructure</b> : héberge le relais (machine virtuelle).</li>
+    <li><b>Cloudflare</b> : achemine le trafic HTTPS vers le relais (tunnel Cloudflare), sans garder les données.</li>
+    <li><b>GitHub</b> : héberge le code, les téléchargements et cette page ; aucune donnée d'utilisateur.</li>
+    <li><b>Au choix de l'utilisateur :</b> tu peux relier ton Foulée à l'application Claude Desktop (Anthropic) sur
+      ton ordinateur pour analyser tes données. C'est ton choix et ton compte ; Foulée lui-même n'envoie rien à
+      aucun service d'IA.</li>
+  </ul>
+
+  <h2>5. Tes droits</h2>
+  <p>Selon le RGPD, tu peux demander l'accès, la correction ou l'effacement de tes données sur le relais, et délier
+  Garmin à tout moment. Les données sur ton ordinateur restent à toi : désinstaller Foulée et supprimer son dossier
+  de données les efface. Contact : <a href="mailto:william.lequin@gmail.com">william.lequin@gmail.com</a>, ou un
+  ticket sur <a href="https://github.com/willyl02/foulee/issues">GitHub</a>.</p>
+</main>
+</body>
+</html>
