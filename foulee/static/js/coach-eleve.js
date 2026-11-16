@@ -23,18 +23,43 @@ function shareList(accord) {
     <dt>Sommeil, VFC</dt><dd>${yes(accord.sante)}</dd><dt>Poids</dt><dd>${yes(accord.poids)}</dd></dl>`;
 }
 
-function proposal(p, vma) {
+/** L'envoi sur la montre d'une séance : « sur ta montre », « à renvoyer » (le coach l'a modifiée), ou rien. */
+function watchChip(m) {
+  if (!m) return "";
+  if (!m.a_jour) return `<span class="co-chip warn" title="${F.escape(m.erreur || "Ton coach l'a modifiée depuis l'envoi")}">${icon("watch")}à renvoyer</span>`;
+  return `<span class="co-chip good" title="Dans ton calendrier Garmin pour le ${F.escape(dayLabel(m.date).toLowerCase())} (envoyée ${F.escape(F.relative(m.envoye_le))}${m.par === "coach" ? " par ton coach" : ""})">${icon("watch")}sur ta montre</span>`;
+}
+
+function proposal(p, vma, watch) {
   const href = p.seance ? `#/coach/seance/${encodeURIComponent(p.seance.cle)}` : "";
+  const open = p.statut !== "fait" && p.statut !== "manque";
+  const sent = p.montre && p.montre.a_jour;
   return `<article class="co-myprop is-${F.escape(p.statut || "")}">
-    <header><span class="co-ico">${sportIcon(p.sport)}</span><div><b>${F.escape(p.titre)}</b><span>${F.escape(dayLabel(p.date))}${p.sport_label ? ` · ${F.escape(p.sport_label)}` : ""}</span></div>${statusChip(p.statut)}</header>
+    <header><span class="co-ico">${sportIcon(p.sport)}</span><div><b>${F.escape(p.titre)}</b><span>${F.escape(dayLabel(p.date))}${p.sport_label ? ` · ${F.escape(p.sport_label)}` : ""}</span></div><span class="co-chips">${watchChip(p.montre)}${statusChip(p.statut)}</span></header>
     ${blocksHtml(p.blocs, vma)}
     ${p.consigne ? `<p class="co-consigne">« ${F.escape(p.consigne)} »</p>` : ""}
     <div class="inline-actions" style="margin:8px 0 0">
       ${href ? `<a class="btn btn-small" href="${href}">${icon("activity")}Ma séance : ${F.escape(p.seance.nom || "voir")}</a>` : ""}
-      ${p.statut !== "fait" && p.statut !== "manque" ? `<a class="btn btn-small btn-ghost" href="/api/coach/seances/${p.id}.fit" download title="Fichier d'entraînement Garmin, avec tes allures">${icon("download")}Pour ma montre (.fit)</a>
+      ${open && watch?.disponible ? `<button type="button" class="btn btn-small ${sent ? "btn-ghost" : "btn-primary"}" data-watch="${p.id}" title="${sent ? "La renvoyer (elle remplace la précédente)" : "Dans ton calendrier Garmin Connect, à sa date : ta montre la récupère à sa synchro"}">${icon("watch")}${sent ? "Renvoyer sur ma montre" : "Envoyer sur ma montre"}</button>` : ""}
+      ${open ? `<a class="btn btn-small btn-ghost" href="/api/coach/seances/${p.id}.fit" download title="Fichier d'entraînement Garmin, avec tes allures, à copier par câble USB">${icon("download")}${watch?.disponible ? "Fichier .fit" : "Pour ma montre (.fit)"}</a>
         <button type="button" class="btn btn-small btn-ghost" data-fit-help>${icon("info")}Comment ?</button>` : ""}
     </div>
   </article>`;
+}
+
+/** La carte « Ta montre Garmin » : relier, ce que le coach peut faire, délier. */
+function watchCard(watch, first) {
+  if (!watch?.disponible) return "";
+  if (!watch.relie) {
+    return `<section class="coach-card co-watchcard"><h2>${icon("watch")}Ta montre Garmin</h2>
+      <p>Relie une fois ton compte Garmin Connect : les séances de ${F.escape(first)} partiront ensuite sur ta montre en un clic, avec <b>tes</b> allures, à leur date dans ton calendrier Garmin.</p>
+      <p class="hint">Tu te connectes chez Garmin, sur le site de Garmin, puis tu cliques sur «&nbsp;Accepter&nbsp;». Foulée ne voit jamais ton mot de passe et ne lit rien de ta montre : il ne fait qu'y déposer des séances.</p>
+      <div class="inline-actions" style="margin:10px 0 0"><button type="button" class="btn btn-small" data-watch-link>${icon("watch")}Relier mon compte Garmin</button></div></section>`;
+  }
+  return `<section class="coach-card co-watchcard"><h2>${icon("watch")}Ta montre Garmin <span class="co-chip good">${icon("check")}reliée</span></h2>
+    <p class="hint">Compte Garmin Connect relié ${F.escape(F.relative(watch.relie_le))}. «&nbsp;Envoyer sur ma montre&nbsp;» range la séance dans ton calendrier Garmin, à sa date ; synchronise ta montre pour l'y trouver.</p>
+    <label class="co-check"><input type="checkbox" data-watch-coach ${watch.coach_peut_envoyer ? "checked" : ""}><span>${F.escape(first)} peut envoyer ses séances directement sur ma montre</span></label>
+    <div class="inline-actions" style="margin:10px 0 0"><button type="button" class="btn btn-small btn-ghost" data-watch-unlink>${icon("close")}Délier mon compte Garmin</button></div></section>`;
 }
 
 export async function renderMyCoach(ctx) {
@@ -64,18 +89,20 @@ export async function renderMyCoach(ctx) {
           ${clubLogo ? `<img class="co-club-logo" src="${clubLogo}" alt="Logo du club${clubName ? ` ${F.escape(clubName)}` : ""}" title="${F.escape(first)} fait partie de ton club${clubName ? ` : ${F.escape(clubName)}` : ""}">` : ""}
           <div class="co-actions"><a class="btn btn-small" href="#/coach/messages?fil=groupe">${icon("club")}Fil du groupe</a></div></section>
         <section class="coach-card"><h2>${icon("calendar")}Séances proposées par ${F.escape(first)} ${upcoming.length ? `<span class="co-count">${upcoming.length}</span>` : ""}</h2>
-          ${upcoming.length ? upcoming.map((p) => proposal(p, data.vma_kmh)).join("") : `<p class="co-empty">Rien de prévu pour l'instant.</p>`}
+          ${upcoming.length ? upcoming.map((p) => proposal(p, data.vma_kmh, data.montre)).join("") : `<p class="co-empty">Rien de prévu pour l'instant.</p>`}
           ${upcoming.length ? `<p class="hint" style="margin:10px 0 0">Elles sont aussi dans ta vue « Calendrier », en pointillé bleu.${data.vma_kmh ? ` Allures calculées avec ta VMA (${F.dec1(data.vma_kmh)} km/h).` : " Indique ta VMA dans Réglages → Profil pour voir tes allures."}</p>` : ""}
           <div class="co-fit-help" data-fit-box hidden><b>${icon("download")}Mettre la séance sur ta montre</b>
             <ol><li>Télécharge le fichier <b>.fit</b> (bouton « Pour ma montre »). Il contient chaque bloc, avec <b>tes</b> allures en fourchette ou la zone de FC.</li>
               <li>Branche ta montre Garmin à l'ordinateur en USB et ouvre-la dans l'Explorateur de fichiers.</li>
               <li>Copie le fichier dans le dossier <code>GARMIN\\NewFiles</code> de la montre.</li>
               <li>Débranche la montre : la séance apparaît dans <b>Entraînement → Entraînements</b>.</li></ol>
-            <p>Pas de câble sous la main ? Recopie la séance dans Garmin Connect (Entraînement → Entraînements → Créer), bloc par bloc.</p></div>
-          ${past.length ? `<details class="co-past"><summary>Les 2 dernières semaines (${past.length})</summary>${past.map((p) => proposal(p, data.vma_kmh)).join("")}</details>` : ""}
+            <p>${data.montre?.disponible ? "Plus simple : « Envoyer sur ma montre », sans câble." : "Pas de câble sous la main ? Recopie la séance dans Garmin Connect (Entraînement → Entraînements → Créer), bloc par bloc."}</p></div>
+          ${past.length ? `<details class="co-past"><summary>Les 2 dernières semaines (${past.length})</summary>${past.map((p) => proposal(p, data.vma_kmh, data.montre)).join("")}</details>` : ""}
         </section>
       </div>
       <div class="co-page">
+        <div data-watch-wait hidden></div>
+        ${watchCard(data.montre, first)}
         <section class="coach-card co-minichat"><h2>${icon("chat")}Conversation avec ${F.escape(first)}</h2><div data-thread></div>
           <a class="hint" href="#/coach/messages?fil=eleve-${me.id}">Ouvrir dans Messages ›</a></section>
         <section class="coach-card"><h2>${icon("lock")}Ce que tu partages</h2>${shareList(accord)}
@@ -85,6 +112,7 @@ export async function renderMyCoach(ctx) {
       </div>
     </div>`;
 
+  bindWatch(ctx, page, data, first);
   page.querySelectorAll("[data-fit-help]").forEach((b) => b.addEventListener("click", () => {
     const box = page.querySelector("[data-fit-box]");
     box.hidden = !box.hidden;
@@ -103,6 +131,101 @@ export async function renderMyCoach(ctx) {
       renderMyCoach(ctx);
     } catch (err) { toast(err.message); btn.disabled = false; }
   });
+}
+
+// ------------------------------------------------------------ la montre (Garmin)
+let waiting = null; // la liaison en cours chez Garmin (une seule à la fois)
+
+function bindWatch(ctx, page, data, first) {
+  const { toast } = ctx;
+  const box = page.querySelector("[data-watch-wait]");
+  if (waiting) showWait(box, waiting.url, waiting.title);
+
+  // Garmin s'ouvre dans une autre fenêtre ; on guette le retour (compte relié, séance partie)
+  const waitForLink = (url, title, proposalId) => {
+    waiting = { url, title, proposalId, until: Date.now() + 15 * 60 * 1000 };
+    showWait(box, url, title);
+    const tick = async () => {
+      if (!waiting || Date.now() > waiting.until) { waiting = null; return; }
+      try {
+        const st = await api.get("/api/coach/garmin", null, { fresh: true });
+        if (st.relie) {
+          const done = waiting;
+          waiting = null;
+          toast(done.proposalId ? `Compte Garmin relié : « ${done.title} » est partie dans ton calendrier Garmin. Synchronise ta montre.` : "Compte Garmin relié : tes séances partiront maintenant en un clic.");
+          if (location.hash.startsWith("#/coach")) renderMyCoach(ctx);
+          return;
+        }
+      } catch { /* relais momentanément injoignable : on réessaie */ }
+      setTimeout(tick, 3000);
+    };
+    setTimeout(tick, 3000);
+  };
+
+  // window.open tout de suite (dans le clic), sinon le navigateur bloque la fenêtre
+  const openGarmin = () => {
+    const win = window.open("about:blank", "_blank");
+    if (win) { try { win.opener = null; win.document.title = "Garmin Connect…"; } catch { /* rien */ } }
+    return win;
+  };
+  const go = (win, url) => { if (win && !win.closed) win.location.href = url; };
+
+  page.querySelectorAll("[data-watch]").forEach((btn) => btn.addEventListener("click", async () => {
+    const id = Number(btn.dataset.watch);
+    const p = (data.propositions || []).find((x) => x.id === id);
+    const win = data.montre?.relie ? null : openGarmin();
+    btn.disabled = true;
+    try {
+      const res = await api.post(`/api/coach/seances/${id}/montre`);
+      if (res.envoi) {
+        win?.close();
+        toast(`« ${p?.titre || "La séance"} » est dans ton calendrier Garmin pour le ${dayLabel(res.envoi.date).toLowerCase()} : synchronise ta montre.`);
+        renderMyCoach(ctx);
+        return;
+      }
+      if (res.a_relier) {
+        if (res.raison) toast(res.raison);
+        go(win, res.adresse);
+        waitForLink(res.adresse, p?.titre || "La séance", id);
+        btn.disabled = false;
+      }
+    } catch (err) {
+      win?.close();
+      toast(err.message);
+      btn.disabled = false;
+    }
+  }));
+  page.querySelector("[data-watch-link]")?.addEventListener("click", async (e) => {
+    const btn = e.currentTarget;
+    const win = openGarmin();
+    btn.disabled = true;
+    try {
+      const res = await api.post("/api/coach/garmin/relier");
+      go(win, res.adresse);
+      waitForLink(res.adresse, "", null);
+    } catch (err) { win?.close(); toast(err.message); }
+    btn.disabled = false;
+  });
+  page.querySelector("[data-watch-coach]")?.addEventListener("change", async (e) => {
+    try {
+      await api.put("/api/coach/garmin", { coach_peut_envoyer: e.target.checked });
+      toast(e.target.checked ? `${first} peut envoyer ses séances sur ta montre.` : `${first} ne peut plus envoyer sur ta montre : toi seul le fais.`);
+    } catch (err) { toast(err.message); e.target.checked = !e.target.checked; }
+  });
+  page.querySelector("[data-watch-unlink]")?.addEventListener("click", async (e) => {
+    if (!window.confirm("Délier ton compte Garmin ? Foulée perd le droit d'y déposer des séances (l'autorisation est aussi retirée chez Garmin). Les séances déjà envoyées restent dans ton calendrier Garmin.")) return;
+    e.currentTarget.disabled = true;
+    try { await api.del("/api/coach/garmin"); toast("Compte Garmin délié."); renderMyCoach(ctx); }
+    catch (err) { toast(err.message); e.currentTarget.disabled = false; }
+  });
+}
+
+function showWait(box, url, title) {
+  if (!box) return;
+  box.hidden = false;
+  box.innerHTML = `<section class="co-callout co-watchwait"><span class="spinner" aria-hidden="true"></span><div><b>Garmin Connect s'est ouvert dans une autre fenêtre</b>
+    <span>Connecte-toi chez Garmin et clique sur «&nbsp;Accepter&nbsp;»${title ? ` : «&nbsp;${F.escape(title)}&nbsp;» partira aussitôt` : ""}. Cette page se met à jour toute seule.</span></div>
+    <a class="btn btn-small" href="${F.escape(url)}" target="_blank" rel="noopener">${icon("external")}Rouvrir Garmin</a></section>`;
 }
 
 export async function renderAccord(ctx) {

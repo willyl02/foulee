@@ -107,6 +107,36 @@ CREATE TABLE IF NOT EXISTS modeles (
     contenu   TEXT NOT NULL,
     cree_le   TEXT NOT NULL
 );
+
+-- Envoi des séances sur la montre (Training API de Garmin, voir garmin.py) : le lien de chaque élève (jetons
+-- chiffrés), les autorisations en cours (15 minutes) et les séances envoyées
+CREATE TABLE IF NOT EXISTS garmin_liens (
+    compte_id           INTEGER PRIMARY KEY REFERENCES comptes(id) ON DELETE CASCADE,
+    garmin_user         TEXT NOT NULL,
+    jetons              TEXT NOT NULL,            -- chiffré (Fernet), avec la clé du dossier des secrets
+    relie_le            TEXT NOT NULL,
+    coach_peut_envoyer  INTEGER NOT NULL DEFAULT 1
+);
+CREATE TABLE IF NOT EXISTS garmin_attentes (
+    etat            TEXT PRIMARY KEY,
+    compte_id       INTEGER NOT NULL REFERENCES comptes(id) ON DELETE CASCADE,
+    verificateur    TEXT NOT NULL,
+    proposition_id  INTEGER,
+    vma_kmh         REAL,
+    cree_le         TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS garmin_envois (
+    proposition_id  INTEGER PRIMARY KEY REFERENCES propositions(id) ON DELETE CASCADE,
+    compte_id       INTEGER NOT NULL REFERENCES comptes(id) ON DELETE CASCADE,
+    workout_id      INTEGER,
+    schedule_id     INTEGER,
+    date            TEXT NOT NULL,
+    envoye_le       TEXT NOT NULL,
+    par             TEXT NOT NULL,
+    version         TEXT NOT NULL,                -- « modifie_le » de la séance au moment de l'envoi
+    vma_kmh         REAL,
+    erreur          TEXT
+);
 """
 
 SCHEMA_VERSION = 1
@@ -269,7 +299,10 @@ def set_active(conn: sqlite3.Connection, account_id: int, active: bool) -> None:
 
 def delete_account(conn: sqlite3.Connection, account_id: int) -> None:
     """Efface le compte et tout ce qui s'y rattache (sessions, invitations, ce qu'il a partagé, ses conversations ;
-    pour un coach, ses élèves et tout son groupe)."""
+    pour un coach, ses élèves et tout son groupe). Chacun est d'abord délié de Garmin, chez Garmin aussi."""
+    from . import garmin
+
+    garmin.unlink_all(conn, account_id)
     conn.execute("DELETE FROM messages WHERE fil = ? OR fil LIKE ?", (f"eleve-{account_id}", f"seance-{account_id}-%"))
     conn.execute("DELETE FROM comptes WHERE id = ?", (account_id,))
 

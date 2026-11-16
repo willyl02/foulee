@@ -49,7 +49,7 @@ def session(key, day, **extra):
 def test_share_needs_accord_and_follows_it(relay):
     sophie = token(relay, "sophie")
     lucas, lucas_id = join(relay, sophie, "lucas", "Lucas B.")
-    today = date.today()
+    today = club._today()  # la date du relais (heure de Paris), pas celle de la machine de test
     payload = {"seances": [session("garmin:1", today, trace=[[49.0, 3.4], [49.01, 3.41]])],
                "jours": [{"date": today.isoformat(), "sommeil_h": 7.5, "vfc": 61, "poids_kg": 70.2}],
                "profil": {"vma_kmh": 17, "objectif": {"nom": "Semi de Reims", "date": (today + timedelta(days=30))
@@ -113,7 +113,7 @@ def test_messages_threads_and_access(relay):
 def test_proposals_status_and_overview(relay):
     sophie = token(relay, "sophie")
     lucas, lucas_id = join(relay, sophie, "lucas", "Lucas B.")
-    today = date.today()
+    today = club._today()
     blocks = [{"nom": "Échauffement", "duree_min": 20, "pct_vma": 65, "genre": "echauffement"},
               {"nom": "Seuil", "repetitions": 3, "duree_min": 10, "pct_vma": 88, "recup_min": 2}]
     res = relay.post("/api/v1/propositions", headers=sophie, json={

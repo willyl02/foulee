@@ -1,6 +1,6 @@
 [project]
 name = "foulee"
-version = "0.8.0"
+version = "0.8.1"
 description = "Foulée — hub local de données sport et santé (Garmin d'abord)"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -10,10 +10,12 @@ dependencies = [
     "fastapi>=0.115",
     "uvicorn>=0.30",
     "mcp>=1.10",
-    "keyring>=25; sys_platform == 'win32'",
-    "pystray>=0.19.5 ; sys_platform == 'win32'",
+    "keyring>=25; sys_platform == 'win32' or sys_platform == 'darwin'",  # Gestionnaire d'identification, Trousseau
+    "pystray>=0.19.5 ; sys_platform == 'win32' or sys_platform == 'darwin'",  # icône près de l'horloge / des menus
     "tzdata>=2024.1 ; sys_platform == 'win32'",  # fuseaux horaires (heures des mesures Withings) : absents de Windows
     "pillow>=11",
+    "segno>=1.6",
+    "cryptography>=44",  # relais : les autorisations Garmin des élèves, chiffrées dans sa base
 ]
 
 [project.scripts]

@@ -195,6 +195,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
         "distance_km": 21.0975,
         "temps_cible": "1:25:00",
     },
+    "objectifs_secondaires": [],  # les autres objectifs (voir objectifs.py) ; l'objectif principal reste ci-dessus
     "postes": {                # ancien réglage (0.1 à 0.4), relu si « horaires » est vide
         "actif": True,
         "impaires": "matin",   # semaines ISO impaires

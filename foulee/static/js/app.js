@@ -20,23 +20,35 @@ import * as G from "./tiles-agenda.js";
 import * as R from "./tiles-renfo.js";
 import * as T from "./tiles-effet.js";
 import * as D from "./tiles-data.js";
+import * as O from "./goals.js";
 import * as H from "./tiles-home.js";
 import * as W from "./tiles-withings.js";
 
 const RENDERERS = {
   kpi: D.kpi, serie: D.serie, charge: D.charge, zones: D.zones, calendrier: D.calendrier, nuage: D.nuage,
-  postes: D.postes, objectif: D.objectif, fractions: D.fractions, note: D.note,
+  postes: D.postes, objectif: O.objectif, objectifs: O.objectifs, fractions: D.fractions, note: D.note,
   activites: A.activites, derniere_seance: A.derniere_seance, seance_resume: A.seance_resume,
   seance_carte: A.seance_carte, seance_courbes: A.seance_courbes, seance_tours: A.seance_tours,
   seance_mesures: A.seance_mesures,
-  renfo: R.renfo, renfo_exercices: R.renfo_exercices, seance_renfo: R.seance_renfo, renfo_equilibre: R.renfo_equilibre,
+  renfo: R.renfo, renfo_exercices: R.renfo_exercices, seance_renfo: R.seance_renfo, renfo_equilibre: R.renfo_equilibre, renfo_conseils: R.renfo_conseils,
   seance_effet: T.seance_effet,
   profil: H.profil, forme: H.forme, allures: H.allures, semaine: H.semaine, records: H.records, journee: H.journee,
   club: H.club, withings: W.withings, agenda: G.agenda, a_venir: G.a_venir,
 };
 const PERIODS = [[7, "7 j"], [30, "30 j"], [90, "90 j"], [180, "6 mois"], [365, "1 an"], [730, "2 ans"]];
 // Tuiles qui ne dépendent pas de la période : une vue faite seulement de celles-ci se passe du sélecteur
-const TIMELESS = new Set(["profil", "club", "withings", "agenda", "a_venir"]);
+const PERIOD_LABEL = Object.fromEntries(PERIODS);
+/** La tuile a-t-elle une période (réglage « Période » de son type) ? */
+const hasPeriod = (tile) => (state.types[tile.type]?.params || []).some((p) => p.kind === "periode");
+/** … et suit-elle le sélecteur de la vue (plutôt qu'une période qui lui est propre) ? */
+const followsView = (tile) => hasPeriod(tile) && (!tile.params?.periode || tile.params.periode === "herite");
+/** La période de la vue : celle choisie sur cet appareil, sinon celle de la vue (Entraînement : 6 mois…), sinon 90 j. */
+function viewDays(view) {
+  const saved = Number(store(`foulee-period:${view.id}`));
+  if (PERIOD_LABEL[saved]) return saved;
+  if (PERIOD_LABEL[view.spec.periode]) return Number(view.spec.periode);
+  return Number(store("foulee-period")) || 90;
+}
 const WIDTHS = [3, 4, 6, 8, 9, 12];
 const THEMES = ["auto", "light", "dark"];
 const THEME_LABELS = { auto: "Thème : automatique", light: "Thème : clair", dark: "Thème : sombre" };
@@ -194,7 +206,7 @@ function closeMenu() { $("#rail").classList.remove("open"); }
 function renderBrand() {
   const profil = state.boot.profil || {};
   document.querySelectorAll(".brand-mark").forEach((box) => { box.innerHTML = brandMark(profil, box.dataset.size ? Number(box.dataset.size) : 28); });
-  setFavicon(profil);
+  setFavicon();
 }
 
 /** Recharge l'état du serveur (après un réglage qui touche l'en-tête, les horaires…). */
@@ -232,7 +244,7 @@ function renderNav() {
   const nav = $("#nav");
   nav.innerHTML = state.views.map((v, i) => `<button class="nav-item" type="button" data-id="${F.escape(v.id)}" data-index="${i}"
       ${v.id === state.viewId && !isOtherPage() ? 'aria-current="page"' : ""} ${state.editing ? 'draggable="true"' : ""}>
-      ${icon(v.icon)}<span>${F.escape(v.name)}</span><span class="blaze" aria-hidden="true"></span></button>`).join("")
+      ${icon(v.icon)}<span>${F.escape(v.name)}</span></button>`).join("")
     + `<button class="nav-item nav-add" type="button" data-new>${icon("plus")}<span>Nouvelle vue</span></button>`
     + (state.boot?.coach ? `<a class="nav-item nav-coach" href="#/coach" ${location.hash.startsWith("#/coach") ? 'aria-current="page"' : ""}>${icon(state.boot.coach.role === "coach" ? "club" : "user")}<span>${coachPageLabel(state.boot.coach)}</span><span class="co-badge nav-badge" data-coach-unread ${coachUnread() ? "" : "hidden"}>${coachUnread()}</span></a>` : "");
   nav.querySelectorAll("[data-id]").forEach((b) => {
@@ -324,7 +336,9 @@ async function renderView() {
     return;
   }
   const needsActivity = view.spec.tuiles.some((t) => t.type.startsWith("seance_"));
-  const usesPeriod = state.editing || !view.spec.tuiles.length || view.spec.tuiles.some((t) => !TIMELESS.has(t.type));
+  // Le sélecteur ne s'affiche que s'il change quelque chose : au moins une tuile qui suit la période de la vue
+  const usesPeriod = state.editing || !view.spec.tuiles.length || view.spec.tuiles.some(followsView);
+  state.days = viewDays(view);
   const todayIso = F.isoDate(new Date());
   page.innerHTML = `
     <header class="head">
@@ -344,7 +358,8 @@ async function renderView() {
 
   page.querySelectorAll("[data-days]").forEach((b) => b.addEventListener("click", () => {
     state.days = Number(b.dataset.days);
-    store("foulee-period", String(state.days));
+    store(`foulee-period:${view.id}`, String(state.days));  // chaque vue garde la sienne
+    store("foulee-period", String(state.days));  // et la dernière choisie sert aux vues sans période
     renderView();
   }));
   page.querySelector("[data-edit]").addEventListener("click", () => { state.editing = !state.editing; renderNav(); renderView(); });
@@ -404,6 +419,15 @@ function makeContext(token) {
         toast(err.message, { error: true });
       }
     },
+    /** La vue qui contient une tuile de ce type (pour un lien « Gérer »), ou undefined. */
+    viewWith: (type) => state.views.find((v) => v.spec.tuiles.some((t) => t.type === type))?.id,
+    /** Les objectifs ont changé (centre de gestion) : l'objectif principal sert à d'autres tuiles. */
+    goalsChanged: (res, principalChanged) => {
+      state.boot.reglages = res.reglages;
+      state.boot.objectif = res.objectif;
+      api.clearCache();
+      if (principalChanged) renderView();
+    },
     meta: (key) => state.catalog[key] || state.boot.metriques.find((m) => m.key === key) || { key, label: key, fmt: "num", unit: "" },
     sportLabel: (s) => E.sportLabel(s, state.boot.sports),
     period: (p) => {
@@ -453,7 +477,10 @@ function renderTile(view, tile, index, ctx) {
   }
   const title = tile.titre || renderer.title(tile.params, ctx);
   el.setAttribute("aria-label", title);
-  el.innerHTML = `${renderer.ownHead ? "" : `<div class="tile-head"><h2 class="tile-title" title="${F.escape(title)}">${F.escape(title)}</h2><span class="tile-src" hidden></span><span class="tile-sub"></span></div>`}
+  // Une tuile à période fixe dans une vue qui a son sélecteur : on le dit, sinon le sélecteur semble en panne
+  const fixed = hasPeriod(tile) && !followsView(tile) && view.spec.tuiles.some(followsView)
+    ? `<span class="tile-fixed" title="Période propre à cette tuile : le sélecteur de la vue ne la change pas (Modifier la vue pour la changer).">${icon("lock")}${F.escape(PERIOD_LABEL[tile.params.periode] || `${tile.params.periode} j`)}</span>` : "";
+  el.innerHTML = `${renderer.ownHead ? "" : `<div class="tile-head"><h2 class="tile-title" title="${F.escape(title)}">${F.escape(title)}</h2>${fixed}<span class="tile-src" hidden></span><span class="tile-sub"></span></div>`}
     <div class="tile-body"></div>${state.editing ? tileTools() : ""}`;
   const body = el.querySelector(".tile-body");
   // Sources des chiffres (Garmin, Strava, Withings), d'après les réponses de chaque requête de la tuile

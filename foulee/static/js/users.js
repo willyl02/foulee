@@ -4,7 +4,7 @@ import * as api from "./api.js";
 import { confirm, openDialog } from "./editor.js";
 import * as F from "./format.js";
 import { icon } from "./icons.js";
-import { brandMark, logoSVG } from "./logos.js";
+import { appIconSVG, logoSVG } from "./logos.js";
 
 const COLORS = ["#4b3e34", "#2f5d50", "#8a3b2f", "#3d5a80", "#6b4f2a", "#5b4a7a", "#2f6b5e", "#7a4a5e"];
 const colorOf = (id) => COLORS[[...String(id)].reduce((sum, ch) => sum + ch.charCodeAt(0), 0) % COLORS.length];
@@ -150,7 +150,7 @@ export function renderChooser(page, boot, { toast }) {
   const users = boot.utilisateurs || [];
   page.innerHTML = `
     <div class="chooser">
-      <div class="chooser-brand">${brandMark({}, 30)}<span>Foulée</span></div>
+      <div class="chooser-brand">${appIconSVG(30)}<span>Foulée</span></div>
       <h1>Qui utilise Foulée ?</h1>
       <p class="chooser-sub">Chacun retrouve ses données Garmin, ses vues et ses réglages.</p>
       <ul class="chooser-grid">${users.map((u) => `<li><button class="chooser-card" type="button" data-user="${F.escape(u.id)}">

@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import subprocess
 import sqlite3
 import sys
 import uuid
@@ -304,7 +305,14 @@ def previous_installs() -> list[dict]:
 
 
 def pick_folder(initial: str | None = None) -> str | None:
-    """Ouvre la fenêtre « Choisir un dossier » de Windows, sur la machine qui fait tourner Foulée."""
+    """Ouvre la fenêtre « Choisir un dossier » (Windows ou Mac), sur la machine qui fait tourner Foulée."""
+    if sys.platform == "darwin":  # Tk hors du fil principal planterait : la fenêtre du Finder, par AppleScript
+        start = (initial or str(Path.home())).replace("\\", "\\\\").replace('"', '\\"')
+        script = (f'POSIX path of (choose folder with prompt "Dossier des données de Foulée" '
+                  f'default location (POSIX file "{start}"))')
+        done = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, timeout=600)
+        chosen = done.stdout.strip() if done.returncode == 0 else ""
+        return os.path.normpath(chosen) if chosen else None
     import tkinter
     from tkinter import filedialog
 

@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import logging
 import sqlite3
+from pathlib import Path
 from datetime import date, timedelta
 from typing import Callable
 
@@ -94,7 +95,9 @@ def upsert_activity(conn: sqlite3.Connection, row: dict) -> bool:
     exists = conn.execute("SELECT 1 FROM activities WHERE id = ?", (row["id"],)).fetchone() is not None
     columns = [k for k in row.keys()]
     placeholders = ",".join("?" for _ in columns)
-    updates = ",".join(f"{c} = excluded.{c}" for c in columns if c != "id")
+    # La VO2max vient du fichier FIT (l'API ne la donne pas) : un résumé sans VO2max ne l'efface pas
+    updates = ",".join(f"{c} = COALESCE(excluded.{c}, activities.{c})" if c == "vo2max" else f"{c} = excluded.{c}"
+                       for c in columns if c != "id")
     conn.execute(
         f"INSERT INTO activities({','.join(columns)}, updated_at) VALUES ({placeholders}, ?) "
         f"ON CONFLICT(id) DO UPDATE SET {updates}, updated_at = excluded.updated_at",
@@ -156,6 +159,43 @@ def fetch_fit(session: GarminSession, conn: sqlite3.Connection, activity_id: str
         return "FIT illisible"
     analysis.store_activity_streams(conn, activity_id, decoded, str(path), settings, hrp)
     return "ok"
+
+
+VO2_SPORTS = ("course", "trail", "velo")
+VO2_BATCH = 60  # fichiers relus par synchro, pour ne pas la ralentir
+
+
+def backfill_vo2max(conn: sqlite3.Connection, limit: int = VO2_BATCH) -> int:
+    """Relit la VO2max dans les fichiers FIT déjà sur le disque (séances d'avant la 0.8.1b5), les plus récentes
+    d'abord, quelques dizaines par synchro. Chaque fichier n'est relu qu'une fois."""
+    try:
+        seen = set(json.loads(db.get_meta(conn, "vo2_relus") or "[]"))
+    except ValueError:
+        seen = set()
+    marks = ",".join("?" for _ in VO2_SPORTS)
+    rows = conn.execute(
+        f"SELECT id, fit_path FROM activities WHERE source = ? AND vo2max IS NULL AND has_streams = 1 "
+        f"AND fit_path IS NOT NULL AND sport IN ({marks}) ORDER BY date DESC", (SOURCE, *VO2_SPORTS)).fetchall()
+    found = 0
+    done = 0
+    for row in rows:
+        if row["id"] in seen:
+            continue
+        if done >= limit:
+            break
+        done += 1
+        seen.add(row["id"])
+        try:
+            value = fitfile.read_vo2max(Path(row["fit_path"]).read_bytes())
+        except Exception as exc:  # fichier absent ou illisible : on passe
+            LOG.info("VO2max illisible pour %s : %s", row["id"], exc)
+            continue
+        if value:
+            conn.execute("UPDATE activities SET vo2max = ? WHERE id = ?", (value, row["id"]))
+            found += 1
+    if done:
+        db.set_meta(conn, "vo2_relus", json.dumps(sorted(seen)))
+    return found
 
 
 def ensure_streams(conn: sqlite3.Connection, activity_id: str) -> str:
@@ -300,6 +340,8 @@ def run(conn: sqlite3.Connection, *, since: date | None = None, fit_days: int | 
         if summary["erreurs"] and not session.answered:
             # Rien n'a abouti : ce n'est pas une synchro « partielle » mais un échec
             raise GarminError(f"Aucune donnée n'a pu être lue chez Garmin. {summary['erreurs'][0]}")
+        if with_fit:
+            summary["vo2max"] = backfill_vo2max(conn)
         progress("Calcul de la charge d'entraînement…", 0.98)
         analysis.recompute_daily_calc(conn)
         views.sync_renfo_view(conn)  # la vue « Renfo » arrive avec les premiers exercices

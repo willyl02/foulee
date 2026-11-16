@@ -2,6 +2,7 @@
 import * as api from "./api.js";
 import * as F from "./format.js";
 import { icon } from "./icons.js";
+import { appIconSVG } from "./logos.js";
 import { claudePanel, keyPanel } from "./system.js";
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -16,7 +17,7 @@ export function renderWelcome(page, boot, { toast, onImport, onDone }) {
   page.innerHTML = `
     <div class="welcome">
       <header class="welcome-head">
-        <span class="blaze" aria-hidden="true"></span>
+        <span class="welcome-logo">${appIconSVG(46)}</span>
         <div><h1>${principal ? "Bienvenue dans Foulée" : `Bienvenue, ${F.escape(me?.prenom || "")}`}</h1>
           <p>${principal ? "Tes données Garmin rangées chez toi, des tableaux de bord que tu composes, et Claude pour les analyser avec toi. Trois étapes et c'est parti."
             : "Ce profil est à toi : tes données Garmin, tes vues et tes réglages, séparés de ceux des autres. Deux étapes et c'est parti."}</p></div>

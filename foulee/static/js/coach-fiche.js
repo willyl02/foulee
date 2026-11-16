@@ -1,9 +1,12 @@
 // La fiche d'un élève (vue du coach) et la page d'une séance partagée, avec son fil (coach et élève).
+import * as api from "./api.js";
 import * as F from "./format.js";
 import { icon } from "./icons.js";
 import {
   avatar, blocksHtml, dayLabel, dur, km, loading, mountThread, rdel, rget, sessionFigures, sportIcon, statusChip, traceSvg,
+  watchLine, watchSummary,
 } from "./coach-ui.js";
+import { beam, headline, pairs } from "./tiles-renfo.js";
 
 const DOW = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
 
@@ -56,6 +59,37 @@ function sessionRow(s, href) {
     <span class="co-sess-tail">${s.trace ? `<span class="co-chip" title="Tracé GPS partagé">${icon("map")}</span>` : ""}${s.messages ? `<span class="co-chip">${icon("chat")}${s.messages}</span>` : ""}${icon("right")}</span></a>`;
 }
 
+/** Le renfo de l'élève : l'équilibre avant / arrière de ses 4 semaines, ce que tu peux lui dire, et sa tendance. */
+function renfoCard(r, sid, accord) {
+  if (accord?.seances === false) return "";
+  if (!r) return `<section class="coach-card"><h2>${icon("balance")}Renfo : avant / arrière</h2><p class="co-empty">Pas de renfo sur les 4 dernières semaines.</p></section>`;
+  if (r.zone === "vide") {
+    return `<section class="coach-card"><h2>${icon("balance")}Renfo : avant / arrière</h2><p class="co-empty">${r.seances} séance${r.seances > 1 ? "s" : ""} de renfo, mais aucune série rangée devant ou derrière (échauffement, cardio, latéral ou exercice non précisé).</p></section>`;
+  }
+  const hint = r.conseil;
+  const weeks = (r.semaines || []).map((w) => {
+    const label = `S${F.isoWeek(F.parseDate(w.lundi)).week}`;
+    return `<li class="co-rw${w.zone ? ` z-${w.zone}` : ""}" title="${F.escape(`Semaine du ${F.dateLong(w.lundi, { weekday: false })} : ${w.ratio_texte ? `${w.ratio_texte}, ${w.series} séries` : "pas de renfo"}`)}">
+        <small>${label}</small><b>${F.escape(w.ratio_texte ? w.ratio_texte.replace("1 : ", "1:") : "–")}</b></li>`;
+  }).join("");
+  const draft = hint?.brouillon ? `#/coach/messages?fil=eleve-${sid}&brouillon=${encodeURIComponent(hint.brouillon)}` : null;
+  return `<section class="coach-card co-renfo-card"><h2>${icon("balance")}Renfo : avant / arrière <span class="co-count">${r.seances} séance${r.seances > 1 ? "s" : ""}</span></h2>
+      ${headline(r, { compact: true })}${beam(r, { compact: true })}
+      ${hint ? `<p class="co-renfo-hint z-${F.escape(r.zone)}">${F.escape(hint.texte)}</p>` : ""}
+      ${weeks ? `<ol class="co-rweeks" aria-label="Semaine par semaine">${weeks}</ol>` : ""}
+      ${r.paires?.length ? `<details class="co-rpairs"><summary>Paire par paire</summary>${pairs(r)}</details>` : ""}
+      <div class="inline-actions" style="margin:10px 0 0">${draft ? `<a class="btn btn-small" href="${draft}">${icon("chat")}Lui en parler</a>` : ""}
+        <span class="hint">Cible du coureur : 1:1 à 1:2 (séries devant : derrière).</span></div>
+    </section>`;
+}
+
+function otherGoals(list) {
+  if (!list?.length) return "";
+  return `<div class="co-goals2"><h3>Aussi au programme</h3><ul>${list.map((g) => `<li><span class="co-g2-name"><b>${F.escape(g.nom)}</b>
+      <small>${F.escape([F.dateShort(g.date), g.distance_km ? `${F.dec1(g.distance_km).replace(",0", "")} km` : "", g.d_plus_m ? `${F.int(g.d_plus_m)} m D+` : "", g.temps_cible ? `visé ${g.temps_cible}` : ""].filter(Boolean).join(" · "))}</small></span>
+      <span class="co-chip blue">J-${g.dans_jours}</span></li>`).join("")}</ul></div>`;
+}
+
 export async function renderStudent(ctx, sid) {
   const { page, params, toast } = ctx;
   const semaine = /^\d{4}-\d{2}-\d{2}$/.test(params.get("semaine") || "") ? params.get("semaine") : null;
@@ -65,6 +99,7 @@ export async function renderStudent(ctx, sid) {
   const goal = data.objectif;
   const gp = goalPace(goal);
   const vma = data.profil?.vma_kmh;
+  const canWatch = Boolean(data.montre?.disponible && data.montre.relie && data.montre.coach_peut_envoyer);
   const week = data.semaine;
   const monday = F.parseDate(week.lundi);
   const prev = F.isoDate(F.addDays(monday, -7));
@@ -102,19 +137,25 @@ export async function renderStudent(ctx, sid) {
             <dl class="co-dl"><dt>Course</dt><dd>${F.escape(goal.nom)}</dd>${goal.date ? `<dt>Date</dt><dd>${F.escape(F.dateLong(goal.date, { year: true }))}</dd>` : ""}
             ${goal.distance_km ? `<dt>Distance</dt><dd>${F.escape(F.dec1(goal.distance_km))} km</dd>` : ""}${goal.temps_cible ? `<dt>Temps visé</dt><dd>${F.escape(goal.temps_cible)}</dd>` : ""}
             ${gp ? `<dt>Allure</dt><dd>${F.escape(gp.pace)}${vma ? ` · ${Math.round(gp.kmh / vma * 100)} % VMA` : ""}</dd>` : ""}
+            ${goal.d_plus_m ? `<dt>Dénivelé</dt><dd>${F.int(goal.d_plus_m)} m D+</dd>` : ""}
             <dt>VMA</dt><dd>${vma ? `${F.dec1(vma)} km/h` : "–"}</dd></dl>`
             : `<p class="co-empty">${data.accord?.objectif === false ? "Il ne partage pas son objectif." : "Pas d'objectif partagé."}${vma ? ` VMA : <b>${F.dec1(vma)} km/h</b>.` : ""}</p>`}
+          ${otherGoals(data.objectifs)}
         </section>
         <section class="coach-card"><h2>${icon("gauge")}4 dernières semaines</h2>
           <dl class="co-dl"><dt>Séances</dt><dd>${t.seances}${t.renfo ? ` (dont ${t.renfo} renfo)` : ""}</dd><dt>Distance</dt><dd>${t.distance_m ? km(t.distance_m) : "–"}</dd>
             <dt>Durée</dt><dd>${t.duree_s ? dur(t.duree_s) : "–"}</dd><dt>Charge</dt><dd>${t.charge ? F.int(t.charge) : "–"}</dd></dl></section>
+        ${renfoCard(data.renfo, sid, data.accord)}
         <section class="coach-card"><h2>${icon("layers")}Séances proposées</h2><div data-props>
           ${data.propositions.length ? data.propositions.map((p) => `<div class="co-prop"><div><b>${F.escape(p.titre)}</b><span>${F.escape(dayLabel(p.date))}${p.sport_label ? ` · ${F.escape(p.sport_label)}` : ""}</span></div>
-            ${statusChip(p.statut)}<span class="co-prop-tools">${p.seance ? `<a class="co-mini" href="#/coach/eleve/${sid}/seance/${encodeURIComponent(p.seance.cle)}" title="Voir la séance faite">${icon("right")}</a>` : ""}
+            ${statusChip(p.statut)}<span class="co-prop-tools">${p.montre ? `<i class="co-watchmark${p.montre.a_jour ? "" : " warn"}" title="${p.montre.a_jour ? `Sur sa montre (${p.montre.par === "coach" ? "envoyée par toi" : "envoyée par lui"}, ${F.escape(F.relative(p.montre.envoye_le))})` : F.escape(p.montre.erreur || "À renvoyer")}">${icon("watch")}</i>` : ""}
+            ${p.seance ? `<a class="co-mini" href="#/coach/eleve/${sid}/seance/${encodeURIComponent(p.seance.cle)}" title="Voir la séance faite">${icon("right")}</a>` : ""}
+            ${canWatch && p.statut !== "fait" && p.statut !== "manque" ? `<button type="button" class="co-mini" data-watch="${p.id}" title="${p.montre ? "La renvoyer sur sa montre" : "L'envoyer sur sa montre (calendrier Garmin Connect)"}">${icon("watch")}</button>` : ""}
             <a class="co-mini" href="/api/coach/eleves/${sid}/seances/${p.id}.fit" download title="Le fichier pour sa montre (.fit), avec ses allures">${icon("download")}</a>
             <a class="co-mini" href="#/coach/proposer?id=${p.id}&eleve=${sid}" title="Modifier">${icon("edit")}</a>
             <button type="button" class="co-mini" data-drop="${p.id}" title="Supprimer">${icon("trash")}</button></span></div>`).join("")
             : `<p class="co-empty">Aucune séance proposée.</p>`}</div>
+          ${watchLine(data.montre, e.nom)}
           <div class="inline-actions" style="margin:10px 0 0"><a class="btn btn-small" href="#/coach/proposer?eleves=${sid}">${icon("plus")}Proposer une séance</a></div></section>
         ${health.length ? `<section class="coach-card"><h2>${icon("heart")}Forme</h2><div class="co-health">${health.map(([key, label, fmt, color]) => `<div>
             <small>${label}</small><b>${fmt(lastOf(key))}</b>${spark(metric(key), { color })}</div>`).join("")}</div>
@@ -122,6 +163,14 @@ export async function renderStudent(ctx, sid) {
       </div>
     </div>`;
 
+  page.querySelectorAll("[data-watch]").forEach((btn) => btn.addEventListener("click", async () => {
+    btn.disabled = true;
+    try {
+      const res = await api.post("/api/coach/montres", { propositions: [Number(btn.dataset.watch)] });
+      toast(watchSummary(res));
+      renderStudent(ctx, sid);
+    } catch (err) { toast(err.message); btn.disabled = false; }
+  }));
   page.querySelectorAll("[data-drop]").forEach((btn) => btn.addEventListener("click", async () => {
     if (!window.confirm("Supprimer cette séance proposée ? Elle disparaît aussi du calendrier de l'élève.")) return;
     try { await rdel(`propositions/${btn.dataset.drop}`); toast("Séance supprimée."); renderStudent(ctx, sid); }

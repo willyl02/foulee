@@ -179,8 +179,10 @@ def test_sync_summary():
 
 def test_app_endpoints_outside_the_application():
     client = TestClient(web.create_app())
-    assert client.get("/api/app").json() == {"application": False, "demarrage_windows": None,
-                                            "synchro_auto_heures": None}
+    info = client.get("/api/app").json()
+    assert info.pop("systeme") in ("windows", "mac", "serveur")
+    assert info == {"application": False, "demarrage_windows": None, "synchro_auto_heures": None, "fenetre": None,
+                    "fenetre_possible": None}
     assert client.post("/api/app/quitter", headers=WRITE).status_code == 404
     assert client.put("/api/app", json={"demarrage_windows": True}, headers=WRITE).status_code == 404
 
@@ -238,3 +240,44 @@ def test_demo_switch(monkeypatch):
     assert client.get("/api/bootstrap").json()["demo"] is True
     assert client.post("/api/demo", json={"actif": False}, headers=WRITE).json()["actif"] is False
     assert client.get("/api/bootstrap").json()["demo"] is False
+
+
+# ------------------------------------------- « Ouvrir Foulée » : fenêtre à part ou navigateur
+def test_window_mode_defaults_to_an_app_window_and_falls_back(tmp_path, monkeypatch):
+    opened = []
+    monkeypatch.setattr(desktop.webbrowser, "open", lambda url: opened.append(url))
+    launched = []
+    monkeypatch.setattr(desktop.subprocess, "Popen", lambda args, **kw: launched.append(args))
+    browser = tmp_path / "msedge.exe"
+    browser.write_text("")
+    monkeypatch.setenv("FOULEE_NAVIGATEUR_APP", str(browser))
+
+    assert desktop.window_mode() == "application"
+    assert desktop.open_url("http://127.0.0.1:8770/") == "application"
+    assert launched == [[str(browser), "--app=http://127.0.0.1:8770/"]] and opened == []
+
+    desktop.set_window_mode("navigateur")
+    assert desktop.open_url("http://127.0.0.1:8770/#/aide") == "navigateur"
+    assert opened == ["http://127.0.0.1:8770/#/aide"] and len(launched) == 1
+
+    desktop.set_window_mode("application")
+    monkeypatch.setenv("FOULEE_NAVIGATEUR_APP", "")  # ni Edge ni Chrome : l'onglet habituel
+    assert desktop.open_url("http://127.0.0.1:8770/") == "navigateur"
+    with pytest.raises(ValueError):
+        desktop.set_window_mode("plein-ecran")
+
+
+def test_window_mode_setting_in_the_app_panel(tmp_path, monkeypatch):
+    browser = tmp_path / "msedge.exe"
+    browser.write_text("")
+    monkeypatch.setenv("FOULEE_NAVIGATEUR_APP", str(browser))
+    app = web.create_app()
+    client = TestClient(app)
+    assert client.get("/api/app").json()["fenetre"] is None  # pas l'application de bureau
+    assert client.put("/api/app", headers={"X-Foulee": "1"}, json={"fenetre": "navigateur"}).status_code == 404
+    app.state.quit = lambda: None
+    info = client.get("/api/app").json()
+    assert info["fenetre"] == "application" and info["fenetre_possible"] is True
+    info = client.put("/api/app", headers={"X-Foulee": "1"}, json={"fenetre": "navigateur"}).json()
+    assert info["fenetre"] == "navigateur"
+    assert client.put("/api/app", headers={"X-Foulee": "1"}, json={"fenetre": "x"}).status_code == 400

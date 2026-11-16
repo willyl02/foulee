@@ -46,6 +46,10 @@ DATA_SOURCES = ("garmin", "withings", "strava")  # le calendrier ne donne que de
 DEFAULT_INTERVAL = 180
 MIN_INTERVAL, MAX_INTERVAL = 30, 720
 RETRY_AFTER_FAILURE = 30 * 60  # après un échec, pas plus d'un essai par demi-heure
+# Veille des nouvelles séances : entre deux synchros complètes (3 h par défaut), un seul appel léger regarde
+# les séances Garmin des deux derniers jours ; une séance encore inconnue lance la synchro Garmin tout de suite.
+WATCH_EVERY = 20 * 60
+WATCH_DAYS = 2
 
 
 def active_sources() -> list[str]:
@@ -320,6 +324,67 @@ def due_sources(conn, now: float | None = None) -> list[str]:
             continue
         due.append(name)
     return due
+
+
+def watch_possible(conn) -> bool:
+    """La veille a-t-elle un sens pour ce profil ? (Garmin relié, clé acceptée, premier import fait, pas en démo)"""
+    if config.is_demo() or not can_sync() or "garmin" not in active_sources():
+        return False
+    return db.get_meta(conn, "last_sync") is not None and vault.has_key() and key_refused(conn) is None
+
+
+def new_garmin_activities(conn, today: date | None = None) -> list[str]:
+    """Les séances Garmin des deux derniers jours qui ne sont pas encore dans Foulée (un seul appel à Garmin).
+    Liste vide si rien de neuf, ou si Garmin ne répond pas : la synchro complète prendra le relais."""
+    from datetime import timedelta
+
+    from .garmin import parse
+    from .garmin.client import GarminError, GarminSession
+
+    today = today or date.today()
+    try:
+        with GarminSession() as session:
+            payload = session.call("search_activities", start=0, limit=10,
+                                   start_date=today - timedelta(days=WATCH_DAYS), end_date=today)
+    except GarminError as exc:
+        LOG.info("Veille des séances : %s", exc)
+        return []
+    unknown = []
+    for item in parse.items_of(payload, "activityList", "activities"):
+        aid = item.get("activityId") if isinstance(item, dict) else None
+        if aid and conn.execute("SELECT 1 FROM activities WHERE id = ?", (f"garmin:{aid}",)).fetchone() is None:
+            unknown.append(str(aid))
+    return unknown
+
+
+def watch_check(now: float | None = None) -> list[str]:
+    """La veille, pour le profil courant : ["garmin"] si une séance encore inconnue est arrivée chez Garmin,
+    au plus une fois toutes les 20 minutes (l'heure de la dernière veille reste dans la base, pour l'application
+    du PC comme pour la minuterie du serveur). Une séance qui a déjà lancé une synchro sans pouvoir être rangée ne
+    la relance pas."""
+    now = time.time() if now is None else now
+    with db.session() as conn:
+        if not watch_possible(conn):
+            return []
+        try:
+            last = float(db.get_meta(conn, "veille_garmin") or 0)
+        except ValueError:
+            last = 0.0
+        if now - last < WATCH_EVERY - 30:
+            return []
+        db.set_meta(conn, "veille_garmin", str(now))
+        conn.commit()
+        fresh = new_garmin_activities(conn)
+        try:
+            sent = set(json.loads(db.get_meta(conn, "veille_envoyees") or "[]"))
+        except ValueError:
+            sent = set()
+        new = [a for a in fresh if a not in sent]
+        if not new:
+            return []
+        db.set_meta(conn, "veille_envoyees", json.dumps(sorted(sent | set(new))[-50:]))
+        LOG.info("Veille : %d nouvelle(s) séance(s) chez Garmin, synchro lancée", len(new))
+        return ["garmin"]
 
 
 def _history(conn, limit: int = 120) -> list[tuple[str, dict]]:

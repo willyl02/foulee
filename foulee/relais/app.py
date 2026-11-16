@@ -15,7 +15,7 @@ from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from .. import __version__
-from . import API_VERSION, club, store
+from . import API_VERSION, club, garmin, store
 
 log = logging.getLogger("foulee.relais")
 
@@ -331,6 +331,65 @@ def create_relay_app() -> FastAPI:
         """Relevé léger, toutes les minutes : non lus et repère des changements."""
         return run(request, lambda conn, me: {"non_lus": club.unread_total(conn, me),
                                               "repere": club.last_activity(conn, me)})
+
+    # ------------------------------------------------ séances sur la montre (Garmin)
+    def garmin_run(request: Request, action, *, role: str | None = None):
+        with store.session() as conn:
+            account, _ = current(request, conn, role=role)
+            try:
+                return action(conn, account)
+            except garmin.GarminError as exc:
+                raise HTTPException(exc.status, str(exc)) from None
+            except store.RelayError as exc:
+                raise refuse(exc) from None
+
+    @app.get("/api/v1/garmin")
+    def garmin_status(request: Request) -> dict:
+        return garmin_run(request, lambda conn, me: garmin.status(conn, me))
+
+    @app.post("/api/v1/garmin/relier")
+    def garmin_link(request: Request) -> dict:
+        return garmin_run(request, lambda conn, me: {"adresse": garmin.authorize_url(conn, me["id"])}, role="eleve")
+
+    @app.post("/api/v1/garmin/envoyer")
+    def garmin_send(request: Request, payload: dict = Body(...)) -> dict:
+        proposal = payload.get("proposition")
+        if not str(proposal).isdigit():
+            raise HTTPException(400, "Séance inconnue.")
+        return garmin_run(request, lambda conn, me: garmin.student_send(conn, me, int(proposal), payload.get("vma_kmh")),
+                          role="eleve")
+
+    @app.put("/api/v1/garmin")
+    def garmin_settings(request: Request, payload: dict = Body(...)) -> dict:
+        def action(conn, me):
+            garmin.set_coach_allowed(conn, me["id"], bool(payload.get("coach_peut_envoyer")))
+            return garmin.status(conn, me)
+        return garmin_run(request, action, role="eleve")
+
+    @app.delete("/api/v1/garmin")
+    def garmin_unlink(request: Request) -> dict:
+        def action(conn, me):
+            garmin.unlink(conn, me["id"])
+            return garmin.status(conn, me)
+        return garmin_run(request, action, role="eleve")
+
+    @app.post("/api/v1/garmin/coach")
+    def garmin_coach_send(request: Request, payload: dict = Body(...)) -> dict:
+        return garmin_run(request, lambda conn, me: garmin.coach_send(conn, me, payload.get("propositions") or []),
+                          role="coach")
+
+    @app.get(garmin.CALLBACK_PATH, response_class=HTMLResponse)
+    def garmin_return(state: str | None = None, code: str | None = None, error: str | None = None) -> HTMLResponse:
+        """Retour de Garmin dans le navigateur de l'élève (après « Accepter » ou « Refuser »)."""
+        with store.session() as conn:
+            try:
+                result = garmin.complete(conn, state, code, error)
+            except garmin.GarminError as exc:
+                result = {"ok": False, "titre": "Liaison avec Garmin impossible", "texte": str(exc)}
+        response = HTMLResponse(garmin.page(result), status_code=200 if result["ok"] else 400)
+        response.headers["Content-Security-Policy"] = "default-src 'none'; style-src 'unsafe-inline'"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        return response
 
     @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"], include_in_schema=False)
     def not_found(path: str) -> JSONResponse:

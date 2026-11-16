@@ -161,4 +161,5 @@ def test_database_from_0_4_is_upgraded():
         assert json.loads(row["extra"]) == {"gct": 241.1, "best_5000": 1290.0}
         assert json.loads(row["hr_zones_garmin"])[1] == 100.0
         assert conn.execute("SELECT value FROM daily WHERE metric = 'spo2_avg'").fetchone()["value"] == 97
-        assert [v["id"] for v in views.list_views(conn)] == ["accueil", "perso"]
+        # l'Accueil (0.5) et la vue « Objectifs » (0.8.1) arrivent une fois, les vues personnelles restent
+        assert [v["id"] for v in views.list_views(conn)] == ["accueil", "objectifs", "perso"]

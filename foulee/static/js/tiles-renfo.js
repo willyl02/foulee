@@ -129,7 +129,7 @@ const ZONES = [["avant", 0, 4 / 9], ["proche", 4 / 9, 0.5], ["cible", 0.5, 2 / 3
   ["arriere_fort", 0.8, 1]];
 const TICKS = [[1 / 3, "1:0,5"], [0.5, "1:1"], [2 / 3, "1:2"], [0.8, "1:4"]];
 
-function beam(b, { compact = false } = {}) {
+export function beam(b, { compact = false } = {}) {
   const share = b.part_arriere;
   const zones = ZONES.map(([z, from, to]) => `<span class="eq-z z-${z}" style="left:${(from * 100).toFixed(2)}%;width:${((to - from) * 100).toFixed(2)}%">${z === "cible" && !compact ? "<em>cible</em>" : ""}</span>`).join("");
   const ticks = TICKS.map(([v, label]) => `<span class="eq-tick" style="left:${(v * 100).toFixed(2)}%"><b>${label}</b></span>`).join("");
@@ -141,7 +141,7 @@ function beam(b, { compact = false } = {}) {
     </div>`;
 }
 
-function headline(b, { compact = false } = {}) {
+export function headline(b, { compact = false } = {}) {
   return `<div class="eq-head${compact ? " compact" : ""}">
       <span class="eq-ratio" title="${F.escape(`Rapport avant : arrière, en séries. ${b.explication}`)}">${F.escape(b.ratio_texte || "–")}</span>
       <span class="eq-pill z-${b.zone}" title="${F.escape(b.explication)}">${F.escape(b.verdict)}</span>
@@ -150,7 +150,7 @@ function headline(b, { compact = false } = {}) {
 }
 
 /** Les paires du repère 1:1 (genou / hanche, poussée / tirage…), en ailes de papillon autour de l'axe. */
-function pairs(b) {
+export function pairs(b) {
   const rows = [...b.paires];
   if (b.mixte) {
     rows.push({ cle: "mixte", nom: "Corps entier", penche: null, avant: { nom: "½ devant", court: "½ devant", series: b.mixte / 2 },
@@ -241,6 +241,46 @@ export const renfo_equilibre = {
         <section class="eq-detail">${b.zone === "vide" ? "" : pairs(b)}${balanceNotes(b, d.exercices)}</section>
         <section class="eq-trend">${weeksBalance(d.semaines)}</section>
       </div>`;
+  },
+};
+
+// ------------------------------------------------------------- exercices pour rééquilibrer
+const SIDE_LABEL = { arriere: "Arrière", avant: "Avant" };
+
+function compensateCard(f, open) {
+  const shown = f.exercices.slice(0, 3);
+  const more = f.exercices.slice(3);
+  const row = (e) => `<li class="cp-ex"><div class="cp-ex-top"><b>${F.escape(e.nom)}</b><span class="cp-dose">${F.escape(e.dosage)}</span></div>
+      <small class="cp-tip">${F.escape(e.consigne)} <span class="cp-gear">· ${F.escape(e.materiel)}</span></small></li>`;
+  return `<article class="cp-card cp-${F.escape(f.chaine)}">
+      <header><span class="cp-side">${F.escape(SIDE_LABEL[f.chaine] || "")}</span><h4>${F.escape(f.nom)}</h4></header>
+      ${f.constat ? `<p class="cp-fact">${F.escape(f.constat.charAt(0).toUpperCase() + f.constat.slice(1))}</p>` : ""}
+      ${f.pourquoi ? `<p class="cp-why">${F.escape(f.pourquoi)}</p>` : ""}
+      <ul class="cp-list">${shown.map(row).join("")}</ul>
+      ${more.length ? `<details class="cp-more" ${open ? "open" : ""}><summary>${more.length} autre${more.length > 1 ? "s" : ""} exercice${more.length > 1 ? "s" : ""}</summary><ul class="cp-list">${more.map(row).join("")}</ul></details>` : ""}
+    </article>`;
+}
+
+export const renfo_conseils = {
+  title: () => "Renfo : exercices pour rééquilibrer",
+  async render(body, p, ctx) {
+    const { start, end, days } = ctx.period(p);
+    const d = await ctx.get("/api/renfo", { start, end });
+    ctx.sub(`${days} derniers jours · cible 1:1,5`);
+    if (!d.nb_seances && !d.semaines.some((w) => w.seances)) return message(body, NO_SESSION);
+    const c = d.compenser;
+    if (!c) return message(body, d.exercices.length ? "Rien à rééquilibrer : aucune série rangée devant ou derrière sur la période." : NO_DETAIL);
+    body.classList.add("scroll", "cp-body");
+    const weekly = c.par_semaine >= 2.5 ? F.int(c.par_semaine) : F.dec1(Math.max(0.5, Math.round(c.par_semaine * 2) / 2)).replace(",0", "");
+    const counter = c.manque_series ? `<div class="cp-count z-${F.escape(c.zone)}" title="${F.escape(`Il manque environ ${c.manque_series} séries sur ${c.jours} jours`)}"><b>+${weekly}</b><small>séries ${c.cote === "avant" ? "devant" : "derrière"}<br>par semaine</small></div>` : "";
+    body.innerHTML = `<div class="cp">
+      <div class="cp-head">
+        <div class="cp-lead"><h3>${F.escape(c.titre)}</h3><p>${F.escape(c.resume)}</p></div>
+        ${counter}
+      </div>
+      ${c.familles.length ? `<div class="cp-cards">${c.familles.map((f) => compensateCard(f, c.familles.length === 1)).join("")}</div>` : ""}
+      ${c.cote ? `<p class="cp-foot">Ajoute-les à tes séances habituelles, à la place d'une partie des séries ${c.cote === "arriere" ? "devant" : "derrière"} si tu manques de temps. Sur la montre, choisis l'exercice à chaque série (ou écris-le dans la description Strava) : il comptera du bon côté.</p>` : ""}
+    </div>`;
   },
 };
 

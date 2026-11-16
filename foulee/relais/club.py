@@ -19,7 +19,8 @@ import sqlite3
 from datetime import date, timedelta
 from typing import Any
 
-from .. import metrics
+from .. import metrics, renfo
+from . import garmin
 from .store import RelayError, local_now, now
 
 KEEP_DAYS = 28                 # le relais ne garde que 4 semaines de séances
@@ -111,9 +112,12 @@ def _clean_session(raw: dict, oldest: str) -> dict | None:
     sets = []
     for row in (raw.get("renfo") or [])[:80]:
         if isinstance(row, dict) and row.get("exercice"):
-            sets.append({"exercice": _txt(row.get("exercice"), 80), "series": _num(row.get("series"), 0, 200, 0),
-                         "reps": _num(row.get("reps"), 0, 5000, 0), "kg": _num(row.get("kg"), 0, 1000, 1),
-                         "chaine": _txt(row.get("chaine"), 20)})
+            item = {"exercice": _txt(row.get("exercice"), 80), "series": _num(row.get("series"), 0, 200, 0),
+                    "reps": _num(row.get("reps"), 0, 5000, 0), "kg": _num(row.get("kg"), 0, 1000, 1),
+                    "chaine": _txt(row.get("chaine"), 20)}
+            if row.get("famille") in renfo.CHAIN_FAMILIES:
+                item["famille"] = row["famille"]
+            sets.append(item)
     if sets:
         out["renfo"] = sets
     trace = raw.get("trace")
@@ -126,6 +130,59 @@ def _clean_session(raw: dict, oldest: str) -> dict | None:
                     points.append([lat, lon])
         if len(points) >= 2:
             out["trace"] = points
+    return out
+
+
+def _clean_goal(goal: dict) -> dict:
+    return {"nom": _txt(goal.get("nom"), 80), "date": _day(goal.get("date")),
+            "distance_km": _num(goal.get("distance_km"), 0, 1000, 3), "temps_cible": _txt(goal.get("temps_cible"), 12),
+            "d_plus_m": _num(goal.get("d_plus_m"), 0, 30000, 0)}
+
+
+def renfo_balance(sessions: list[dict], today: date | None = None) -> dict | None:
+    """L'équilibre avant / arrière du renfo partagé (4 semaines), comme l'élève le voit chez lui, avec ce que le
+    coach peut lui dire, et semaine par semaine. Chaque exercice est rangé par sa famille quand Foulée l'envoie,
+    sinon par son nom (versions de Foulée d'avant 0.8.1). None sans renfo."""
+    today = today or _today()
+    monday = _monday(today)
+    weeks = [monday - timedelta(weeks=k) for k in range(3, -1, -1)]
+    total: dict[str, float] = {}
+    per_week: dict[date, dict[str, float]] = {w: {} for w in weeks}
+    skipped = 0.0
+    renfo_sessions = 0
+    for session in sessions:
+        sets = session.get("renfo") or []
+        if not sets:
+            continue
+        renfo_sessions += 1
+        week = _monday(date.fromisoformat(session["date"]))
+        for row in sets:
+            count = float(row.get("series") or 0)
+            if not count:
+                continue
+            family = row.get("famille") or renfo.chain_family("texte", row.get("exercice") or "")
+            if family is None:
+                skipped += count
+                continue
+            total[family] = total.get(family, 0.0) + count
+            if week in per_week:
+                per_week[week][family] = per_week[week].get(family, 0.0) + count
+    if not renfo_sessions:
+        return None
+    bal = renfo.balance_from_families(total, skipped)
+    out = {k: bal[k] for k in ("avant", "arriere", "ratio", "ratio_texte", "part_arriere", "zone", "verdict",
+                               "explication", "neutre", "mixte", "non_comptees")}
+    out["paires"] = [{k: p[k] for k in ("cle", "nom", "avant", "arriere", "ratio_texte", "penche")} for p in bal["paires"]]
+    out["seances"] = renfo_sessions
+    out["conseil"] = renfo.coach_hint(bal)
+    out["semaines"] = []
+    for week in weeks:
+        families = per_week[week]
+        week_bal = renfo.balance_from_families(families) if families else None
+        out["semaines"].append({"lundi": week.isoformat(), "ratio_texte": week_bal["ratio_texte"] if week_bal else None,
+                                "zone": week_bal["zone"] if week_bal else None,
+                                "part_arriere": week_bal["part_arriere"] if week_bal else None,
+                                "series": round(sum(families.values()), 1)})
     return out
 
 
@@ -152,9 +209,10 @@ def clean_share(payload: Any) -> dict:
         profile["fc_max"] = fcmax
     goal = profile_raw.get("objectif") if isinstance(profile_raw.get("objectif"), dict) else None
     if goal and goal.get("nom"):
-        profile["objectif"] = {"nom": _txt(goal.get("nom"), 80), "date": _day(goal.get("date")),
-                               "distance_km": _num(goal.get("distance_km"), 0, 1000, 3),
-                               "temps_cible": _txt(goal.get("temps_cible"), 12)}
+        profile["objectif"] = _clean_goal(goal)
+    others = [_clean_goal(g) for g in (profile_raw.get("objectifs") or [])[:10] if isinstance(g, dict) and g.get("nom")]
+    if others:
+        profile["objectifs"] = [g for g in others if g.get("date")]
     plan = []
     for raw in (payload.get("plan") or [])[:120]:
         if isinstance(raw, dict) and (day := _day(raw.get("date"))) and raw.get("titre"):
@@ -338,10 +396,15 @@ def update_proposal(conn: sqlite3.Connection, coach_id: int, proposal_id: int, p
     day, title, sport, content = _clean_proposal(payload)
     conn.execute("UPDATE propositions SET date = ?, titre = ?, sport = ?, contenu = ?, modifie_le = ? WHERE id = ?",
                  (day, title, sport, json.dumps(content, ensure_ascii=False), now(), proposal_id))
-    return _proposal_dict(conn.execute("SELECT * FROM propositions WHERE id = ?", (proposal_id,)).fetchone())
+    garmin.follow_update(conn, proposal_id)  # déjà sur la montre : renvoyée telle que modifiée
+    item = _proposal_dict(conn.execute("SELECT * FROM propositions WHERE id = ?", (proposal_id,)).fetchone())
+    garmin.decorate(conn, item["eleve_id"], [item])
+    return item
 
 
 def delete_proposal(conn: sqlite3.Connection, coach_id: int, proposal_id: int) -> bool:
+    if conn.execute("SELECT 1 FROM propositions WHERE id = ? AND coach_id = ?", (proposal_id, coach_id)).fetchone():
+        garmin.withdraw(conn, proposal_id)  # et hors du calendrier Garmin de l'élève
     return conn.execute("DELETE FROM propositions WHERE id = ? AND coach_id = ?",
                         (proposal_id, coach_id)).rowcount > 0
 
@@ -350,7 +413,9 @@ def proposals(conn: sqlite3.Connection, student_id: int, start: date, end: date,
               sessions: list[dict] | None = None) -> list[dict]:
     rows = conn.execute("SELECT * FROM propositions WHERE eleve_id = ? AND date BETWEEN ? AND ? ORDER BY date, id",
                         (student_id, start.isoformat(), end.isoformat())).fetchall()
-    return [_proposal_dict(row, sessions) for row in rows]
+    items = [_proposal_dict(row, sessions) for row in rows]
+    garmin.decorate(conn, student_id, items)  # déjà envoyée sur sa montre ?
+    return items
 
 
 def templates(conn: sqlite3.Connection, coach_id: int) -> list[dict]:
@@ -618,6 +683,10 @@ def overview(conn: sqlite3.Connection, coach: sqlite3.Row) -> list[dict]:
             "semaine": tally(days), "bande": strip(days, today), "charge_7j": round(load7) if sessions else None,
             "vma_kmh": content["profil"].get("vma_kmh"),
             "seances_28j": len(sessions), "objectif": goal, "non_lus": unread,
+            "montre": garmin.student_flags(conn, row["id"]),
+            "prochain": _next_goal(goal, content["profil"], today),
+            "renfo": {k: balance[k] for k in ("ratio_texte", "zone", "verdict", "seances")}
+            if (balance := renfo_balance(sessions, today)) and balance["zone"] != "vide" else None,
             "alerte": f"{idle} jours sans séance" if idle is not None and idle >= ALERT_DAYS and accord
             and accord.get("seances") else None,
         })
@@ -655,8 +724,27 @@ def student_page(conn: sqlite3.Connection, coach: sqlite3.Row, student_id: int, 
     return {"eleve": {"id": row["id"], "nom": row["nom"], "identifiant": row["identifiant"],
                       "inscrit_le": row["cree_le"], "derniere_connexion": row["derniere_connexion"]},
             "accord": get_accord(conn, student_id), "partage_recu_le": received, "profil": content["profil"],
-            "objectif": goal, "semaine": {"lundi": monday.isoformat(), "jours": days, "bilan": tally(days)},
-            "seances": briefs, "jours": content["jours"], "total_28j": total, "propositions": upcoming}
+            "objectif": goal, "objectifs": _upcoming_goals(content["profil"], today),
+            "semaine": {"lundi": monday.isoformat(), "jours": days, "bilan": tally(days)},
+            "seances": briefs, "jours": content["jours"], "total_28j": total, "propositions": upcoming,
+            "renfo": renfo_balance(sessions, today),
+            "montre": {**garmin.student_flags(conn, student_id), "disponible": garmin.configured()}}
+
+
+def _next_goal(goal: dict | None, profile: dict, today: date) -> dict | None:
+    """Le plus proche des objectifs à venir, principal ou secondaire (la « prochaine course » du groupe)."""
+    candidates = [g for g in [goal, *_upcoming_goals(profile, today)] if g and g.get("dans_jours") is not None
+                  and g["dans_jours"] >= 0]
+    return min(candidates, key=lambda g: g["dans_jours"]) if candidates else None
+
+
+def _upcoming_goals(profile: dict, today: date) -> list[dict]:
+    """Les objectifs secondaires encore à venir, avec leur compte à rebours."""
+    out = []
+    for goal in profile.get("objectifs") or []:
+        if goal.get("date") and goal["date"] >= today.isoformat():
+            out.append({**goal, "dans_jours": (date.fromisoformat(goal["date"]) - today).days})
+    return sorted(out, key=lambda g: g["date"])
 
 
 def student_session(conn: sqlite3.Connection, account: sqlite3.Row, student_id: int, key: str) -> dict:
@@ -683,7 +771,8 @@ def my_page(conn: sqlite3.Connection, student: sqlite3.Row) -> dict:
             "partage": {"seances": len(content["seances"]), "jours": len(content["jours"]),
                         "traces": sum("trace" in s for s in content["seances"])},
             "propositions": proposals(conn, student["id"], today - timedelta(days=14), today + timedelta(days=90),
-                                      content["seances"])}
+                                      content["seances"]),
+            "montre": garmin.status(conn, student)}
 
 
 def last_activity(conn: sqlite3.Connection, account: sqlite3.Row) -> str:

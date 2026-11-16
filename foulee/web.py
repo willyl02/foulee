@@ -21,6 +21,7 @@ seules la liste des profils et la page de choix répondent.
 from __future__ import annotations
 
 import contextvars
+import io
 import ipaddress
 import json
 import mimetypes
@@ -34,6 +35,7 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
+import segno
 from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -44,19 +46,21 @@ from . import (
     access,
     analysis,
     calendrier,
-    club,
     claude_desktop,
+    club,
     coach,
     config,
     datadir,
     db,
     keyinput,
     metrics,
+    objectifs,
     profile,
     reglages,
     renfo,
     retours,
     schedule,
+    telephone,
     updates,
     utilisateurs,
     vault,
@@ -220,7 +224,8 @@ def create_app() -> FastAPI:
 
     @app.middleware("http")
     async def guard(request: Request, call_next):
-        if not host_allowed(host_name(request.headers.get("host")), hosts):
+        host = host_name(request.headers.get("host"))
+        if not host_allowed(host, hosts) and host != telephone.allowed_host():  # Foulée sur ton téléphone
             return JSONResponse({"detail": "Hôte refusé"}, status_code=403)
         if request.method not in ("GET", "HEAD", "OPTIONS") and request.headers.get("x-foulee") != "1":
             return JSONResponse({"detail": "En-tête X-Foulee manquant"}, status_code=403)
@@ -267,7 +272,7 @@ def create_app() -> FastAPI:
         if request.state.profil_requis:  # « Qui es-tu ? » : rien des données de personne
             return {"app": "Foulée", "version": __version__, "demo": config.is_demo(), "profil_requis": True,
                     "utilisateurs": utilisateurs.cards(), "acces": "local" if request.state.local else "reseau",
-                    "machine": "pc" if sys.platform == "win32" else "serveur", "retours": retours.info(),
+                    "machine": "pc" if config.is_desktop() else "serveur", "retours": retours.info(),
                     "demarre_le": STARTED_AT}
         me = request.state.profil
         with db.session() as conn:
@@ -290,7 +295,7 @@ def create_app() -> FastAPI:
                 "synchro": sync_module.last_sync_info(conn), "cle": vault.has_key() or config.is_demo(),
                 "connexions": sync_module.connections(conn),
                 "dossier_donnees": str(config.data_dir()),
-                "machine": "pc" if sys.platform == "win32" else "serveur",
+                "machine": "pc" if config.is_desktop() else "serveur",
                 "acces": "local" if request.state.local else "reseau",
                 "installation": updates.mode(),
                 "application": app.state.quit is not None,
@@ -394,7 +399,46 @@ def create_app() -> FastAPI:
     @app.get("/api/objective")
     def get_objective() -> dict:
         with db.session(readonly=True) as conn:
-            return analysis.objective(db.get_settings(conn))
+            settings = db.get_settings(conn)
+            data = analysis.objective(settings)
+            data["secondaires"] = [g for g in (objectifs.describe(x, settings) for x in
+                                               settings.get("objectifs_secondaires") or []) if g]
+            return data
+
+    # ----------------------------------------------------------- objectifs
+    @app.get("/api/objectifs")
+    def get_goals() -> dict:
+        with db.session(readonly=True) as conn:
+            return objectifs.overview(conn, db.get_settings(conn))
+
+    def _save_goals(change) -> dict:
+        with db.session() as conn:
+            try:
+                patch = change(db.get_settings(conn))
+                settings, _ = reglages.apply(conn, patch)
+            except (objectifs.GoalError, reglages.SettingsError) as exc:
+                raise HTTPException(400, str(exc)) from exc
+            except LookupError as exc:
+                raise HTTPException(404, str(exc)) from exc
+            return {**objectifs.overview(conn, settings), "objectif": analysis.objective(settings),
+                    "reglages": settings}
+
+    @app.post("/api/objectifs")
+    def add_goal(payload: dict = Body(...)) -> dict:
+        """Nouvel objectif ; {"principal": true} pour en faire l'objectif principal."""
+        return _save_goals(lambda s: objectifs.add(s, payload))
+
+    @app.put("/api/objectifs/{goal_id}")
+    def update_goal(goal_id: str, payload: dict = Body(...)) -> dict:
+        return _save_goals(lambda s: objectifs.update(s, goal_id, payload))
+
+    @app.delete("/api/objectifs/{goal_id}")
+    def delete_goal(goal_id: str) -> dict:
+        return _save_goals(lambda s: objectifs.remove(s, goal_id))
+
+    @app.post("/api/objectifs/{goal_id}/principal")
+    def promote_goal(goal_id: str) -> dict:
+        return _save_goals(lambda s: objectifs.promote(s, goal_id))
 
     # -------------------------------------------------------------- accueil
     @app.get("/api/forme")
@@ -700,7 +744,7 @@ def create_app() -> FastAPI:
     def export_settings(vues: int = 1, photo: int = 1, logo: int = 1) -> JSONResponse:
         with db.session(readonly=True) as conn:
             data = reglages.export(conn, with_views=bool(vues), with_photo=bool(photo), with_logo=bool(logo))
-        machine = "pc" if sys.platform == "win32" else "serveur"
+        machine = "pc" if config.is_desktop() else "serveur"
         name = f"foulee-reglages-{machine}-{date.today().isoformat()}.json"
         return JSONResponse(data, headers={"Content-Disposition": f'attachment; filename="{name}"'})
 
@@ -922,6 +966,35 @@ def create_app() -> FastAPI:
     def require_principal(request: Request) -> None:
         if not utilisateurs.is_principal(request.state.profil):
             raise HTTPException(403, "Réservé à l'utilisateur principal : ce réglage concerne toute l'installation.")
+
+    # Foulée sur ton téléphone (PC) : Tailscale relaie l'interface vers tes appareils (voir telephone.py)
+    @app.get("/api/telephone")
+    def phone_status(request: Request) -> dict:
+        require_local(request)
+        try:
+            return telephone.status()
+        except telephone.PhoneError as exc:
+            raise HTTPException(503, str(exc)) from exc
+
+    @app.put("/api/telephone")
+    def phone_switch(request: Request, payload: dict = Body(...)) -> dict:
+        require_local(request)
+        require_principal(request)
+        try:
+            return telephone.enable() if payload.get("actif") else telephone.disable()
+        except telephone.PhoneError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+    @app.get("/api/telephone/qr.svg")
+    def phone_qr(request: Request) -> Response:
+        require_local(request)
+        name = telephone.allowed_host()
+        if not name:
+            raise HTTPException(404, "Accès depuis le téléphone pas activé")
+        out = io.BytesIO()  # un vrai fichier SVG (avec xmlns), affichable seul dans une balise <img>
+        segno.make(f"https://{name}/", error="m").save(out, kind="svg", dark="#15201b", light="#ffffff", border=2, scale=4,
+                                                         xmldecl=False)
+        return Response(out.getvalue(), media_type="image/svg+xml", headers={"Cache-Control": "no-store"})
 
     @app.put("/api/acces-reseau")
     def lan_enable(request: Request, payload: dict = Body(...)) -> dict:
@@ -1553,6 +1626,34 @@ def create_app() -> FastAPI:
         """Côté coach : la même séance, avec les allures de cet élève."""
         return fit_response(*coach_call(lambda conn: coach.workout_file(conn, proposal_id, student_id)))
 
+    # Séances sur la montre : le relais les envoie dans le calendrier Garmin Connect (Training API de Garmin)
+    @app.get("/api/coach/garmin")
+    def coach_garmin_status(request: Request) -> dict:
+        return coach_call(coach.garmin_status)
+
+    @app.post("/api/coach/garmin/relier")
+    def coach_garmin_link(request: Request) -> dict:
+        return coach_call(coach.garmin_link)
+
+    @app.put("/api/coach/garmin")
+    def coach_garmin_settings(request: Request, payload: dict = Body(...)) -> dict:
+        return coach_call(lambda conn: coach.garmin_settings(conn, bool(payload.get("coach_peut_envoyer"))))
+
+    @app.delete("/api/coach/garmin")
+    def coach_garmin_unlink(request: Request) -> dict:
+        return coach_call(coach.garmin_unlink)
+
+    @app.post("/api/coach/seances/{proposal_id}/montre")
+    def coach_garmin_send(proposal_id: int, request: Request) -> dict:
+        """« Envoyer sur ma montre » (élève)."""
+        return coach_call(lambda conn: coach.garmin_send(conn, proposal_id))
+
+    @app.post("/api/coach/montres")
+    def coach_garmin_send_students(request: Request, payload: dict = Body(...)) -> dict:
+        """Côté coach : ces séances proposées, sur la montre de leurs élèves."""
+        ids = payload.get("propositions")
+        return coach_call(lambda conn: coach.garmin_coach_send(conn, ids if isinstance(ids, list) else []))
+
     @app.get("/api/coach/accord")
     def coach_accord(request: Request) -> dict:
         def run(conn):
@@ -1590,7 +1691,7 @@ def create_app() -> FastAPI:
     # -------------------------------------------------- dossier des données
     @app.get("/api/dossier")
     def folder_status(anciennes: int = 0) -> dict:
-        info = {**datadir.describe(), "choix_fenetre": sys.platform == "win32"}
+        info = {**datadir.describe(), "choix_fenetre": config.is_desktop()}  # fenêtre « Choisir un dossier »
         if anciennes:
             info["anciennes"] = datadir.previous_installs()
         return info
@@ -1605,8 +1706,8 @@ def create_app() -> FastAPI:
     def folder_pick(request: Request, payload: dict = Body(default={})) -> dict:
         require_local(request)
         require_principal(request)
-        if sys.platform != "win32":
-            raise HTTPException(404, "La fenêtre de choix n'existe que sur le PC.")
+        if not config.is_desktop():
+            raise HTTPException(404, "La fenêtre de choix n'existe que sur l'ordinateur (Windows ou Mac).")
         return {"chemin": datadir.pick_folder(payload.get("depart"))}
 
     @app.put("/api/dossier")
@@ -1645,8 +1746,12 @@ def create_app() -> FastAPI:
         running = app.state.quit is not None
         return {
             "application": running,
+            "systeme": "mac" if sys.platform == "darwin" else "windows" if sys.platform == "win32" else "serveur",
+            # (« demarrage_windows » : le nom d'origine du réglage, gardé ; sur Mac, l'ouverture de session)
             "demarrage_windows": desktop.startup_enabled() if running and desktop.startup_supported() else None,
             "synchro_auto_heures": desktop.SYNC_EVERY // 3600 if running else None,  # rythme par défaut
+            "fenetre": desktop.window_mode() if running else None,  # « Ouvrir Foulée » : fenêtre à part ou navigateur
+            "fenetre_possible": bool(desktop.app_browser()) if running else None,
         }
 
     @app.get("/api/app")
@@ -1661,11 +1766,18 @@ def create_app() -> FastAPI:
         require_principal(request)
         if "demarrage_windows" in payload:
             if app.state.quit is None or not desktop.startup_supported():
-                raise HTTPException(404, "Réglage propre à l'application Windows.")
+                raise HTTPException(404, "Réglage propre à l'application (Windows ou Mac).")
             try:
                 desktop.set_startup(bool(payload["demarrage_windows"]))
             except OSError as exc:
                 raise HTTPException(500, f"Réglage impossible : {exc}") from exc
+        if "fenetre" in payload:
+            if app.state.quit is None:
+                raise HTTPException(404, "Réglage propre à l'application (Windows ou Mac).")
+            try:
+                desktop.set_window_mode(str(payload["fenetre"]))
+            except ValueError as exc:
+                raise HTTPException(400, str(exc)) from exc
         return app_info()
 
     @app.post("/api/app/quitter")

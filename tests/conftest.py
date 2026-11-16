@@ -6,6 +6,10 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent))
 
+from foulee import sync as _sync  # noqa: E402
+
+REAL_NEW_ACTIVITIES = _sync.new_garmin_activities  # la vraie veille, pour test_veille_vo2_periodes
+
 
 @pytest.fixture(autouse=True)
 def isolated(tmp_path, monkeypatch):
@@ -35,5 +39,16 @@ def isolated(tmp_path, monkeypatch):
     from foulee import updates
 
     updates.WATCH.forget()
+    # Veille des nouvelles séances : jamais d'appel à Garmin pendant les tests (test_veille la rebranche)
+    from foulee import sync
+
+    monkeypatch.setattr(sync, "new_garmin_activities", lambda conn, today=None: [])
+    # Envoi des séances sur la montre : jamais le vrai Garmin (test_relais_garmin branche un faux Garmin)
+    from foulee.relais import garmin as relay_garmin
+
+    def no_garmin(*args, **kwargs):
+        raise AssertionError("Appel au vrai Garmin pendant les tests")
+
+    monkeypatch.setattr(relay_garmin, "transport", no_garmin)
     yield tmp_path
     updates.WATCH.forget()

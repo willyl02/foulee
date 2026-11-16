@@ -161,7 +161,7 @@ TILE_TYPES: list[dict[str, Any]] = [
             {"key": "metriques", "label": "Métriques", "kind": "metrics",
              "default": ["sleep_s", "sleep_end_h", "hrv_night", "resting_hr", "bb_wake"]},
             {"key": "jours_ouvres", "label": "Jours travaillés seulement", "kind": "bool", "default": True},
-            {"key": "periode", "label": "Période (jours)", "kind": "periode", "default": "180"},
+            {"key": "periode", "label": "Période (jours)", "kind": "periode", "default": "herite"},
         ],
     },
     {
@@ -209,6 +209,14 @@ TILE_TYPES: list[dict[str, Any]] = [
                        "(1:1 à 1:2), paire par paire (genou / hanche, poussée / tirage…) avec un conseil, et "
                        "semaine après semaine.",
         "taille": {"w": 12, "h": 2},
+        "params": [{"key": "periode", "label": "Période (jours)", "kind": "periode", "default": "herite"}],
+    },
+    {
+        "type": "renfo_conseils", "label": "Renfo : exercices pour rééquilibrer", "icone": "dumbbell",
+        "categorie": "Entraînement",
+        "description": "Selon ton équilibre avant / arrière : combien de séries ajouter pour viser 1:1,5, et quels "
+                       "exercices choisir (avec ou sans matériel), le bas du corps d'abord.",
+        "taille": {"w": 12, "h": 3},
         "params": [{"key": "periode", "label": "Période (jours)", "kind": "periode", "default": "herite"}],
     },
     {
@@ -261,15 +269,23 @@ TILE_TYPES: list[dict[str, Any]] = [
         ],
     },
     {
-        "type": "objectif", "label": "Objectif course", "icone": "flag", "categorie": "Entraînement",
-        "description": "Compte à rebours et allure cible de ton objectif (voir Réglages).",
+        "type": "objectif", "label": "Objectifs", "icone": "flag", "categorie": "Entraînement",
+        "description": "Ton objectif principal (compte à rebours, temps visé, allure cible) et, en dessous, tes "
+                       "objectifs secondaires à venir.",
         "taille": {"w": 4, "h": 2}, "params": [],
+    },
+    {
+        "type": "objectifs", "label": "Mes objectifs (gestion)", "icone": "flag", "categorie": "Entraînement",
+        "description": "Le centre de tes objectifs : le principal, les secondaires (courses de préparation…), "
+                       "ajout, modification, « en faire l'objectif principal », les courses de ton calendrier, et "
+                       "les objectifs passés avec ton temps réalisé.",
+        "taille": {"w": 12, "h": 3}, "params": [],
     },
     {
         "type": "fractions", "label": "Fractions rapides", "icone": "bolt", "categorie": "Entraînement",
         "description": "Allure moyenne de tes tours rapides, séance par séance, face à l'allure cible.",
         "taille": {"w": 8, "h": 2},
-        "params": [{"key": "periode", "label": "Période (jours)", "kind": "periode", "default": "120"}],
+        "params": [{"key": "periode", "label": "Période (jours)", "kind": "periode", "default": "herite"}],
     },
     {
         "type": "records", "label": "Records", "icone": "trophy", "categorie": "Entraînement",
@@ -300,12 +316,14 @@ TILE_TYPES: list[dict[str, Any]] = [
 ]
 TILE_INDEX = {t["type"]: t for t in TILE_TYPES}
 WIDTHS = (3, 4, 6, 8, 9, 12)
+VIEW_PERIODS = (7, 30, 90, 180, 365, 730)
 ICONS = ["home", "sun", "activity", "map", "moon", "flag", "heart", "chart", "calendar", "star", "bolt", "layers",
          "run", "trophy", "clock", "user", "club", "scale", "dumbbell"]
 CLUB_VIEW = "club"
 WITHINGS_VIEW = "withings"
 RENFO_VIEW = "renfo"
 CALENDAR_VIEW = "calendrier"
+OBJECTIVES_VIEW = "objectifs"
 
 
 def _tile(kind: str, w: int | None = None, h: int | None = None, titre: str | None = None, **params: Any) -> dict:
@@ -362,17 +380,17 @@ def default_views() -> list[dict]:
         },
         {
             "id": "entrainement", "name": "Entraînement", "icon": "activity",
-            "spec": {"tuiles": [
+            "spec": {"periode": 180, "tuiles": [
                 _tile("serie", 8, 2, titre="Kilomètres par semaine (course + trail)", metriques=["act.distance_km"],
-                      style="barres", agregation="semaine", sport=pied, periode="180"),
+                      style="barres", agregation="semaine", sport=pied),
                 _tile("kpi", 4, 1, titre="Kilomètres sur 7 jours", metrique="act.distance_km", fenetre="semaine",
                       reference_jours=28),
                 _tile("kpi", 4, 1, titre="Charge sur 7 jours", metrique="act.load", fenetre="semaine",
                       reference_jours=28),
-                _tile("charge", 12, 3, periode="180", afficher_ratio=True),
-                _tile("zones", 6, 2, titre="Temps par zone FC", zones="fc", groupe="semaine", periode="90"),
+                _tile("charge", 12, 3, afficher_ratio=True),
+                _tile("zones", 6, 2, titre="Temps par zone FC", zones="fc", groupe="semaine"),
                 _tile("zones", 6, 2, titre="Temps par zone d'allure (VMA)", zones="allure", groupe="semaine",
-                      sport=pied, periode="90"),
+                      sport=pied),
                 _tile("activites", 12, 3, limite=25),
             ]},
         },
@@ -390,31 +408,34 @@ def default_views() -> list[dict]:
         },
         {
             "id": "recup-postes", "name": "Récup & postes", "icon": "moon",
-            "spec": {"tuiles": [
+            "spec": {"periode": 180, "tuiles": [
                 _tile("postes", 12, 3, metriques=["sleep_s", "sleep_end_h", "sleep_score", "hrv_night",
-                                                  "resting_hr", "bb_wake", "stress_avg"], periode="180"),
+                                                  "resting_hr", "bb_wake", "stress_avg"]),
                 _tile("serie", 6, 2, titre="Sommeil (moyenne 7 j)", metriques=["sleep_s"], lissage=7,
-                      bandes_postes=True, periode="90"),
+                      bandes_postes=True),
                 _tile("serie", 6, 2, titre="VFC et FC de repos", metriques=["hrv_night", "resting_hr"],
-                      disposition="empiler", bandes_postes=True, periode="90"),
-                _tile("nuage", 6, 2, titre="Sommeil → VFC de la nuit", x="sleep_s", y="hrv_night", periode="180"),
+                      disposition="empiler", bandes_postes=True),
+                _tile("nuage", 6, 2, titre="Sommeil → VFC de la nuit", x="sleep_s", y="hrv_night"),
                 _tile("calendrier", 6, 2, titre="Calendrier du sommeil", metrique="sleep_s", mois="6"),
             ]},
         },
-        {
-            "id": "cap-semi", "name": "Cap semi de Paris", "icon": "flag",
-            "spec": {"tuiles": [
-                _tile("objectif", 4, 2),
-                _tile("fractions", 8, 2, periode="120"),
-                _tile("serie", 6, 2, titre="Kilomètres par semaine", metriques=["act.distance_km"], style="barres",
-                      agregation="semaine", sport=pied, periode="120"),
-                _tile("charge", 6, 2, periode="120"),
-                _tile("zones", 6, 2, titre="Zones d'allure par semaine", zones="allure", groupe="semaine",
-                      sport=pied, periode="120"),
-                _tile("serie", 6, 2, titre="VO2max estimée par Garmin", metriques=["vo2max"], periode="365"),
-            ]},
-        },
+        objectives_view(),
     ]
+
+
+def objectives_view() -> dict:
+    """La vue « Objectifs » : le centre de gestion, puis ce qui mesure la préparation (allure cible des
+    fractions, volume, charge, zones d'allure, VO2max)."""
+    pied = "pied"
+    return {"id": OBJECTIVES_VIEW, "name": "Objectifs", "icon": "flag", "spec": {"periode": 180, "tuiles": [
+        _tile("objectifs", 12, 3),
+        _tile("fractions", 12, 2),
+        _tile("serie", 6, 2, titre="Kilomètres par semaine", metriques=["act.distance_km"], style="barres",
+              agregation="semaine", sport=pied),
+        _tile("charge", 6, 2),
+        _tile("zones", 6, 2, titre="Zones d'allure par semaine", zones="allure", groupe="semaine", sport=pied),
+        _tile("serie", 6, 2, titre="VO2max estimée par Garmin", metriques=["vo2max"]),
+    ]}}
 
 
 # ------------------------------------------------------------------ validation
@@ -462,7 +483,14 @@ def clean_spec(spec: dict) -> dict:
         if tile.get("titre"):
             clean["titre"] = str(tile["titre"])[:120]
         tiles.append(clean)
-    return {"tuiles": tiles}
+    out: dict = {"tuiles": tiles}
+    try:
+        period = int((spec or {}).get("periode") or 0)
+    except (TypeError, ValueError):
+        period = 0
+    if period in VIEW_PERIODS:
+        out["periode"] = period  # la période de la vue à l'ouverture (le sélecteur en haut à droite)
+    return out
 
 
 def slugify(text: str) -> str:
@@ -501,6 +529,9 @@ def ensure_default_views(conn: sqlite3.Connection) -> None:
         db.set_meta(conn, "vue_effet_entrainement", "1")
         db.set_meta(conn, "vue_renfo_equilibre", "1")
         db.set_meta(conn, "vue_forme_large", "1")
+        db.set_meta(conn, "vue_objectifs", "1")
+        db.set_meta(conn, "vue_renfo_conseils", "1")
+        db.set_meta(conn, "vue_periodes", "1")
         conn.commit()
         return
     if db.get_meta(conn, "vue_seance_renfo") is None:
@@ -556,9 +587,83 @@ def ensure_default_views(conn: sqlite3.Connection) -> None:
                              (json.dumps(spec, ensure_ascii=False), db.now_iso()))
         db.set_meta(conn, "vue_forme_large", "1")
         conn.commit()
+    if db.get_meta(conn, "vue_periodes") is None:
+        migrate_view_periods(conn)
+        db.set_meta(conn, "vue_periodes", "1")
+        conn.commit()
+    if db.get_meta(conn, "vue_objectifs") is None:
+        migrate_objectives_view(conn)
+        db.set_meta(conn, "vue_objectifs", "1")
+        conn.commit()
+    if db.get_meta(conn, "vue_renfo_conseils") is None:
+        # 0.8.1 : les exercices pour rééquilibrer, juste sous l'équilibre avant / arrière de la vue « Renfo »
+        _insert_tile(conn, RENFO_VIEW, "renfo_conseils", 12, 3, after=("renfo_equilibre", "renfo"))
+        db.set_meta(conn, "vue_renfo_conseils", "1")
+        conn.commit()
     if db.get_meta(conn, "renfo_vue") is None and sync_renfo_view(conn):
         # 0.6 : exercices retrouvés par la mise à niveau de la base, la vue « Renfo » sans attendre une synchro
         conn.commit()
+
+
+# Avant la 0.8.1b5, les tuiles de ces vues avaient chacune leur période (180 j, 90 j…) : le sélecteur de
+# période ne changeait rien. Elles suivent désormais la période de la vue, qui a la sienne à l'ouverture.
+OLD_TILE_PERIODS = {"entrainement": (180, {"180", "90"}), "recup-postes": (180, {"180", "90"}),
+                    "objectifs": (180, {"120", "365"}), "cap-semi": (180, {"120", "365"}),
+                    "renfo": (90, {"180"}), WITHINGS_VIEW: (180, {"365", "180", "60"})}
+
+
+def migrate_view_periods(conn: sqlite3.Connection) -> None:
+    """Les tuiles des vues d'origine qui gardent leur période d'origine suivent maintenant le sélecteur ;
+    une période changée à la main (autre valeur) est gardée."""
+    for view_id, (period, old) in OLD_TILE_PERIODS.items():
+        row = conn.execute("SELECT spec FROM views WHERE id = ?", (view_id,)).fetchone()
+        if not row:
+            continue
+        spec = json.loads(row["spec"])
+        spec.setdefault("periode", period)
+        for tile in spec.get("tuiles", []):
+            params = tile.setdefault("params", {})
+            kinds = {p["key"] for p in TILE_INDEX.get(tile.get("type"), {}).get("params", []) if p.get("kind") == "periode"}
+            if "periode" in kinds and str(params.get("periode")) in old:
+                params["periode"] = "herite"
+        conn.execute("UPDATE views SET spec = ?, updated_at = ? WHERE id = ?",
+                     (json.dumps(spec, ensure_ascii=False), db.now_iso(), view_id))
+
+
+def migrate_objectives_view(conn: sqlite3.Connection) -> None:
+    """0.8.1 : « Cap semi de Paris » devient « Objectifs » (le centre de gestion en tête, à la place de la petite
+    tuile de l'objectif ; les autres tuiles restent). Un nom changé à la main est gardé. Sans cette vue (supprimée),
+    la vue « Objectifs » arrive après « Entraînement » ; rien si une vue a déjà le centre des objectifs."""
+    rows = conn.execute("SELECT id, name, spec FROM views").fetchall()
+    if any(any(t.get("type") == "objectifs" for t in json.loads(r["spec"]).get("tuiles", [])) for r in rows):
+        return
+    old = next((r for r in rows if r["id"] == "cap-semi"), None)
+    if old:
+        spec = json.loads(old["spec"])
+        tiles = spec.setdefault("tuiles", [])
+        at = next((i for i, t in enumerate(tiles) if t.get("type") == "objectif"), None)
+        if at is None:
+            tiles.insert(0, _tile("objectifs", 12, 3))
+        else:
+            tiles[at] = _tile("objectifs", 12, 3)
+            nxt = tiles[at + 1] if at + 1 < len(tiles) else None
+            if nxt and nxt.get("type") == "fractions" and nxt.get("w") == 8:
+                nxt["w"] = 12  # elle partageait la rangée avec la petite tuile de l'objectif
+        name = "Objectifs" if old["name"] == "Cap semi de Paris" else old["name"]
+        new_id = OBJECTIVES_VIEW if not any(r["id"] == OBJECTIVES_VIEW for r in rows) else "cap-semi"
+        conn.execute("UPDATE views SET id = ?, name = ?, spec = ?, updated_at = ? WHERE id = 'cap-semi'",
+                     (new_id, name, json.dumps(spec, ensure_ascii=False), db.now_iso()))
+        return
+    view = objectives_view()
+    if any(r["id"] == view["id"] for r in rows):
+        view["id"] = "objectifs-2"
+    anchor = conn.execute("SELECT position FROM views WHERE id IN ('entrainement', 'accueil') "
+                          "ORDER BY id = 'accueil' LIMIT 1").fetchone()
+    position = (anchor["position"] + 1) if anchor else 0
+    conn.execute("UPDATE views SET position = position + 1 WHERE position >= ?", (position,))
+    conn.execute("INSERT INTO views(id, name, icon, position, spec, builtin, updated_at) VALUES (?, ?, ?, ?, ?, 1, ?)",
+                 (view["id"], view["name"], view["icon"], position, json.dumps(view["spec"], ensure_ascii=False),
+                  db.now_iso()))
 
 
 def reset_default_views(conn: sqlite3.Connection) -> None:
@@ -634,32 +739,30 @@ def withings_view(families: list[str] | None = None) -> dict:
     for family in present:
         if family == "corps":
             tiles += [
-                _tile("serie", 6, 2, titre="Poids", metriques=["wi_weight_kg"], lissage=0, periode="365"),
+                _tile("serie", 6, 2, titre="Poids", metriques=["wi_weight_kg"], lissage=0),
                 _tile("serie", 6, 2, titre="Composition corporelle", metriques=["wi_fat_pct", "wi_muscle_kg"],
-                      disposition="empiler", periode="365"),
+                      disposition="empiler"),
             ]
         elif family == "tension":
             tiles += [
                 _tile("serie", 6, 2, titre="Tension artérielle", metriques=["wi_bp_sys", "wi_bp_dia"],
-                      disposition="superposer", periode="180"),
-                _tile("serie", 6, 2, titre="Pouls au repos (tensiomètre, balance)", metriques=["wi_pulse"],
-                      periode="180"),
+                      disposition="superposer"),
+                _tile("serie", 6, 2, titre="Pouls au repos (tensiomètre, balance)", metriques=["wi_pulse"]),
             ]
         elif family == "sommeil":
             tiles += [
                 _tile("serie", 6, 2, titre="Sommeil (Withings)", metriques=["wi_sleep_s"], style="barres",
-                      bandes_postes=True, periode="60"),
+                      bandes_postes=True),
                 _tile("serie", 6, 2, titre="Nuits : FC et respiration", metriques=["wi_sleep_hr", "wi_sleep_resp"],
-                      disposition="empiler", periode="60"),
+                      disposition="empiler"),
             ]
         elif family == "activite":
             tiles += [
-                _tile("serie", 6, 2, titre="Pas par jour (Withings)", metriques=["wi_steps"], style="barres",
-                      periode="60"),
+                _tile("serie", 6, 2, titre="Pas par jour (Withings)", metriques=["wi_steps"], style="barres"),
                 _tile("serie", 6, 2, titre="Temps actif par semaine (Withings)", metriques=["wi_active_s"],
-                      style="barres", agregation="semaine", periode="180"),
+                      style="barres", agregation="semaine"),
             ]
-    return {"id": WITHINGS_VIEW, "name": "Withings", "icon": "scale", "spec": {"tuiles": tiles}}
+    return {"id": WITHINGS_VIEW, "name": "Withings", "icon": "scale", "spec": {"periode": 180, "tuiles": tiles}}
 
 
 def sync_withings_view(conn: sqlite3.Connection, enabled: bool, families: list[str] | None = None) -> None:
@@ -732,14 +835,15 @@ def sync_calendar_view(conn: sqlite3.Connection, enabled: bool) -> str | None:
 
 def renfo_view() -> dict:
     """La vue « Renfo » : muscles travaillés, exercices et leur progression, régularité, séances."""
-    return {"id": RENFO_VIEW, "name": "Renfo", "icon": "dumbbell", "spec": {"tuiles": [
+    return {"id": RENFO_VIEW, "name": "Renfo", "icon": "dumbbell", "spec": {"periode": 90, "tuiles": [
         _tile("renfo", 12, 4),
         _tile("renfo_equilibre", 12, 2),
+        _tile("renfo_conseils", 12, 3),
         _tile("renfo_exercices", 12, 3),
         _tile("serie", 6, 2, titre="Temps de renfo par semaine", metriques=["act.duration_s"], style="barres",
-              agregation="semaine", sport="renfo", periode="180"),
+              agregation="semaine", sport="renfo"),
         _tile("serie", 6, 2, titre="Séries et tonnage par semaine", metriques=["act.sets", "act.volume"],
-              style="barres", agregation="semaine", disposition="empiler", periode="180"),
+              style="barres", agregation="semaine", disposition="empiler"),
         _tile("activites", 12, 3, titre="Séances de renfo", sport="renfo", limite=20),
     ]}}
 

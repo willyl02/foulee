@@ -1,10 +1,12 @@
 """Mises à jour de Foulée, sur le canal stable ou bêta.
 
 Trois façons d'être installé, trois façons de se mettre à jour :
-- « exe » (PC, installé par Foulee-Setup.exe) : Foulée cherche sur GitHub la dernière
-  version publiée (les versions stables, ou aussi les pré-versions bêta), télécharge
+- « exe » (PC, installé par Foulee-Setup.exe ; Mac, Foulee.app) : Foulée cherche sur GitHub la
+  dernière version publiée (les versions stables, ou aussi les pré-versions bêta), télécharge
   son installateur, vérifie son empreinte SHA-256 puis le lance en mode silencieux ;
-  l'installateur remplace le programme et relance Foulée ;
+  l'installateur remplace le programme et relance Foulée. Sur Mac, l'« installateur » est le
+  .dmg de son processeur (Apple Silicon ou Intel) : un petit script attend la fermeture de
+  Foulée, remplace Foulee.app par celle du .dmg et la relance ;
 - « serveur » : l'interface dépose une demande que le service système foulee-maj
   traite (scripts/maj_serveur.py suit la branche main ou beta du dépôt) ;
 - « dev » (dossier décompressé, installation à la main) : Mettre-a-jour-Foulee.cmd.
@@ -39,6 +41,25 @@ CHANNELS = ("stable", "beta")
 CHECK_EVERY = 3 * 3600      # l'alerte de l'interface revérifie toutes les 3 heures
 RETRY_AFTER = 30 * 60       # GitHub injoignable (pas d'Internet…) : nouvel essai plus tôt
 ASSET_PATTERN = re.compile(r"^Foulee-Setup-[\w.\-]+\.exe$")
+
+
+def mac_arch() -> str:
+    """« arm64 » (Apple Silicon) ou « intel »."""
+    import platform
+
+    return "arm64" if platform.machine() == "arm64" else "intel"
+
+
+def asset_pattern(system: str | None = None) -> re.Pattern:
+    """Le fichier à télécharger pour ce système : Foulee-Setup-x.y.z.exe, ou Foulee-x.y.z-mac-arm64.dmg pour
+    l'application Mac (Foulee.app)."""
+    if system is None:
+        from . import desktop
+
+        system = "darwin" if sys.platform == "darwin" and desktop.mac_app_bundle() is not None else "win32"
+    if system == "darwin":
+        return re.compile(rf"^Foulee-[\w.\-]+-mac-{mac_arch()}\.dmg$")
+    return ASSET_PATTERN
 SUMS_NAME = "SHA256SUMS.txt"
 _VERSION = re.compile(r"^v?(\d+)\.(\d+)(?:\.(\d+))?(?:[-.]?(a|alpha|b|beta|rc)[-.]?(\d+)?)?$", re.IGNORECASE)
 _PRE_RANK = {"a": 0, "alpha": 0, "b": 1, "beta": 1, "rc": 2}
@@ -71,6 +92,11 @@ def mode() -> str:
     """« exe », « serveur » ou « dev » : la façon dont cette copie de Foulée se met à jour."""
     if config.is_packaged() and sys.platform == "win32":
         return "exe"
+    if config.is_packaged() and sys.platform == "darwin":
+        from . import desktop
+
+        if desktop.mac_app_bundle() is not None:
+            return "exe"  # l'application Mac se met à jour comme celle du PC
     folder = os.environ.get("FOULEE_MAJ")
     if folder and Path(folder).is_dir():
         return "serveur"
@@ -153,7 +179,8 @@ def pick(releases: list[dict], channel: str) -> dict | None:
         except ValueError:
             continue
         assets = release.get("assets") or []
-        installer = next((a for a in assets if ASSET_PATTERN.match(a.get("name", ""))), None)
+        pattern = asset_pattern()
+        installer = next((a for a in assets if pattern.match(a.get("name", ""))), None)
         sums = next((a for a in assets if a.get("name") == SUMS_NAME), None)
         if installer and sums and (best is None or version > best["cle"]):
             best = {"cle": version, "version": release["tag_name"].lstrip("vV"), "release": release,
@@ -222,9 +249,47 @@ def download(best: dict, token: str | None, folder: Path,
     return target
 
 
+MAC_UPDATE_SCRIPT = """#!/bin/bash
+# Mise à jour de Foulée sur Mac : attend la fermeture de Foulée, remplace l'application, la relance.
+pid="$1"; dmg="$2"; app="$3"; log="$4"
+exec >>"$log" 2>&1
+echo "$(date) : mise à jour depuis $dmg"
+for _ in $(seq 1 120); do kill -0 "$pid" 2>/dev/null || break; sleep 0.5; done
+mnt=$(mktemp -d /tmp/foulee-maj.XXXXXX)
+if hdiutil attach -nobrowse -readonly -mountpoint "$mnt" "$dmg"; then
+  if [ -d "$mnt/Foulee.app" ]; then
+    rm -rf "$app.ancienne"
+    if mv "$app" "$app.ancienne" && ditto "$mnt/Foulee.app" "$app"; then
+      rm -rf "$app.ancienne"
+      echo "Foulee.app remplacée"
+    else
+      echo "Remplacement impossible : l'ancienne version reste en place"
+      rm -rf "$app"; mv "$app.ancienne" "$app"
+    fi
+  fi
+  hdiutil detach "$mnt" -quiet
+fi
+xattr -dr com.apple.quarantine "$app" 2>/dev/null
+open "$app" --args --apres-maj
+rm -f "$dmg"
+"""
+
+
 def launch_installer(path: Path) -> None:
     """Lance l'installateur en mode silencieux ; il remplace le programme puis relance Foulée."""
     log = config.log_dir() / "installation.log"
+    if sys.platform == "darwin":
+        from . import desktop
+
+        bundle = desktop.mac_app_bundle()
+        if bundle is None:
+            raise UpdateError("Foulee.app introuvable : télécharge le .dmg sur GitHub et remplace l'application.")
+        script = path.with_name("maj-foulee.sh")
+        script.write_text(MAC_UPDATE_SCRIPT, encoding="utf-8")
+        subprocess.Popen(["/bin/bash", str(script), str(os.getpid()), str(path), str(bundle), str(log)],
+                         start_new_session=True, close_fds=True, stdin=subprocess.DEVNULL,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return
     flags = getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
     subprocess.Popen([str(path), "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", f"/LOG={log}"],
                      creationflags=flags, close_fds=True)

@@ -10,7 +10,8 @@ disposition de deux façons :
 - un **serveur MCP pour Claude Desktop**, pour poser tes questions à Claude directement.
 
 Sur Windows, Foulée s'installe comme n'importe quel programme et tourne en
-arrière-plan, avec son icône près de l'horloge. Installé sur un serveur à la maison,
+arrière-plan, avec son icône près de l'horloge ; **sur Mac** (bêta), c'est une application à glisser dans
+Applications, avec son icône dans la barre des menus (section 1 bis). Installé sur un serveur à la maison,
 il s'ouvre aussi **sur ton téléphone**, de partout, comme une appli (section 9).
 
 **Présentation illustrée** (27 pages, avec le téléchargement, l'installation pas à pas
@@ -62,8 +63,49 @@ Ensuite, Foulée tourne en arrière-plan avec son **icône près de l'horloge** 
 flèche « ^ » si Windows la range) : un clic ouvre l'interface, un clic droit propose
 **Synchroniser maintenant**, **Lancer au démarrage de Windows** et **Quitter Foulée**.
 Tant qu'il tourne, la synchro se fait toute seule, **toutes les 3 heures** par défaut
-(au réveil du PC si elle a été manquée ; rythme réglable, voir plus bas). Relancer
+(au réveil du PC si elle a été manquée ; rythme réglable, voir plus bas), et entre deux,
+Foulée **guette tes nouvelles séances** : toutes les 20 minutes, un seul appel léger à
+Garmin, et la synchro part dès qu'une séance arrive dans Garmin Connect. Relancer
 Foulée depuis le menu Démarrer rouvre simplement l'interface.
+
+L'interface s'ouvre dans **sa propre fenêtre**, sans barre d'adresse, d'onglets ni de favoris (le mode
+application de Microsoft Edge, toujours présent sous Windows 10 et 11 ; Chrome à défaut), avec son icône
+dans la barre des tâches. Tu préfères un onglet de ton navigateur ? **Réglages → Application → Ouvrir
+Foulée → Dans mon navigateur**. Fermer la fenêtre n'arrête pas Foulée, qui reste près de l'horloge.
+
+## 1 bis. Installer Foulée sur Mac (bêta)
+
+L'application Mac fonctionne comme celle du PC : l'interface, la synchro automatique, Claude Desktop, les
+mises à jour toutes seules. Il faut macOS 11 (Big Sur) ou plus récent.
+
+1. Sur la page des versions (https://github.com/willyl02/foulee/releases), télécharge le `.dmg` de ton Mac :
+   **`Foulee-<version>-mac-arm64.dmg`** pour un Mac **Apple Silicon** (puce M1, M2, M3, M4…), ou
+   **`Foulee-<version>-mac-intel.dmg`** pour un Mac **Intel**. Pour savoir : menu Pomme (en haut à gauche) → **À propos de ce Mac**,
+   ligne « Puce » (Apple M…) ou « Processeur » (Intel).
+2. Ouvre le `.dmg` et **glisse Foulée sur le dossier Applications**. Éjecte ensuite le `.dmg`.
+3. **Premier lancement** : l'application n'est pas signée par Apple (il faudrait un abonnement développeur
+   payant), alors macOS refuse d'abord de l'ouvrir (« Foulée n'a pas été ouvert » ou « Apple ne peut pas
+   vérifier… »). Clique sur **Terminé** (pas sur « Placer dans la corbeille »), puis :
+   - ouvre **Réglages Système → Confidentialité et sécurité** ;
+   - tout en bas, à côté de « Foulée a été bloqué… », clique sur **Ouvrir quand même** ;
+   - confirme avec ton mot de passe (ou Touch ID), puis **Ouvrir**.
+
+   C'est à faire une seule fois : ensuite, Foulée s'ouvre normalement, et ses mises à jour aussi.
+   (Sur macOS 14 et plus ancien, un clic droit sur Foulée dans Applications → **Ouvrir** suffit aussi.)
+4. Foulée s'ouvre sur sa **page d'accueil**, comme sur Windows : ta clé API Garmin, le premier import, et
+   Claude Desktop si tu l'utilises.
+
+Ensuite, Foulée tourne en arrière-plan avec son **icône dans la barre des menus** (en haut à droite de
+l'écran, le F rouge et blanc ; pas d'icône dans le Dock) : **Ouvrir Foulée**, **Synchroniser maintenant**,
+**Lancer à l'ouverture de session** (conseillé : la synchro automatique en dépend) et **Quitter Foulée**.
+L'interface s'ouvre dans sa propre fenêtre si **Google Chrome** ou **Microsoft Edge** est installé (Safari
+n'a pas de mode application), sinon dans ton navigateur. Ta clé API Garmin est rangée dans le **Trousseau**
+de macOS. Tes données sont dans `~/Library/Application Support/Foulee/donnees`.
+
+**Désinstaller sur Mac** : quitte Foulée (barre des menus → Quitter Foulée), décoche avant « Lancer à
+l'ouverture de session », puis glisse **Foulée** d'Applications vers la Corbeille. Tes données restent dans
+`~/Library/Application Support/Foulee` : supprime ce dossier si tu n'en veux plus (et l'entrée « Foulee »
+du Trousseau, dans l'app Trousseau d'accès).
 
 ### Tu avais installé Foulée avec l'archive (dossier `C:\Users\<toi>\Foulee`) ?
 
@@ -237,14 +279,14 @@ Garmin Connect (une nouvelle publication donne un nouveau lien).
 
 | Vue | Contenu |
 |---|---|
-| Accueil | Bonjour (photo, poste du jour, objectif), forme du jour face à tes habitudes (chaque signal avec sa petite courbe : FC de repos face à ta moyenne 30 jours, VFC dans ta zone habituelle, sommeil face à ton besoin…), ta semaine (avec les séances prévues si ton calendrier est relié), tes allures selon ta VMA (tableau du club, piste, test VAMEVAL), Body Battery de la journée, records |
+| Accueil | Bonjour (photo, poste du jour, objectif), objectifs (le principal, et dessous les secondaires à venir), forme du jour face à tes habitudes (chaque signal avec sa petite courbe : FC de repos face à ta moyenne 30 jours, VFC dans ta zone habituelle, sommeil face à ton besoin…), ta semaine (avec les séances prévues si ton calendrier est relié), tes allures selon ta VMA (tableau du club, piste, test VAMEVAL), Body Battery de la journée, records |
 | Calendrier | Si tu as relié ton calendrier d'entraînement : ta prochaine course (compte à rebours) et tes prochaines séances, puis le mois jour par jour, séances prévues face aux séances faites |
 | Aujourd'hui | Nuit, VFC, FC de repos, Body Battery au réveil, stress, km sur 7 jours, fraîcheur, dernière séance |
 | Entraînement | Km par semaine, forme et fatigue (charge chronique, aiguë, fraîcheur, ratio), zones FC et d'allure, liste des séances |
-| Renfo | Dès ta première séance de renfo détaillée : muscles travaillés (carte du corps face et dos, séries par muscle), régularité face à ton objectif, équilibre avant / arrière (rapport 1:x, paire par paire, semaine après semaine), chaque exercice et sa progression, temps, séries et tonnage par semaine, séances |
+| Renfo | Dès ta première séance de renfo détaillée : muscles travaillés (carte du corps face et dos, séries par muscle), régularité face à ton objectif, équilibre avant / arrière (rapport 1:x, paire par paire, semaine après semaine), exercices pour rééquilibrer (combien de séries ajouter pour viser 1:1,5, et lesquels), chaque exercice et sa progression, temps, séries et tonnage par semaine, séances |
 | Séance | Résumé, exercices de renfo (avec la carte du corps et l'équilibre avant / arrière de la séance), effet d'entraînement (jauges aérobie et anaérobie de Garmin), carte, courbes synchronisées (FC, allure, altitude, cadence…), autres mesures (dynamique de course, puissance, respiration…), tours ou découpage au km |
 | Récup & postes | Comparaison d'un poste de travail à l'autre, sommeil, VFC, FC de repos, nuage sommeil → VFC, calendrier |
-| Cap semi de Paris | Compte à rebours, allure cible, fractions rapides face à l'allure cible, volume, charge, zones, VO2max |
+| Objectifs | Le centre de tes objectifs : le principal (compte à rebours, temps visé, allure cible, part de ta VMA) et les secondaires (courses de préparation…), avec l'équivalence de leur temps sur la distance du principal, les courses de ton calendrier à ajouter d'un clic, les objectifs passés et ton temps réalisé ; puis fractions rapides face à l'allure cible, volume, charge, zones, VO2max |
 | Mon club | Si tu l'as coché dans les Réglages : ton club FFA (avec son logo si tu l'as importé), coordonnées, site, carte, ta licence, et son classement sur athle.fr en un clic |
 | Withings | Si tu as relié ton compte : dernière pesée et composition corporelle, dernière tension (avec les repères de la Société européenne d'hypertension), dernière nuit, activité, puis les courbes de chaque appareil |
 
@@ -264,7 +306,18 @@ la tuile les affiche (un appel par jour), puis gardées dans ta base.
 source, Garmin et Withings, de 30 minutes à 12 heures (3 heures par défaut). 3 heures est
 un bon compromis : séances, nuits et pesées arrivent dans la journée sans solliciter
 Garmin et Withings pour rien ; plus rapproché, Foulée redemande sans cesse des données qui
-n'ont pas bougé. Pour une donnée tout de suite, le bouton **Synchroniser** suffit.
+n'ont pas bougé. Pour une donnée tout de suite, le bouton **Synchroniser** suffit. Les
+nouvelles séances, elles, n'attendent pas : la veille (toutes les 20 minutes, un appel)
+lance la synchro Garmin dès qu'une séance arrive dans Garmin Connect.
+
+**VO2max** : l'API personnelle de Garmin ne la donne pas ; ta montre l'écrit dans le
+fichier FIT de chaque séance où elle l'estime, et Foulée l'y lit (les anciennes séances
+déjà téléchargées sont relues petit à petit, une soixantaine par synchro).
+
+**Période des vues** : le sélecteur 7 j… 2 ans règle les tuiles de la vue, et chaque vue
+garde la sienne (Entraînement, Récup & postes, Objectifs : 6 mois à l'ouverture ; Renfo :
+90 jours). Il n'apparaît que là où il change quelque chose. Une tuile à période fixe
+(réglage « Période » de la tuile) porte un petit cadenas avec sa période.
 
 **Pastilles de connexion** : en haut à droite de chaque vue (dans la barre du haut
 sur téléphone), une pastille par source branchée sur le profil (Garmin, Withings, Strava,
@@ -296,7 +349,9 @@ Foulée compare les séries : « 1 : 1,5 », c'est 1,5 série derrière pour 1 d
 cible du coureur va de 1:1 à 1:2 (la propulsion vient de la chaîne postérieure). La
 tuile « Renfo : équilibre avant / arrière » donne le rapport sur la période, paire
 par paire (bas du corps genou / hanche, haut du corps poussée / tirage, tronc, bras,
-bas de jambe) avec un conseil, et semaine après semaine ; la tuile « Exercices de
+bas de jambe) avec un conseil, et semaine après semaine ; la tuile « Renfo : exercices pour
+rééquilibrer », juste dessous, dit combien de séries ajouter pour viser 1:1,5 (par semaine et
+par séance) et lesquelles, famille par famille, avec dosage, consigne et matériel ; la tuile « Exercices de
 renfo » de la vue Séance donne celui de la séance, et une étiquette montre comment
 chaque exercice est compté. Les exercices « corps entier » comptent ½ de chaque côté ;
 le latéral et la rotation (planche latérale, bonds latéraux…) sont comptés à part.
@@ -473,7 +528,7 @@ l'installer par-dessus : c'est exactement ce que fait le bouton.
 
 ## 7. Désinstaller
 
-Paramètres de Windows → **Applications** → **Foulée** → **Désinstaller**. Foulée se
+Sur Mac : voir la fin de la section 1 bis. Sur Windows : Paramètres de Windows → **Applications** → **Foulée** → **Désinstaller**. Foulée se
 ferme, se retire de Claude Desktop et du démarrage de Windows, puis te demande s'il
 faut **effacer aussi tes données** (base, fichiers FIT, réglages, clé Garmin) :
 réponds « Non » pour les garder, par exemple pour réinstaller plus tard. Si tu as rangé
@@ -507,9 +562,29 @@ Dans un terminal :
 | `reset-views` | Restaurer les vues d'origine |
 | `forget-key` | Supprimer la clé de ce PC |
 
-## 9. Sur ton téléphone : Foulée sur un serveur
+## 9. Sur ton téléphone
 
-Pour consulter Foulée de partout, il tourne en permanence sur un petit serveur
+### Le plus simple : depuis ton PC, avec Tailscale
+
+Foulée reste sur ton PC ; **Tailscale** (gratuit) relie ton téléphone à ton PC par une liaison privée et
+chiffrée, de partout, sans rien publier sur Internet.
+
+1. Installe [Tailscale](https://tailscale.com/download) sur le PC et sur le téléphone, et connecte-toi sur
+   les deux avec **le même compte** (Google, Microsoft, Apple…).
+2. Une fois pour toutes, dans la [console Tailscale, page DNS](https://login.tailscale.com/admin/dns) :
+   active MagicDNS, puis « Enable HTTPS ».
+3. Dans Foulée, **Réglages → Foulée sur ton téléphone** : les étapes se cochent toutes seules ; puis
+   « Activer l'accès depuis mon téléphone » (si Windows demande une autorisation, réponds « Oui »).
+4. Sur le téléphone, Tailscale connecté, scanne le QR code : ton Foulée s'ouvre. Pour l'avoir comme une
+   appli : Android, menu ⋮ → « Installer l'application » ; iPhone, Partager → « Sur l'écran d'accueil ».
+
+Le PC doit rester allumé (pas en veille), avec Foulée lancé. Foulée fait pour toi ce qu'il fallait taper
+dans PowerShell (`tailscale serve --bg 8770`, puis accepter le nom Tailscale du PC) ; « Couper l'accès »
+le défait. Par Tailscale, tu as tous tes réglages, comme sur le PC.
+
+### Foulée sur un serveur, allumé en permanence
+
+Pour consulter Foulée de partout sans laisser le PC allumé, il tourne en permanence sur un petit serveur
 Linux (par exemple un conteneur Debian sous Proxmox), et **Tailscale** le relie
 à tes seuls appareils, en HTTPS. Rien n'est publié sur Internet.
 
@@ -601,7 +676,8 @@ Un coach et ses élèves se relient par un **relais** : un petit serveur sur Int
 Foulée appellent. Chacun garde Foulée et tout son historique chez lui ; le relais ne garde que les comptes,
 les codes d'invitation, les messages, les séances proposées et l'extrait que chaque élève choisit de partager
 (séances des 4 dernières semaines en résumé, objectif, VMA ; GPS, sommeil, VFC et poids en option, jamais
-Strava). Le relais, c'est Foulée lui-même, en « mode relais » : il ne touche pas à Garmin.
+Strava). Le relais, c'est Foulée lui-même, en « mode relais » : il ne lit rien chez Garmin (il peut seulement, si
+l'élève le relie, déposer les séances du coach dans son calendrier Garmin : voir « Sur la montre » plus bas).
 
 ```
 Foulée de l'élève  ──►  relais (HTTPS, tunnel Cloudflare)  ◄──  Foulée du coach
@@ -631,11 +707,13 @@ ton adresse, par exemple `https://relais.mon-club.com`.
 
 **Ce que fait le coach** (page « Mes élèves ») :
 - le tableau de bord du groupe : pour chaque élève sa dernière séance, sa semaine jour par jour (fait, manqué,
-  prévu), sa charge sur 7 jours, sa VMA, son objectif et le compte à rebours, les messages non lus, et
-  l'alerte « 6 jours sans séance » ;
+  prévu), sa charge sur 7 jours, sa VMA, son objectif et le compte à rebours, l'équilibre avant / arrière de
+  son renfo, les messages non lus, et l'alerte « 6 jours sans séance » ;
 - la **fiche** d'un élève : sa semaine (son plan Garmin et les séances proposées, face à ce qu'il a fait,
   semaine après semaine), ses séances des 4 dernières semaines, son objectif et l'allure qui va avec, ses
-  séances proposées, sa forme (sommeil, VFC, FC au repos, poids) s'il la partage ;
+  objectifs secondaires, l'équilibre avant / arrière de son renfo (rapport, tendance, paire par paire, ce
+  que tu peux lui dire, et « Lui en parler » avec un message tout prêt), ses séances proposées, sa forme
+  (sommeil, VFC, FC au repos, poids) s'il la partage ;
 - chaque **séance** en détail : chiffres, tours, renfo, tracé simplifié (sans fond de carte), ce qui était
   proposé, et un **fil** pour en parler ;
 - **proposer une séance** à un ou plusieurs élèves : un déroulé en blocs (durée ou distance, répétitions,
@@ -643,15 +721,37 @@ ton adresse, par exemple `https://relais.mon-club.com`.
 
 **Ce que voit l'élève** (page « Mon coach ») : les séances proposées, bloc par bloc avec ses allures (et dans
 sa vue « Calendrier », en pointillé bleu, face à ce qu'il fait), la conversation avec son coach, et ce qu'il
-partage. Chaque séance proposée se télécharge en **fichier .fit pour la montre** (« Pour ma montre ») : chaque
-bloc devient une étape, les répétitions une boucle, les % de VMA une fourchette d'allure calculée avec la VMA
-de l'élève (± 3 %), la zone de FC une cible de FC. Montre branchée en USB, le fichier se copie dans le
-dossier `GARMIN\NewFiles` ; débranchée, la montre la range dans Entraînement → Entraînements. Sans câble ?
-Garmin Connect n'importe pas les fichiers d'entraînement (seulement des activités et des parcours), et l'API
-officielle de Garmin, celle de Foulée, ne fait que lire : l'élève recopie alors la séance dans Garmin Connect
-(Entraînement et planification → Entraînements → Créer), puis « Envoyer vers l'appareil ». Le coach peut télécharger
-le même fichier, avec les allures de l'élève, depuis sa fiche. Si l'élève répond « oui » à « Ton coach
-fait-il partie de ton club ? » (Réglages → Coach et élèves), le logo du club s'affiche sur la carte du coach.
+partage.
+
+**Sur la montre, sans câble** : sous chaque séance proposée, **« Envoyer sur ma montre »**. La première fois,
+Garmin Connect s'ouvre dans une autre fenêtre : l'élève s'y connecte, chez Garmin (Foulée ne voit jamais son
+mot de passe), et clique sur « Accepter » ; la séance part aussitôt, les suivantes en un clic. Elle arrive dans
+son **calendrier Garmin Connect**, à sa date : chaque bloc devient une étape, les répétitions une boucle, les %
+de VMA une fourchette d'allure calculée avec **sa** VMA (± 3 %), la zone de FC une cible de FC. La montre la
+récupère à sa synchro. « Renvoyer » la remplace ; une séance modifiée par le coach est renvoyée toute seule,
+supprimée elle quitte le calendrier Garmin. La carte « Ta montre Garmin » (page « Mon coach ») dit si le coach
+peut envoyer lui-même ses séances sur la montre (oui par défaut) et permet de délier le compte (l'autorisation
+est retirée chez Garmin aussi, comme quand on quitte le groupe). Côté coach : une petite montre verte marque les
+élèves reliés ; « Envoyer aussi sur leur montre Garmin » (cochée d'office) en proposant une séance, ou le bouton
+montre sur la fiche de l'élève.
+
+Comment ça marche : le relais est l'appli « Foulée » inscrite au programme développeur de Garmin (Connect
+Developer, Training API, OAuth 2.0 avec PKCE). Elle ne fait que déposer des séances dans le calendrier : elle ne
+lit rien de la montre. Les autorisations des élèves sont gardées **chiffrées** dans la base du relais (la clé est
+à part, dans son dossier des secrets). L'administrateur l'active une fois, sur la machine du relais :
+
+```bash
+sudo foulee relais garmin
+```
+
+(Client ID et Client Secret de l'appli Garmin, le secret ne s'affiche pas ; puis l'adresse publique du relais.
+Chez Garmin, l'« OAuth redirect URL » de l'appli est cette adresse suivie de `/garmin/retour`.)
+
+**Avec un câble** : chaque séance se télécharge aussi en **fichier .fit** (« Fichier .fit »). Montre branchée en
+USB, il se copie dans le dossier `GARMIN\NewFiles` ; débranchée, la montre la range dans Entraînement →
+Entraînements. Le coach peut télécharger le même fichier, avec les allures de l'élève, depuis sa fiche.
+
+Si l'élève répond « oui » à « Ton coach fait-il partie de ton club ? » (Réglages → Coach et élèves), le logo du club s'affiche sur la carte du coach.
 **Messages** : une conversation par élève, le fil du groupe (le coach y épingle ses annonces) et un
 fil sous chaque séance ; Foulée relève les nouveautés toutes les minutes (badge dans la colonne). L'extrait
 part après chaque synchro.

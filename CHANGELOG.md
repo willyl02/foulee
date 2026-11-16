@@ -4,6 +4,119 @@ Les versions « bêta » (par exemple 0.4.0b1) sont des avant-premières : elles
 sur le canal bêta (Réglages → Mises à jour → « Recevoir les versions bêta »), puis sortent en
 version stable une fois éprouvées.
 
+## 0.8.1 — 16 novembre 2026
+
+La version stable qui réunit les bêtas 0.8.1 ; le détail de chacune est dans l'historique des versions (CHANGELOG.md sur GitHub).
+
+- **Les séances du coach sur la montre, sans câble** : « Envoyer sur ma montre » sous chaque séance proposée. La première
+  fois, Garmin Connect s'ouvre : on s'y connecte, chez Garmin, et on clique sur « Accepter » (Foulée ne voit jamais le mot
+  de passe) ; ensuite, un clic suffit. La séance arrive dans le calendrier Garmin Connect à sa date, avec tes allures ;
+  la montre la récupère à sa synchro. Le coach peut aussi l'envoyer lui-même aux élèves reliés. Le fichier .fit reste là.
+- **Objectifs** : « Cap semi de Paris » devient la vue « Objectifs » : l'objectif principal et des objectifs secondaires
+  (courses de préparation), avec l'équivalence de chaque temps visé sur la distance du principal. Sur l'Accueil, la
+  tuile « Objectifs » montre le principal et les secondaires à venir.
+- **Renfo** : des exercices pour rééquilibrer l'avant et l'arrière, famille par famille ; le coach voit cet équilibre
+  sur « Mes élèves » et sur la fiche de chaque élève, avec un message tout prêt.
+- **VO2max** lue dans les fichiers FIT de la montre (la tuile était vide) ; **nouvelles séances plus vite** : Foulée
+  guette toutes les 20 minutes et synchronise dès qu'une séance arrive dans Garmin Connect ; **sélecteur de période**
+  qui agit sur chaque vue, retenu vue par vue.
+- **Un logo fixe** (le F de la balise) partout, la rubrique active marquée d'un trait rouge, et **Foulée dans sa propre
+  fenêtre**, sans barre d'adresse.
+- **Foulée sur ton téléphone depuis ton PC** avec Tailscale, en un bouton et un QR code.
+- **Foulée sur Mac** (bêta) : Apple Silicon et Intel, à glisser dans Applications.
+
+## 0.8.1b7 — 16 novembre 2026 (bêta)
+
+- **Les séances du coach sur la montre, sans câble** : « Envoyer sur ma montre » sous chaque séance proposée
+  (page « Mon coach »). La première fois, Garmin Connect s'ouvre : on s'y connecte, chez Garmin (Foulée ne voit
+  jamais le mot de passe), et on clique sur « Accepter » ; la séance part aussitôt, les suivantes en un clic.
+  Elle arrive dans le calendrier Garmin Connect à sa date, bloc par bloc, avec ses allures (fourchette de ± 3 %
+  autour du % de VMA) ou sa zone de FC ; la montre la récupère à sa synchro. « Renvoyer » la remplace.
+- **Le coach peut l'envoyer lui-même** sur la montre des élèves reliés (une montre verte à côté de leur nom) :
+  case « Envoyer aussi sur leur montre Garmin » en proposant une séance, bouton montre sur la fiche. Une séance
+  modifiée est renvoyée toute seule ; supprimée, elle quitte le calendrier Garmin. L'élève choisit si son coach
+  peut le faire (carte « Ta montre Garmin », oui par défaut) et peut délier son compte à tout moment.
+- Comment : le relais est désormais l'appli « Foulée » du programme développeur de Garmin (Training API,
+  OAuth 2.0 avec PKCE). Il ne lit rien de la montre, il y dépose seulement des séances ; les autorisations sont
+  gardées chiffrées. À activer une fois sur la machine du relais : `sudo foulee relais garmin`. Le fichier .fit
+  (câble USB) reste disponible.
+
+## 0.8.1b6 — 15 novembre 2026 (bêta)
+
+- **Foulée sur Mac** (bêta) : `Foulee-<version>-mac-arm64.dmg` (Apple Silicon) et `-mac-intel.dmg` (Intel),
+  à glisser dans Applications. Comme sur le PC : interface, synchro automatique et veille des nouvelles
+  séances, Claude Desktop, mises à jour toutes seules (Foulée télécharge le .dmg de ton processeur, vérifie
+  son empreinte, remplace l'application et se relance). Icône dans la barre des menus, lancement à
+  l'ouverture de session, fenêtre à part avec Chrome ou Edge, clé API dans le Trousseau, données dans
+  ~/Library/Application Support/Foulee. L'application n'est pas signée par Apple : au premier lancement,
+  Réglages Système → Confidentialité et sécurité → « Ouvrir quand même » (une seule fois).
+
+## 0.8.1b5 — 15 novembre 2026 (bêta)
+
+- **VO2max** : la tuile « VO2max estimée par Garmin » était vide, l'API personnelle de Garmin ne la donnant
+  pas. Foulée la lit désormais dans le fichier FIT de chaque séance, où la montre l'écrit ; les anciennes
+  séances déjà téléchargées sont relues petit à petit (une soixantaine par synchro).
+- **Nouvelles séances plus vite** : entre deux synchros complètes (3 h par défaut), Foulée guette toutes les
+  20 minutes (un seul appel à Garmin) et lance la synchro Garmin dès qu'une nouvelle séance est arrivée dans
+  Garmin Connect. Sur le PC comme sur un serveur. Les synchros automatiques se faisaient bien : le délai
+  venait des 3 heures d'écart, et du moment où la montre envoie la séance à Garmin Connect.
+- **Sélecteur de période** : il ne changeait rien sur plusieurs vues (Entraînement, Récup & postes,
+  Objectifs, Withings, une partie de Renfo), dont les tuiles avaient chacune leur période fixe. Elles suivent
+  désormais la période de la vue, et chaque vue a la sienne à l'ouverture (6 mois pour Entraînement, Récup
+  et Objectifs, 90 jours pour Renfo), retenue vue par vue. Le sélecteur n'apparaît que là où il change
+  quelque chose, et une tuile à période fixe porte un petit cadenas. Une période changée à la main est gardée.
+- **Logo** : l'ancienne balise est remplacée partout par le F : la page « Foulée est injoignable » du
+  téléphone (Tailscale coupé), les pages de connexion par le réseau local, la page de bienvenue, et le logo
+  par défaut en haut du menu (les logos au choix passent sur fond sombre).
+
+## 0.8.1b4 — 15 novembre 2026 (bêta)
+
+- **Objectifs** : « Cap semi de Paris » devient la vue « Objectifs », le centre de tes objectifs. L'objectif
+  principal (compte à rebours, temps visé, allure cible, part de ta VMA) et des **objectifs secondaires**
+  (courses de préparation, un 10 km pour se tester, un trail) : ajouter, modifier, supprimer, et l'étoile pour
+  en faire l'objectif principal. Sous chaque secondaire, l'équivalence de son temps visé sur la distance du
+  principal (Riegel : « ≈ 1:24:57 au semi »). Les courses de ton calendrier qui ne sont pas encore des objectifs
+  sont proposées. Une fois passés, les objectifs gardent ton temps, retrouvé dans les séances du jour, face au
+  temps visé. Aussi dans Réglages → Objectifs.
+- **Accueil** : la tuile « Objectifs » montre le principal, resserré, et dessous les secondaires à venir (la
+  liste défile s'il y en a beaucoup), sans changer de taille.
+- **Renfo : exercices pour rééquilibrer** (vue Renfo, sous l'équilibre avant / arrière) : combien de séries
+  ajouter pour viser 1:1,5, par semaine et par séance, et lesquelles, famille par famille (la paire la plus en
+  retard d'abord, le bas du corps en tête), avec le dosage, la consigne et le matériel (sans matériel d'abord).
+- **Le coach voit l'équilibre avant / arrière du renfo** de ses élèves : sur « Mes élèves » (« Renfo 1 : 0,8 »,
+  et son verdict) et sur la fiche (rapport, jauge, tendance semaine par semaine, paire par paire, ce qu'il peut
+  lui dire, et « Lui en parler » avec un message tout prêt à relire). Il voit aussi ses objectifs secondaires,
+  et la « Prochaine course » du groupe tient compte de tous les objectifs. Le relais se met à jour seul la nuit.
+- Le coach voit enfin la chaîne de chaque exercice (« Avant », « Arrière ») dans le détail d'une séance de renfo.
+- Claude Desktop : l'outil « objectif » donne aussi les objectifs secondaires et les passés.
+
+## 0.8.1b3 — 15 novembre 2026 (bêta)
+
+- **Un logo fixe pour Foulée** : un F tracé avec les deux traits de la balise, blanc en haut, rouge au milieu.
+  Il est désormais l'icône de l'onglet, du titre de la fenêtre, de la barre des tâches, du programme et de ses
+  raccourcis, de l'icône près de l'horloge et de l'appli sur le téléphone, quel que soit le profil. La photo ou
+  le logo choisi dans Réglages → Profil et logo reste en haut de la colonne de gauche, à côté de « Foulée ».
+- **La rubrique active**, dans la colonne de gauche, est marquée d'un trait rouge à gauche et de son icône en
+  rouge, à la place du petit badge balise.
+
+## 0.8.1b2 — 15 novembre 2026 (bêta)
+
+- **Foulée dans sa propre fenêtre** : l'interface s'ouvre désormais dans une fenêtre à part, sans barre
+  d'adresse, d'onglets ni de favoris, avec son icône dans la barre des tâches (le mode application de Microsoft
+  Edge, Chrome à défaut). Pour retrouver l'onglet du navigateur : Réglages → Application → « Ouvrir Foulée » →
+  « Dans mon navigateur ». Vaut pour l'icône près de l'horloge, celle du Bureau et le menu Démarrer.
+
+## 0.8.1b1 — 15 novembre 2026 (bêta)
+
+- **Foulée sur ton téléphone, depuis ton PC** (Réglages → Foulée sur ton téléphone) : avec Tailscale installé
+  sur le PC et sur le téléphone (gratuit, même compte), un bouton « Activer l'accès depuis mon téléphone » fait
+  ce qu'il fallait taper dans PowerShell : Tailscale relaie Foulée sur une adresse https privée, que Foulée
+  accepte. Les étapes se cochent toutes seules (Tailscale installé, connecté, certificats HTTPS activés), et un
+  **QR code** ouvre ton Foulée sur le téléphone. Si Tailscale demande les droits d'administrateur, Windows pose
+  la question. « Couper l'accès » défait tout. Le PC doit rester allumé, avec Foulée lancé.
+- FAQ : Foulée sur le téléphone depuis le PC, les certificats HTTPS de Tailscale, « Foulée est injoignable »
+  (PC en veille).
+
 ## 0.8.0 — 14 novembre 2026
 
 La version stable qui réunit les bêtas 0.8 ; le détail de chacune est dans l'historique des versions (CHANGELOG.md sur GitHub).

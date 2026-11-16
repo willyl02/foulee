@@ -12,13 +12,17 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 FOOTER = """
 ---
-**Installer ou mettre à jour** : télécharge `Foulee-Setup-{version}.exe` ci-dessous et double-clique dessus
-(pas besoin d'être administrateur). Déjà installé ? Foulée se met à jour tout seul : Réglages → Mises à jour.
+**Installer ou mettre à jour** (déjà installé ? Foulée se met à jour tout seul : Réglages → Mises à jour)
 
-Windows peut afficher « Windows a protégé votre ordinateur » (installateur non signé) :
-clique sur « Informations complémentaires », puis « Exécuter quand même ».
+- **Windows** : télécharge `Foulee-Setup-{version}.exe` ci-dessous et double-clique dessus (pas besoin d'être
+  administrateur). Windows peut afficher « Windows a protégé votre ordinateur » (installateur non signé) :
+  clique sur « Informations complémentaires », puis « Exécuter quand même ».
+- **Mac** : `Foulee-{version}-mac-arm64.dmg` pour un Mac Apple Silicon (M1, M2, M3, M4…), `-mac-intel.dmg`
+  pour un Mac Intel (menu Pomme → À propos de ce Mac). Ouvre le .dmg et glisse Foulée dans Applications.
+  L'application n'est pas signée par Apple : au premier lancement, macOS refuse de l'ouvrir ; va dans
+  Réglages Système → Confidentialité et sécurité, tout en bas, « Ouvrir quand même », puis confirme.
 
-Empreinte SHA-256 : voir `SHA256SUMS.txt`.
+Empreintes SHA-256 : voir `SHA256SUMS.txt`.
 """
 
 

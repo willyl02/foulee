@@ -363,8 +363,9 @@ def _shared_session(conn: sqlite3.Connection, row: sqlite3.Row, accord: dict) ->
     sets = []
     for e in conn.execute("SELECT * FROM exercises WHERE activity_id = ? ORDER BY idx", (row["id"],)):
         info = renfo.describe(dict(e))
+        chain = info["chaine"] or {}
         sets.append({"exercice": info["nom"], "series": info["series"], "reps": info["repetitions"],
-                     "kg": info["charge_max_kg"], "chaine": (info["chaine"] or {}).get("court")})
+                     "kg": info["charge_max_kg"], "chaine": chain.get("chaine_nom"), "famille": chain.get("famille")})
     if sets:
         item["renfo"] = sets
     if accord.get("gps") and row["has_streams"]:
@@ -377,7 +378,7 @@ def _shared_session(conn: sqlite3.Connection, row: sqlite3.Row, accord: dict) ->
 def snapshot(conn: sqlite3.Connection, accord: dict, today: date | None = None) -> dict:
     """L'extrait des 4 dernières semaines, selon l'accord. Jamais les séances venues de Strava (ses règles
     l'interdisent), jamais de clé ni de jeton."""
-    from . import calendrier
+    from . import calendrier, objectifs
 
     today = today or date.today()
     since = (today - timedelta(days=SHARE_DAYS)).isoformat()
@@ -393,7 +394,9 @@ def snapshot(conn: sqlite3.Connection, accord: dict, today: date | None = None) 
         settings = db.get_settings(conn)
         goal = settings.get("objectif") if isinstance(settings.get("objectif"), dict) else None
         out["profil"] = {"vma_kmh": settings.get("vma_kmh"), "fc_max": settings.get("fc_max"),
-                         "objectif": goal if goal and goal.get("nom") else None}
+                         "objectif": {k: goal.get(k) for k in ("nom", "date", "distance_km", "temps_cible", "d_plus_m")}
+                         if goal and goal.get("nom") else None,
+                         "objectifs": objectifs.shared(settings, today)}
     wanted = (["sleep_s", "sleep_score", "hrv_night", "resting_hr"] if accord.get("sante") else []) + \
         (["weight_kg"] if accord.get("poids") else [])
     if wanted:
@@ -447,6 +450,45 @@ def workout_file(conn: sqlite3.Connection, proposal_id: int, student_id: int | N
         return workout_fit.file_name(item), workout_fit.build(item, vma)
     except workout_fit.WorkoutError as exc:
         raise CoachError(str(exc), 400) from None
+
+
+# ------------------------------------------------- séances sur la montre (Garmin)
+def _garmin(conn: sqlite3.Connection, method: str, path: str, payload: dict | None = None) -> dict:
+    try:
+        return _authed(conn, method, "/api/v1/garmin" + path, payload)
+    except CoachError as exc:
+        if exc.status == 404 and "Introuvable" in str(exc):
+            raise CoachError("Ton relais n'est pas encore à jour pour envoyer les séances sur la montre : il se "
+                             "met à jour seul chaque nuit, réessaie demain.", 404) from None
+        raise
+
+
+def garmin_status(conn: sqlite3.Connection) -> dict:
+    return _garmin(conn, "GET", "")
+
+
+def garmin_send(conn: sqlite3.Connection, proposal_id: int) -> dict:
+    """« Envoyer sur ma montre » : la séance part (avec ma VMA), ou le relais donne l'adresse de Garmin pour relier
+    mon compte d'abord (la séance part alors toute seule au retour de Garmin)."""
+    vma = db.get_settings(conn).get("vma_kmh")
+    return _garmin(conn, "POST", "/envoyer", {"proposition": int(proposal_id), "vma_kmh": vma})
+
+
+def garmin_link(conn: sqlite3.Connection) -> dict:
+    return _garmin(conn, "POST", "/relier", {})
+
+
+def garmin_unlink(conn: sqlite3.Connection) -> dict:
+    return _garmin(conn, "DELETE", "")
+
+
+def garmin_settings(conn: sqlite3.Connection, coach_allowed: bool) -> dict:
+    return _garmin(conn, "PUT", "", {"coach_peut_envoyer": bool(coach_allowed)})
+
+
+def garmin_coach_send(conn: sqlite3.Connection, proposal_ids: list) -> dict:
+    """Côté coach : envoie des séances proposées sur la montre des élèves reliés (qui le permettent)."""
+    return _garmin(conn, "POST", "/coach", {"propositions": [int(i) for i in proposal_ids if str(i).isdigit()]})
 
 
 def pace_for(vma_kmh: float | None, pct: float | None) -> str | None:

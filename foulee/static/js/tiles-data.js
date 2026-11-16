@@ -1,5 +1,5 @@
 // Tuiles de données : chiffres clés, séries, charge, zones, calendrier, nuage,
-// comparaison par poste, objectif, fractions, note.
+// comparaison par poste, fractions, note (l'objectif : goals.js).
 import * as api from "./api.js";
 import * as C from "./charts.js";
 import * as F from "./format.js";
@@ -433,30 +433,6 @@ export const postes = {
         <div class="shift-row head-row" style="--n:${groups.length}"><span>Métrique</span>${groups.map((g) => `<span class="val">${F.escape(g.nom)}</span>`).join("")}<span class="bar-cell"></span><span class="effect">${head}</span></div>
         ${rows}
       </div>`;
-  },
-};
-
-// ------------------------------------------------------------- objectif
-export const objectif = {
-  title: () => "Objectif",
-  async render(body, p, ctx) {
-    const o = await ctx.get("/api/objective");
-    if (!o.date) return message(body, "Définis ton objectif dans les réglages.");
-    const left = o.jours_restants;
-    const counter = left > 0 ? `${left}<small>jour${left > 1 ? "s" : ""}</small>` : left === 0 ? "Jour J" : "Passé";
-    body.innerHTML = `<div class="goal">
-      <div>
-        <div class="goal-name">${F.escape(o.nom || "Objectif")}</div>
-        <div class="goal-meta">${F.escape(F.dateLong(o.date, { year: true }))}${F.isNum(o.semaines_restantes) && left > 0 ? `, dans ${F.dec1(o.semaines_restantes)} semaines` : ""}</div>
-      </div>
-      <div class="goal-count">${counter}</div>
-      <dl class="goal-rows">
-        <dt>Temps visé</dt><dd>${F.escape(o.temps_cible || "–")}</dd>
-        <dt>Allure cible</dt><dd>${F.escape(o.allure_cible || "–")}</dd>
-        <dt>Vitesse</dt><dd>${F.isNum(o.vitesse_cible_kmh) ? `${F.dec1(o.vitesse_cible_kmh)} km/h` : "–"}</dd>
-        <dt>Part de ta VMA</dt><dd>${F.isNum(o.pct_vma) ? `${Math.round(o.pct_vma)} % de ${F.dec1(ctx.settings.vma_kmh)} km/h` : "–"}</dd>
-      </dl>
-    </div>`;
   },
 };
 

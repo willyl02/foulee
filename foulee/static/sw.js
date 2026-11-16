@@ -12,14 +12,13 @@ const OFFLINE_PAGE = `<!doctype html>
          font: 16px/1.5 system-ui, sans-serif; background: #f2f5f3; color: #1b2420; }
   @media (prefers-color-scheme: dark) { body { background: #101614; color: #e4ebe7; } }
   main { max-width: 340px; }
-  .blaze { width: 44px; margin-bottom: 18px; }
-  .blaze i { display: block; height: 12px; border-radius: 2px; background: #fff; box-shadow: 0 0 0 1px #0002; }
-  .blaze i + i { margin-top: 4px; background: #d3263a; box-shadow: none; }
+  .logo { display: block; margin-bottom: 18px; }
   button { margin-top: 12px; font: inherit; padding: 8px 16px; border-radius: 8px; border: 0;
-           background: #4b3e34; color: #fff; }
+           background: #182020; color: #fff; }
+  @media (prefers-color-scheme: dark) { button { background: #e4ebe7; color: #101614; } }
 </style></head>
 <body><main>
-  <div class="blaze"><i></i><i></i></div>
+  <svg viewBox="0 0 32 32" width="48" height="48" class="logo" aria-hidden="true"><rect width="32" height="32" rx="7" fill="#182020"/><rect x="8" y="6" width="5.5" height="20" rx="1.2" fill="#fff"/><rect x="8" y="6" width="16.5" height="5.5" rx="1.2" fill="#fff"/><rect x="8" y="14.5" width="12.5" height="5.5" rx="1.2" fill="#d3263a"/></svg>
   <h1 style="font-size:20px;margin:0 0 8px">Foulée est injoignable</h1>
   <p style="margin:0">Vérifie que Tailscale est connecté sur ce téléphone, puis réessaie.
   Si c'est déjà le cas, le serveur est peut-être arrêté.</p>

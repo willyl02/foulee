@@ -9,7 +9,9 @@ C'est ce que lancent le menu Démarrer et le raccourci du Bureau (« foulee app 
   est prise en compte) ;
 - une seule copie à la fois : relancer Foulée ouvre simplement l'interface.
 
-Ailleurs que sous Windows (ou avec --sans-icone), même chose sans l'icône.
+Sur Mac, la même chose avec une icône dans la barre des menus (en haut à droite), sans icône dans le Dock ;
+« Lancer à l'ouverture de session » passe par un LaunchAgent. Sur un serveur (ou avec --sans-icone), même
+chose sans l'icône.
 """
 
 from __future__ import annotations
@@ -36,7 +38,7 @@ MUTEX_NAME = "Local\\Foulee-app"
 INSTANCE_FILE = "app.json"
 SYNC_EVERY = 3 * 3600          # rythme par défaut (Réglages → Synchro et calculs, voir sync.intervals)…
 RETRY_AFTER_FAILURE = 30 * 60  # …et pas plus d'un essai par demi-heure quand ça échoue
-CHECK_EVERY = 10 * 60          # on regarde l'heure régulièrement : la mise en veille fausse les minuteries
+CHECK_EVERY = 5 * 60           # on regarde l'heure régulièrement : la mise en veille fausse les minuteries
 FIRST_CHECK_DELAY = 60
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 APPROVED_KEY = r"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run"
@@ -127,6 +129,93 @@ def url_for(port: int, page: str = "") -> str:
     return f"http://127.0.0.1:{port}/{page}"
 
 
+# ------------------------------------------------- ouvrir l'interface
+# « Ouvrir Foulée » (Réglages › Application) : dans une fenêtre à part (le mode application d'Edge, sans
+# barre d'adresse, d'onglets ni de favoris ; Chrome à défaut) ou dans un onglet du navigateur habituel.
+WINDOW_KEY = "fenetre"
+WINDOW_MODES = ("application", "navigateur")
+APP_BROWSERS = (("Microsoft", "Edge", "msedge.exe"), ("Google", "Chrome", "chrome.exe"))
+
+
+def window_mode() -> str:
+    mode = config.load_user_config().get(WINDOW_KEY)
+    return mode if mode in WINDOW_MODES else "application"
+
+
+def set_window_mode(mode: str) -> str:
+    if mode not in WINDOW_MODES:
+        raise ValueError(f"Mode inconnu : {mode}")
+    config.save_user_config({WINDOW_KEY: mode})
+    return mode
+
+
+def app_browser() -> str | None:
+    """Edge (toujours là sous Windows 10 et 11), sinon Chrome ; FOULEE_NAVIGATEUR_APP pour les tests."""
+    custom = os.environ.get("FOULEE_NAVIGATEUR_APP")
+    if custom is not None:
+        return custom if custom and Path(custom).exists() else None
+    if sys.platform == "darwin":
+        return _mac_app_browser()
+    if sys.platform != "win32":
+        return None
+    bases = [os.environ.get(v) for v in ("ProgramFiles(x86)", "ProgramFiles", "ProgramW6432", "LOCALAPPDATA")]
+    for vendor, product, exe in APP_BROWSERS:  # pragma: no cover - Windows
+        found = _app_path(exe)
+        if found:
+            return found
+        for base in filter(None, bases):
+            path = Path(base) / vendor / product / "Application" / exe
+            if path.exists():
+                return str(path)
+    return None
+
+
+MAC_BROWSERS = ("Microsoft Edge", "Google Chrome", "Brave Browser", "Chromium")
+
+
+def _mac_app_browser() -> str | None:
+    """Mac : Edge, Chrome, Brave ou Chromium s'ils sont installés (Safari n'a pas de mode application)."""
+    for root in (Path("/Applications"), Path.home() / "Applications"):
+        for name in MAC_BROWSERS:
+            path = root / f"{name}.app" / "Contents" / "MacOS" / name
+            if path.exists():
+                return str(path)
+    return None
+
+
+def _app_path(exe: str) -> str | None:  # pragma: no cover - Windows
+    try:
+        import winreg
+
+        for root in (winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE):
+            try:
+                with winreg.OpenKey(root, rf"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\{exe}") as key:
+                    value = winreg.QueryValue(key, None)
+                if value and Path(value.strip('"')).exists():
+                    return value.strip('"')
+            except OSError:
+                continue
+    except ImportError:
+        pass
+    return None
+
+
+def open_url(url: str) -> str:
+    """Ouvre l'interface comme l'utilisateur l'a choisi ; renvoie le mode réellement utilisé."""
+    if window_mode() == "application":
+        exe = app_browser()
+        if exe:
+            try:
+                flags = {"creationflags": getattr(subprocess, "DETACHED_PROCESS", 0)} if sys.platform == "win32" else {}
+                subprocess.Popen([exe, f"--app={url}"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                 stderr=subprocess.DEVNULL, close_fds=True, **flags)
+                return "application"
+            except OSError as exc:
+                LOG.warning("Fenêtre à part impossible (%s) : onglet du navigateur à la place", exc)
+    webbrowser.open(url)
+    return "navigateur"
+
+
 # ------------------------------------------------------------------- réseau
 def bind_socket(preferred: int, tries: int = 20) -> socket.socket:
     """Réserve un port sur 127.0.0.1 : le port habituel, sinon un des suivants s'il est pris."""
@@ -188,14 +277,58 @@ def launch_command(*extra: str) -> str:
 
 
 def startup_supported() -> bool:
-    """Lancement à l'ouverture de session : Windows seulement, et jamais pendant les tests."""
-    return sys.platform == "win32" and os.environ.get("FOULEE_TEST") != "1"
+    """Lancement à l'ouverture de session : Windows et Mac (application installée), jamais pendant les tests."""
+    if os.environ.get("FOULEE_TEST") == "1" and not os.environ.get("FOULEE_LAUNCH_AGENTS"):
+        return False
+    if sys.platform == "darwin":
+        return mac_app_bundle() is not None or bool(os.environ.get("FOULEE_LAUNCH_AGENTS"))
+    return sys.platform == "win32"
+
+
+# ---------------------------------------------------------------- Mac
+LAUNCH_AGENT = "fr.foulee.app"
+
+
+def mac_app_bundle() -> Path | None:
+    """Le Foulee.app qui contient ce Python (None hors de l'application Mac)."""
+    for parent in Path(sys.executable).resolve().parents:
+        if parent.suffix == ".app":
+            return parent
+    return None
+
+
+def mac_launcher() -> str:
+    bundle = mac_app_bundle()
+    return str(bundle / "Contents" / "MacOS" / "Foulee") if bundle else sys.executable
+
+
+def launch_agent_file() -> Path:
+    folder = Path(os.environ.get("FOULEE_LAUNCH_AGENTS") or (Path.home() / "Library" / "LaunchAgents"))
+    return folder / f"{LAUNCH_AGENT}.plist"
+
+
+def _mac_set_startup(enabled: bool) -> None:
+    """Un LaunchAgent qui lance Foulée (sans ouvrir l'interface) à l'ouverture de session."""
+    import plistlib
+
+    path = launch_agent_file()
+    if not enabled:
+        path.unlink(missing_ok=True)
+        return
+    program = [mac_launcher(), "--demarrage"] if mac_app_bundle() else [sys.executable, "-m", "foulee", "app",
+                                                                         "--demarrage"]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "wb") as handle:
+        plistlib.dump({"Label": LAUNCH_AGENT, "ProgramArguments": program, "RunAtLoad": True,
+                       "ProcessType": "Interactive", "LimitLoadToSessionType": "Aqua"}, handle)
 
 
 def startup_enabled() -> bool:  # pragma: no cover - Windows uniquement
     """Foulée se lance-t-il à l'ouverture de session (et Windows ne l'a-t-il pas désactivé) ?"""
     if not startup_supported():
         return False
+    if sys.platform == "darwin":
+        return launch_agent_file().exists()
     import winreg
 
     try:
@@ -214,6 +347,9 @@ def startup_enabled() -> bool:  # pragma: no cover - Windows uniquement
 
 
 def set_startup(enabled: bool) -> None:  # pragma: no cover - Windows uniquement
+    if sys.platform == "darwin":
+        _mac_set_startup(enabled)
+        return
     import winreg
 
     with winreg.CreateKey(winreg.HKEY_CURRENT_USER, RUN_KEY) as key:
@@ -273,6 +409,16 @@ class AutoSync:
         with db.session(readonly=True) as conn:
             return sync.due_sources(conn, now)
 
+    def watch(self) -> list[str]:
+        """Entre deux synchros complètes, toutes les 20 minutes : une nouvelle séance chez Garmin ? Alors on va la
+        chercher tout de suite (la montre l'envoie à Garmin Connect quand le téléphone se synchronise)."""
+        from . import sync
+
+        last_attempt = self.last_attempt.get(self._profile_key())
+        if last_attempt and self.clock() - last_attempt < RETRY_AFTER_FAILURE:
+            return []
+        return sync.watch_check(self.clock())
+
     def tick(self) -> dict | None:
         """Une vérification par profil : lance chaque synchro due et renvoie le dernier résultat."""
         entries = self.profiles()
@@ -290,7 +436,7 @@ class AutoSync:
         from .strava import cache as strava_cache
 
         strava_cache.purge_file()  # rien de Strava au-delà de 48 heures, même sans synchro due
-        sources = self.due()
+        sources = self.due() or self.watch()
         if not sources:
             return None
         from . import calendrier, db, sync, utilisateurs
@@ -354,12 +500,16 @@ def show_error(message: str) -> None:
         import ctypes
 
         ctypes.windll.user32.MessageBoxW(None, message, "Foulée", 0x10 | 0x40000)  # erreur, premier plan
+    elif sys.platform == "darwin" and os.environ.get("FOULEE_TEST") != "1":  # pragma: no cover - Mac
+        text = message.replace("\\", "\\\\").replace('"', '\\"')
+        subprocess.run(["osascript", "-e", f'display alert "Foulée" message "{text}" as critical'],
+                       capture_output=True, timeout=600)
     else:
         print(message, file=sys.stderr)
 
 
 def tray_available() -> bool:
-    if sys.platform != "win32":
+    if sys.platform not in ("win32", "darwin"):
         return False
     try:
         import pystray  # noqa: F401
@@ -390,7 +540,7 @@ class DesktopApp:
         return url_for(self.port or self.preferred_port, page)
 
     def open_ui(self, page: str = "") -> None:
-        webbrowser.open(self.url(page))
+        open_url(self.url(page))
 
     def notify(self, message: str) -> None:
         LOG.info("Notification : %s", message)
@@ -519,14 +669,22 @@ class DesktopApp:
             pystray.MenuItem("Synchroniser maintenant", lambda icon, item: self.sync_now(),
                              enabled=lambda item: self.can_sync()),
             pystray.Menu.SEPARATOR,
-            pystray.MenuItem("Lancer au démarrage de Windows", lambda icon, item: self.toggle_startup(),
-                             checked=lambda item: startup_enabled()),
+            pystray.MenuItem("Lancer à l'ouverture de session" if sys.platform == "darwin"
+                             else "Lancer au démarrage de Windows", lambda icon, item: self.toggle_startup(),
+                             checked=lambda item: startup_enabled(), visible=startup_supported()),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("Quitter Foulée", lambda icon, item: self.stop()),
         )
         self.icon = pystray.Icon("Foulee", draw(64), f"Foulée {__version__}", menu)
 
         def ready(icon) -> None:
+            if sys.platform == "darwin":  # Mac : seulement l'icône de la barre des menus, rien dans le Dock
+                try:
+                    from AppKit import NSApplication
+
+                    NSApplication.sharedApplication().setActivationPolicy_(1)  # « accessoire »
+                except Exception:
+                    LOG.debug("Politique d'activation inchangée", exc_info=True)
             icon.visible = True
             if self.after_update:
                 self.notify(f"Foulée {__version__} est installé.")
@@ -589,7 +747,7 @@ def main(*, port: int, at_login: bool, after_update: bool, no_browser: bool, no_
         # Déjà lancé : on se contente d'ouvrir l'interface de la copie qui tourne
         if not (at_login or after_update or no_browser):
             info = read_instance()
-            webbrowser.open(url_for(info["port"] if info else port))
+            open_url(url_for(info["port"] if info else port))
         return 0
     try:
         return DesktopApp(port=port, open_browser=not (at_login or after_update or no_browser),

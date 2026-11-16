@@ -747,6 +747,13 @@ def balance(rows: list[dict]) -> dict:
             skipped += e["sets"]
         else:
             per_family[family] += e["sets"]
+    return balance_from_families(per_family, skipped)
+
+
+def balance_from_families(per_family: dict[str, float], skipped: float = 0.0) -> dict:
+    """Le même bilan à partir des séries déjà rangées par famille (le relais du club le refait ainsi à partir de
+    ce que l'élève partage)."""
+    per_family = defaultdict(float, {f: float(v) for f, v in per_family.items() if f in CHAIN_FAMILIES and v})
     mixed = per_family.get("mixte", 0.0)
 
     def side(chain: str) -> float:
@@ -837,6 +844,192 @@ def _balance_advice(zone: str, pairs: list[dict], short: bool = False) -> str | 
         hint = ", et ".join(p["ajouter_avant"] for p in light[:2]) or "des squats, des fentes ou de la planche"
         return f"Garde aussi un peu d'avant : {hint}."
     return "Rien à corriger : continue comme ça."
+
+
+# ------------------------------------------------- exercices pour rééquilibrer
+# Ce qu'on conseille quand l'équilibre penche : quelques exercices par famille, sans matériel d'abord, avec le
+# dosage et la consigne qui comptent. Chaque nom, tapé tel quel dans une séance (Garmin ou Strava), se range dans
+# la bonne famille (vérifié par les tests) : ce qu'on conseille compte bien du bon côté.
+COMPENSATE_TARGET = 1.5  # le milieu de la cible du coureur (1:1 à 1:2)
+FAMILY_WHY = {
+    "hanche": "Fessiers et ischios propulsent la foulée et protègent les genoux : c'est ce qui manque le plus souvent "
+              "aux coureurs.",
+    "tirage": "Le dos tient la posture quand la fatigue arrive, et équilibre les pompes et les développés.",
+    "lombaires": "Des lombaires solides gardent le buste droit en fin de course et soulagent le bas du dos.",
+    "mollets": "Mollets et tendon d'Achille encaissent chaque appui, deux à trois fois ton poids à chaque foulée.",
+    "triceps": "Pour équilibrer les biceps, et tenir le mouvement des bras.",
+    "genou": "Les quadriceps freinent en descente et tiennent le genou : indispensables en trail.",
+    "abdos": "Le gainage tient le bassin et limite les pertes d'énergie à chaque foulée.",
+    "releveurs": "Les releveurs du pied protègent des périostites et soulagent le tibia.",
+    "poussee": "Un peu de poussée garde l'équilibre du haut du corps.",
+    "biceps": "Quelques curls suffisent à garder les bras équilibrés.",
+}
+# famille → [(nom, matériel, dosage, consigne)], du plus simple au plus exigeant
+EXERCISE_LIBRARY: dict[str, list[tuple[str, str, str, str]]] = {
+    "hanche": [
+        ("Pont fessier", "sans matériel", "3 × 15", "Pousse dans les talons et serre les fessiers 2 s en haut."),
+        ("Pont fessier sur une jambe", "sans matériel", "3 × 10 par jambe", "Le bassin reste horizontal, sans basculer."),
+        ("Soulevé de terre roumain", "haltères ou barre", "3 × 8 à 10",
+         "Dos plat, genoux souples : recule les fesses jusqu'à sentir l'étirement des ischios."),
+        ("Ischios nordiques", "un partenaire, ou les pieds calés", "3 × 4 à 6",
+         "Descends le plus lentement possible, et aide-toi des mains pour remonter."),
+        ("Hip thrust", "un banc et une charge", "3 × 8 à 12", "Haut du dos sur le banc, verrouille les fessiers en haut."),
+        ("Kettlebell swing", "un kettlebell", "3 × 15", "Le mouvement part des hanches, pas des bras."),
+    ],
+    "tirage": [
+        ("Rowing inversé", "une table solide ou une barre basse", "3 × 8 à 12",
+         "Corps gainé comme une planche, tire la poitrine vers le bord."),
+        ("Tirage horizontal à l'élastique", "un élastique", "3 × 15", "Coudes près du corps, serre les omoplates 1 s."),
+        ("Rowing haltère un bras", "un haltère et un banc", "3 × 10 par bras", "Tire le coude vers la hanche, dos plat."),
+        ("Oiseau", "deux petits haltères", "3 × 12 à 15", "Buste penché, ouvre les bras sans hausser les épaules."),
+        ("Face pull", "un élastique ou une poulie", "3 × 15", "Tire vers le front, coudes hauts, pouces vers l'arrière."),
+        ("Tractions", "une barre (avec un élastique pour aider)", "3 × 5 à 8", "Descends bras tendus, sans balancer."),
+    ],
+    "lombaires": [
+        ("Bird dog", "sans matériel", "3 × 10 par côté", "Bras et jambe opposés s'allongent, le bassin ne tourne pas."),
+        ("Superman", "sans matériel", "3 × 10, tenir 3 s", "Bras et jambes décollent ensemble, regard vers le sol."),
+        ("Planche inversée", "sans matériel", "3 × 30 s", "Talons et mains au sol, bassin aligné avec les épaules."),
+        ("Extensions lombaires", "un banc à lombaires (ou au sol)", "3 × 12", "Remonte jusqu'à l'alignement, pas au-delà."),
+    ],
+    "mollets": [
+        ("Élévations des mollets sur une jambe", "une marche", "3 × 15 par jambe",
+         "Monte vite, redescends en 3 s sous le niveau de la marche."),
+        ("Élévations des mollets genoux fléchis", "un mur ou un banc", "3 × 15",
+         "Genoux pliés : c'est le soléaire qui travaille, très sollicité en course."),
+    ],
+    "triceps": [
+        ("Dips sur une chaise", "une chaise stable", "3 × 10", "Coudes vers l'arrière, épaules basses."),
+        ("Extension des triceps à l'élastique", "un élastique", "3 × 12", "Seuls les avant-bras bougent."),
+    ],
+    "genou": [
+        ("Squat", "sans matériel (un haltère pour le goblet)", "3 × 12 à 15",
+         "Cuisses parallèles au sol, genoux dans l'axe des pieds."),
+        ("Fente arrière", "sans matériel", "3 × 10 par jambe", "Le genou arrière frôle le sol, buste droit."),
+        ("Step-up", "une marche haute ou un banc", "3 × 10 par jambe", "Pousse avec la jambe du haut, sans élan."),
+        ("Squat bulgare", "un banc", "3 × 8 par jambe", "Pied arrière sur le banc, le genou avant au-dessus du pied."),
+        ("Chaise contre le mur", "un mur", "3 × 30 à 45 s", "Cuisses parallèles au sol, dos collé au mur."),
+    ],
+    "abdos": [
+        ("Planche", "sans matériel", "3 × 30 à 45 s", "Coudes sous les épaules, bassin ni creusé ni relevé."),
+        ("Dead bug", "sans matériel", "3 × 10 par côté", "Le bas du dos reste collé au sol."),
+        ("Relevés de jambes", "sans matériel", "3 × 10 à 12", "Jambes tendues, sans creuser le dos."),
+        ("Mountain climbers", "sans matériel", "3 × 30 s", "Bassin bas, genoux vers la poitrine."),
+    ],
+    "releveurs": [
+        ("Élévations des orteils", "un mur", "3 × 20", "Dos au mur, talons en avant : relève la pointe des pieds."),
+    ],
+    "poussee": [
+        ("Pompes", "sans matériel (sur les genoux pour commencer)", "3 × 10", "Corps gainé, poitrine près du sol."),
+        ("Développé militaire", "deux haltères", "3 × 10", "Pousse à la verticale sans cambrer."),
+    ],
+    "biceps": [("Curl biceps", "deux haltères", "3 × 12", "Coudes fixes, descente contrôlée.")],
+}
+
+
+def _round_up(value: float) -> int:
+    import math
+
+    return max(0, math.ceil(value - 1e-9))
+
+
+def compensation(bal: dict, days: int, sessions: int = 0) -> dict | None:
+    """Ce qu'il faut ajouter pour viser 1:1,5 : de quel côté, combien de séries (sur la période, par semaine, par
+    séance), et quels exercices, famille par famille (la paire la plus en retard d'abord, le bas du corps en tête).
+    None s'il n'y a rien à comparer."""
+    if bal.get("zone") in (None, "vide"):
+        return None
+    front, back = bal["avant"], bal["arriere"]
+    pairs = bal.get("paires", [])
+    weeks = max(days / 7, 1)
+    forward = [p for p in pairs if p.get("penche") == "avant"]
+    if bal["zone"] in ("avant", "proche") or forward:
+        side = "arriere"
+        missing = _round_up(COMPENSATE_TARGET * front - back) if bal["zone"] in ("avant", "proche") else 0
+        families = [p["arriere"]["famille"] for p in forward]
+        if not families:
+            ranked = sorted(pairs, key=lambda p: p["arriere"]["series"] - p["avant"]["series"])
+            families = [p["arriere"]["famille"] for p in ranked if p["avant"]["series"] > p["arriere"]["series"]]
+        families = families or ["hanche", "tirage", "lombaires"]
+    elif bal["zone"] in ("arriere", "arriere_fort"):
+        side = "avant"
+        missing = _round_up(back / COMPENSATE_TARGET - front)
+        light = [p for p in pairs if p["cle"] in ("bas", "tronc", "jambe") and p["avant"]["series"] < p["arriere"]["series"]]
+        families = [p["avant"]["famille"] for p in light] or ["genou", "abdos"]
+    else:
+        side, missing, families = None, 0, []
+    if side and side == "arriere" and "hanche" not in families and not any(p["cle"] == "bas" for p in pairs):
+        families.insert(0, "hanche")  # aucun travail du bas du corps : la dominante hanche d'abord, pour un coureur
+    seen: list[str] = []
+    for fam in families:
+        if fam not in seen and fam in EXERCISE_LIBRARY:
+            seen.append(fam)
+    by_pair = {p["arriere"]["famille"]: p for p in pairs} | {p["avant"]["famille"]: p for p in pairs}
+    blocks = []
+    for fam in seen[:3]:
+        pair = by_pair.get(fam)
+        blocks.append({
+            "famille": fam, "nom": CHAIN_FAMILIES[fam][0], "chaine": CHAIN_FAMILIES[fam][1],
+            "pourquoi": FAMILY_WHY.get(fam), "constat": _pair_phrase(pair) if pair else None,
+            "exercices": [{"nom": n, "materiel": m, "dosage": d, "consigne": c} for n, m, d, c in EXERCISE_LIBRARY[fam]],
+        })
+    per_week = missing / weeks
+    per_session = per_week / (sessions / weeks) if sessions and missing else None
+
+    def about(value: float) -> str:  # « 10 séries », « 1,5 série » : un ordre de grandeur, pas une comptabilité
+        shown = max(1.0, round(value)) if value >= 2.5 else max(0.5, round(value * 2) / 2)
+        return f"{_number(shown)} série{'s' if shown >= 2 else ''}"
+
+    target = ratio_text(COMPENSATE_TARGET)
+    if side == "arriere" and missing:
+        title = f"Ajoute environ {about(per_week)} par semaine côté arrière"
+        summary = (f"Sur {days} jours, tu es à {bal['ratio_texte']} : pour viser {target}, il manque environ "
+                   f"{missing} série{'s' if missing > 1 else ''} derrière"
+                   + (f", soit {about(per_session)} de plus par séance de renfo." if per_session else "."))
+    elif side == "arriere":
+        names = " et ".join(PAIR_WORDS[p["cle"]][0] for p in forward[:2])
+        title = f"Bon équilibre d'ensemble, mais {names} {'penche' if len(forward[:2]) == 1 else 'penchent'} vers l'avant"
+        summary = "Remplace ou complète une partie des séries devant par celles-ci, à volume égal."
+    elif side == "avant":
+        title = f"Garde aussi un peu d'avant : environ {about(per_week)} par semaine"
+        summary = (f"Sur {days} jours, tu es à {bal['ratio_texte']}, au-delà de 1 : 2 : pour revenir vers {target}, "
+                   f"il manque environ {missing} série{'s' if missing > 1 else ''} devant"
+                   + (f", soit {about(per_session)} de plus par séance de renfo." if per_session else "."))
+    else:
+        title = "Dans la cible : garde le cap"
+        summary = f"Ton renfo est à {bal['ratio_texte']}, entre 1 : 1 et 1 : 2. Rien à compenser : continue comme ça."
+    return {"cote": side, "cible": target, "ratio_texte": bal["ratio_texte"], "zone": bal["zone"],
+            "manque_series": missing, "par_semaine": round(per_week, 1), "par_seance": round(per_session, 1)
+            if per_session else None, "titre": title, "resume": summary, "familles": blocks, "jours": days}
+
+
+def coach_hint(bal: dict) -> dict | None:
+    """Pour la fiche élève du coach : ce qu'il peut lui dire, et un brouillon de message à lui envoyer."""
+    if bal.get("zone") in (None, "vide"):
+        return None
+    forward = [p for p in bal.get("paires", []) if p.get("penche") == "avant"]
+    ratio = bal["ratio_texte"]
+    if bal["zone"] in ("avant", "proche") or forward:
+        pairs = forward or sorted(bal.get("paires", []), key=lambda p: p["arriere"]["series"] - p["avant"]["series"])[:1]
+        adds = ", et ".join(p["ajouter_arriere"] for p in pairs[:2]) or "du soulevé de terre roumain, du hip thrust ou du tirage"
+        if bal["zone"] == "cible":
+            names = " et ".join(PAIR_WORDS[p["cle"]][0] for p in forward[:2])
+            hint = f"Bon équilibre d'ensemble ({ratio}), mais {names} penche vers l'avant : propose-lui {adds}."
+            draft = (f"Ton renfo des 4 dernières semaines est bien équilibré ({ratio} avant : arrière), mais {names} "
+                     f"penche vers l'avant. Pense à ajouter {adds}.")
+        else:
+            label = "Trop d'avant" if bal["zone"] == "avant" else "Presque à l'équilibre, encore un peu trop d'avant"
+            hint = f"{label} ({ratio}) : propose-lui {adds}, pour viser {ratio_text(COMPENSATE_TARGET)}."
+            more = "plus devant que derrière" if bal["zone"] == "avant" else "encore un peu plus devant que derrière"
+            draft = (f"Ton renfo des 4 dernières semaines est à {ratio} (avant : arrière) : tu travailles {more}. "
+                     f"Ajoute {adds}, pour viser {ratio_text(COMPENSATE_TARGET)}.")
+        return {"cote": "arriere", "texte": hint, "brouillon": draft}
+    if bal["zone"] in ("arriere", "arriere_fort"):
+        hint = f"Très orienté arrière ({ratio}) : rappelle-lui de garder des squats, des fentes et du gainage."
+        draft = (f"Ton renfo des 4 dernières semaines est à {ratio} (avant : arrière) : très orienté arrière. Garde "
+                 f"aussi des squats, des fentes et du gainage, utiles en descente et pour tenir le bassin.")
+        return {"cote": "avant", "texte": hint, "brouillon": draft}
+    return {"cote": None, "texte": f"Dans la cible ({ratio}) : rien à corriger.",
+            "brouillon": f"Ton renfo des 4 dernières semaines est bien équilibré ({ratio} avant : arrière). Continue comme ça !"}
 
 
 # ------------------------------------------------------------------ stockage
@@ -1073,7 +1266,8 @@ def period(conn: sqlite3.Connection, start: date, end: date, weeks: int = 12) ->
         "effort_s": round(sum(e["duration_s"] for e in rows)) or None,
         "muscles": _muscle_load(rows),
         "exercices": exercises,
-        "equilibre": balance(rows),
+        "equilibre": (bal := balance(rows)),
+        "compenser": compensation(bal, (end - start).days + 1, len(listed)),
         "semaines": [{"debut": k.isoformat(), "seances": int(v["seances"]), "series": int(v["series"]),
                       "equilibre": week_balance(k)} for k, v in sorted(counts.items())],
         "noms_muscles": MUSCLE_LABELS,

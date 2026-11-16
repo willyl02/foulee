@@ -319,8 +319,9 @@ def store_activity_streams(conn: sqlite3.Connection, activity_id: str, decoded: 
              lap.get("elev_loss_m"), lap.get("intensity")),
         )
     conn.execute(
-        "UPDATE activities SET has_streams = 1, fit_path = COALESCE(?, fit_path), updated_at = ? WHERE id = ?",
-        (fit_path, db.now_iso(), activity_id),
+        "UPDATE activities SET has_streams = 1, fit_path = COALESCE(?, fit_path), vo2max = COALESCE(?, vo2max), "
+        "updated_at = ? WHERE id = ?",
+        (fit_path, decoded.get("vo2max"), db.now_iso(), activity_id),
     )
     update_activity_derived(conn, activity_id, settings, hrp, streams=decoded["streams"])
 
@@ -1227,7 +1228,7 @@ def objective(settings: dict) -> dict:
     target_s = parse_hms(goal.get("temps_cible", ""))
     distance = float(goal.get("distance_km") or 0)
     result: dict[str, Any] = {"nom": goal.get("nom"), "date": goal.get("date"), "distance_km": distance,
-                              "temps_cible": goal.get("temps_cible")}
+                              "temps_cible": goal.get("temps_cible"), "d_plus_m": goal.get("d_plus_m")}
     try:
         race_day = to_date(goal.get("date"))
         days_left = (race_day - date.today()).days

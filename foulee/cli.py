@@ -261,6 +261,7 @@ def _sync_due(args: argparse.Namespace, targets: list[dict]) -> int:
                 continue  # une synchro est déjà en cours (« Synchroniser », premier import) : rien à ajouter
             with db.session(readonly=True) as conn:
                 due = sync.due_sources(conn)
+            due = due or sync.watch_check()  # une nouvelle séance chez Garmin : pas besoin d'attendre 3 heures
             if not due:
                 continue
             if not args.quiet:
@@ -657,6 +658,41 @@ def _new_password(label: str = "Mot de passe") -> str | None:
     return None
 
 
+def _relay_garmin(args: argparse.Namespace) -> int:
+    """« foulee relais garmin » : enregistre l'appli Garmin du club (Training API) sur la machine du relais.
+    Le Client Secret se tape ici, sans s'afficher ; il ne repart jamais du relais."""
+    import getpass
+
+    from .relais import garmin
+
+    current = garmin.app_settings()
+    if args.identifiant == "retirer":
+        from . import vault
+
+        vault.delete_secret("relais-garmin-appli")
+        _say("Appli Garmin retirée : l'envoi vers les montres est coupé (les élèves restent reliés).")
+        return 0
+    if current:
+        _say(f"Appli Garmin enregistrée : Client ID {current['client_id']}")
+        _say(f"Adresse de retour à déclarer chez Garmin : {garmin.redirect_uri(current)}")
+        if _ask("La remplacer ? (oui/non)", "non").lower() != "oui":
+            return 0
+    _say("Les valeurs de ton appli « Foulée » sur le portail développeur de Garmin (Apps → Foulée → Credential).")
+    client_id = _ask("Client ID :")
+    secret = getpass.getpass("Client Secret (ne s'affiche pas) : ").strip()
+    address = _ask("Adresse publique du relais (ex. https://relais.mon-club.com) :",
+                   current["adresse"] if current else "")
+    try:
+        saved = garmin.save_app(client_id, secret, address)
+    except garmin.GarminError as exc:
+        _say(str(exc))
+        return 1
+    _say("Appli Garmin enregistrée (fichier lisible par le relais seul).")
+    _say(f"Vérifie chez Garmin que l'« OAuth redirect URL » est exactement : {saved['retour']}")
+    _say("Pas besoin de relancer le relais : les élèves peuvent envoyer leurs séances sur leur montre.")
+    return 0
+
+
 def cmd_relais(args: argparse.Namespace) -> int:
     """Le relais du club : le lancer, et gérer ses comptes coach (sur la machine du relais)."""
     from .relais import store
@@ -672,6 +708,8 @@ def cmd_relais(args: argparse.Namespace) -> int:
         # est lue dans CF-Connecting-IP, seulement pour ces connexions-là
         uvicorn.run(create_relay_app(), host=args.hote, port=args.port, log_level="warning", proxy_headers=False)
         return 0
+    if action == "garmin":
+        return _relay_garmin(args)
     with store.session() as conn:
         if action == "comptes":
             rows = store.accounts(conn)
@@ -809,9 +847,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("relais", help="le relais du club (coach et élèves) : le lancer, gérer ses comptes")
     p.add_argument("action", choices=["serveur", "admin", "coach", "comptes", "mot-de-passe", "desactiver",
-                                      "reactiver", "supprimer"],
+                                      "reactiver", "supprimer", "garmin"],
                    help="serveur : lancer le relais ; admin / coach : créer un compte coach ; comptes : la liste ; "
-                        "mot-de-passe, desactiver, reactiver, supprimer : sur un compte (identifiant)")
+                        "mot-de-passe, desactiver, reactiver, supprimer : sur un compte (identifiant) ; "
+                        "garmin : enregistrer l'appli Garmin du club (envoi des séances sur les montres ; "
+                        "« garmin retirer » pour la retirer)")
     p.add_argument("identifiant", nargs="?", help="identifiant du compte visé")
     p.add_argument("--nom", help="nom affiché du nouveau compte")
     p.add_argument("--port", type=int, default=config.DEFAULT_PORT, help="port du relais (8770 par défaut)")

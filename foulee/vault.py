@@ -23,11 +23,14 @@ Garmin l'utilise, pour l'échanger contre un jeton temporaire.
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
 from pathlib import Path
 
 from . import config
+
+LOG = logging.getLogger("foulee.vault")
 
 SERVICE = "Foulee"
 USERNAME = "garmin-personal-api-key"
@@ -42,6 +45,10 @@ SECRETS = {
     "strava": ("strava-acces", "strava-acces", None),        # jetons Strava du profil
     "calendrier": ("calendrier-lien", "calendrier-lien", None),  # lien de publication du calendrier (iCal)
     "relais": ("relais-jeton", "relais-jeton", None),  # jeton de session auprès du relais (coach et élèves)
+    # Sur la machine du relais seulement : l'appli Garmin du club (Client ID, Client Secret, adresse publique)
+    # et la clé qui chiffre, dans sa base, les autorisations Garmin des élèves
+    "relais-garmin-appli": ("relais-garmin-appli", "relais-garmin-appli", None),
+    "relais-garmin-cle": ("relais-garmin-cle", "relais-garmin-cle", None),
 }
 # un exemplaire par profil (l'appli Strava : un pour l'installation)
 PER_PROFILE = {"garmin", "withings", "strava", "calendrier", "relais"}
@@ -59,8 +66,12 @@ def _entry(name: str) -> tuple[str, str, str | None]:
 
 
 def _windows_store() -> bool:
-    """Gestionnaire d'identification Windows (sinon : fichier protégé)."""
-    return sys.platform == "win32" and os.environ.get("FOULEE_COFFRE") != "fichier"
+    """Coffre du système : Gestionnaire d'identification Windows, ou Trousseau du Mac (sinon : fichier protégé)."""
+    return sys.platform in ("win32", "darwin") and os.environ.get("FOULEE_COFFRE") != "fichier"
+
+
+def _store_name() -> str:
+    return "Trousseau de macOS" if sys.platform == "darwin" else "Gestionnaire d'identification Windows"
 
 
 def _dpapi_file(name: str = "garmin") -> Path:
@@ -123,12 +134,13 @@ def get_secret(name: str) -> str | None:
         except Exception:
             pass
         path = _dpapi_file(name)
-        if path.exists():
+        if sys.platform == "win32" and path.exists():
             try:
                 return _dpapi(path.read_bytes(), protect=False).decode("utf-8").strip()
             except OSError:
                 return None
-        return None
+        if sys.platform == "win32":
+            return None
     path = _plain_file(name)
     if path.exists():
         value = path.read_text(encoding="utf-8").strip()
@@ -147,12 +159,15 @@ def set_secret(name: str, value: str) -> str:
             import keyring
 
             keyring.set_password(SERVICE, username, value)
-            if _dpapi_file(name).exists():
-                _dpapi_file(name).unlink()
-            return "Gestionnaire d'identification Windows (entrée « Foulee »)"
+            for leftover in (_dpapi_file(name), _plain_file(name)):
+                if leftover.exists():
+                    leftover.unlink()
+            return f"{_store_name()} (entrée « Foulee »)"
         except Exception:
-            _dpapi_file(name).write_bytes(_dpapi(value.encode("utf-8"), protect=True))
-            return f"fichier chiffré par Windows (DPAPI) : {_dpapi_file(name)}"
+            if sys.platform == "win32":
+                _dpapi_file(name).write_bytes(_dpapi(value.encode("utf-8"), protect=True))
+                return f"fichier chiffré par Windows (DPAPI) : {_dpapi_file(name)}"
+            LOG.warning("Trousseau de macOS indisponible : fichier protégé à la place")
     path = _plain_file(name)
     descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
@@ -173,6 +188,9 @@ def delete_secret(name: str) -> bool:
             pass
         if _dpapi_file(name).exists():
             _dpapi_file(name).unlink()
+            removed = True
+        if _plain_file(name).exists():  # Mac : repli sur un fichier protégé si le Trousseau a refusé
+            _plain_file(name).unlink()
             removed = True
     elif _plain_file(name).exists():
         _plain_file(name).unlink()

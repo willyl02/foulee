@@ -1,9 +1,11 @@
 // Proposer une séance (coach) : un déroulé en blocs, en % de VMA ou en zone de FC, envoyé à un ou plusieurs élèves.
 // Chaque élève la reçoit dans son calendrier, avec ses allures à lui (calculées avec sa VMA).
+import * as api from "./api.js";
 import * as F from "./format.js";
 import { icon } from "./icons.js";
 import {
   avatar, blockIntensity, blockRest, blockSize, blocksHtml, fail, GENRES, loading, paceFor, rdel, rget, rpost, rput, totalMinutes,
+  watchSummary,
 } from "./coach-ui.js";
 
 const SPORTS = [["course", "Course à pied"], ["trail", "Trail"], ["velo", "Vélo"], ["natation", "Natation"], ["renfo", "Renforcement"],
@@ -98,6 +100,8 @@ export async function renderEditor(ctx) {
   const state = { eleves: new Set(), date: /^\d{4}-\d{2}-\d{2}$/.test(params.get("date") || "") ? params.get("date") : tomorrow, ...clone(EXAMPLES[1]) };
   (params.get("eleves") || "").split(",").map(Number).filter((id) => students.some((s) => s.id === id)).forEach((id) => state.eleves.add(id));
 
+  let editSent = false; // déjà sur sa montre : le relais la renvoie tout seul, modifiée
+  const watchers = students.filter((s) => s.montre?.relie && s.montre.coach_peut_envoyer);
   if (editId && editStudent) {
     const fiche = await rget(`eleves/${editStudent}/fiche`);
     const p = fiche.propositions.find((x) => x.id === editId);
@@ -107,6 +111,7 @@ export async function renderEditor(ctx) {
     }
     Object.assign(state, { date: p.date, titre: p.titre, sport: p.sport, blocs: clone(p.blocs), consigne: p.consigne || "" });
     state.eleves = new Set([editStudent]);
+    editSent = Boolean(p.montre);
   }
   if (!editId && students.length === 1) state.eleves.add(students[0].id);
 
@@ -118,9 +123,11 @@ export async function renderEditor(ctx) {
       <div class="co-page">
         <section class="coach-card"><h2>${icon("club")}Pour qui</h2>
           ${students.length ? `<div class="co-pick" data-pick>${students.map((s) => `<label class="co-pickone${editId ? " locked" : ""}"><input type="checkbox" value="${s.id}" ${state.eleves.has(s.id) ? "checked" : ""} ${editId ? "disabled" : ""}>
-            ${avatar(s.nom, { size: "sm" })}<span>${F.escape(s.nom)}<small>${s.vma_kmh ? `VMA ${F.dec1(s.vma_kmh)}` : "VMA inconnue"}</small></span></label>`).join("")}</div>
+            ${avatar(s.nom, { size: "sm" })}<span>${F.escape(s.nom)}${s.montre?.relie && s.montre.coach_peut_envoyer ? `<i class="co-watchmini" title="Montre Garmin reliée">${icon("watch")}</i>` : ""}<small>${s.vma_kmh ? `VMA ${F.dec1(s.vma_kmh)}` : "VMA inconnue"}</small></span></label>`).join("")}</div>
             ${!editId && students.length > 1 ? `<div class="inline-actions" style="margin:8px 0 0"><button type="button" class="btn btn-ghost btn-small" data-all>Tout le groupe</button><button type="button" class="btn btn-ghost btn-small" data-none>Personne</button></div>` : ""}`
           : `<p class="co-empty">Ton groupe est vide : <a href="#/coach">invite un élève</a> d'abord.</p>`}
+          ${watchers.length && !editSent ? `<label class="co-check"><input type="checkbox" data-to-watch checked><span>${icon("watch")} Envoyer aussi sur leur montre Garmin (élèves qui l'ont reliée : ${F.escape(watchers.map((w) => w.nom.split(" ")[0]).join(", "))})</span></label>` : ""}
+          ${editSent ? `<p class="hint" style="margin:8px 0 0">${icon("watch")} Déjà sur sa montre : elle y sera remplacée par la version modifiée.</p>` : ""}
         </section>
         <section class="coach-card"><h2>${icon("edit")}La séance</h2>
           <div class="co-form3">
@@ -257,10 +264,16 @@ export async function renderEditor(ctx) {
     button.disabled = true;
     const body = { eleves: list.map((s) => s.id), date: state.date, titre: state.titre, sport: state.sport, blocs: state.blocs, consigne: state.consigne };
     try {
-      if (editId) await rput(`propositions/${editId}`, body);
-      else await rpost("propositions", body);
+      let ids = [];
+      if (editId) { await rput(`propositions/${editId}`, body); ids = [editId]; }
+      else ids = ((await rpost("propositions", body)).propositions || []).map((p) => p.id);
       const names = list.map((s) => s.nom.split(" ")[0]);
-      toast(editId ? "Séance modifiée." : `Séance envoyée à ${names.length > 2 ? `${names.length} élèves` : names.join(" et ")} : elle arrive dans ${names.length > 1 ? "leur" : "son"} calendrier.`);
+      let watched = "";
+      if ($("[data-to-watch]")?.checked && list.some((s) => watchers.includes(s))) {
+        try { watched = ` ${watchSummary(await api.post("/api/coach/montres", { propositions: ids }))}`; }
+        catch (err) { watched = ` Montres : ${err.message}`; }
+      }
+      toast((editId ? "Séance modifiée." : `Séance envoyée à ${names.length > 2 ? `${names.length} élèves` : names.join(" et ")} : elle arrive dans ${names.length > 1 ? "leur" : "son"} calendrier.`) + watched);
       location.hash = list.length === 1 ? `#/coach/eleve/${list[0].id}` : "#/coach";
     } catch (err) {
       toast(err.message);
