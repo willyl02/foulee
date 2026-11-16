@@ -107,6 +107,10 @@ def save_app(client_id: str, client_secret: str, address: str) -> dict:
     client_id, client_secret = (client_id or "").strip(), (client_secret or "").strip()
     if not client_id or len(client_id) > 200 or not client_secret or len(client_secret) > 500:
         raise GarminError("Client ID ou Client Secret manquant.")
+    import re
+    if not re.fullmatch(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}", client_id):
+        raise GarminError(f"Ce Client ID ne ressemble pas à ceux de Garmin (36 caractères, comme "
+                          f"10761fb6-…-8eaddee706dd) : il en compte {len(client_id)}. Collé deux fois ? Recommence.")
     data = {"client_id": client_id, "client_secret": client_secret, "adresse": clean_address(address)}
     vault.set_secret("relais-garmin-appli", json.dumps(data))
     return {"client_id": client_id, "adresse": data["adresse"], "retour": redirect_uri(data)}
