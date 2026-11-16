@@ -394,3 +394,21 @@ def test_cli_tests_the_garmin_app(monkeypatch, capsys):
         garmin._token_request({"grant_type": "authorization_code", "code": "x"})
     assert "invalid_client" in str(refused.value) and "garmin tester" in str(refused.value)
     garmin.vault.delete_secret("relais-garmin-appli")
+
+
+def test_token_service_falls_back_to_the_other_address(monkeypatch):
+    garmin.save_app("id-du-club", "le-secret", "relais.mon-club.com")
+    monkeypatch.delenv("FOULEE_GARMIN_TOKEN_URL", raising=False)
+    calls = []
+
+    def answer(method, url, **kw):
+        calls.append(url)
+        if url == garmin.TOKEN_URL:
+            return 401, "<!doctype html><html><head><title>HTTP Status 401 – Unauthorized</title></head></html>"
+        return 400, {"error": "invalid_grant"}
+
+    monkeypatch.setattr(garmin, "transport", answer)
+    result = garmin.check_app()
+    assert result["ok"] and calls == [garmin.TOKEN_URL, garmin.TOKEN_URL_ALT]
+    assert garmin._reason("<html><title>HTTP Status 401 – Unauthorized</title></html>") == "HTTP Status 401 – Unauthorized"
+    garmin.vault.delete_secret("relais-garmin-appli")

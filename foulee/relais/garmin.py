@@ -43,6 +43,7 @@ log = logging.getLogger("foulee.relais.garmin")
 
 AUTHORIZE_URL = "https://connect.garmin.com/oauth2Confirm"
 TOKEN_URL = "https://connectapi.garmin.com/di-oauth2-service/oauth/token"   # selon la note PKCE de Garmin
+TOKEN_URL_ALT = "https://diauth.garmin.com/di-oauth2-service/oauth/token"  # l'autre adresse publiée par Garmin
 API_URL = "https://apis.garmin.com"
 CALLBACK_PATH = "/garmin/retour"
 PENDING_MINUTES = 15          # le temps de s'identifier chez Garmin et d'accepter
@@ -173,11 +174,25 @@ def _call(method: str, url: str, **kwargs) -> tuple[int, Any]:
         raise GarminError("Garmin ne répond pas pour l'instant : réessaie dans quelques minutes.", 502) from None
 
 
+def _token_urls() -> list[str]:
+    forced = os.environ.get("FOULEE_GARMIN_TOKEN_URL")
+    return [forced.rstrip("/")] if forced else [TOKEN_URL, TOKEN_URL_ALT]
+
+
+def _token_post(params: dict, settings: dict) -> tuple[int, Any]:
+    """POST au service des jetons de Garmin ; si une adresse répond par une page web (pas du JSON), l'autre."""
+    form = {**params, "client_id": settings["client_id"], "client_secret": settings["client_secret"]}
+    status, data = 0, None
+    for url in _token_urls():
+        status, data = _call("POST", url, headers={"Accept": "application/json"}, form=form)
+        if status < 400 or isinstance(data, dict):
+            break
+    return status, data
+
+
 def _token_request(params: dict) -> dict:
     settings = _settings()
-    status, data = _call("POST", _url("FOULEE_GARMIN_TOKEN_URL", TOKEN_URL),
-                         headers={"Accept": "application/json"},
-                         form={**params, "client_id": settings["client_id"], "client_secret": settings["client_secret"]})
+    status, data = _token_post(params, settings)
     if status >= 400 or not isinstance(data, dict) or not data.get("access_token"):
         reason = _reason(data)
         log.warning("Jetons Garmin refusés (HTTP %s) %s", status, reason)
@@ -198,6 +213,10 @@ def _reason(data: Any) -> str:
         text = " ".join(str(data.get(k) or "") for k in ("error", "error_description", "message")).strip()
     else:
         text = str(data or "").strip()
+        if "<" in text:  # une page web d'erreur : son titre seulement
+            import re
+            title = re.search(r"<title>(.*?)</title>", text, re.S | re.I)
+            text = html.unescape(title.group(1)) if title else "page d'erreur"
     return " ".join(text.split())[:160]
 
 
@@ -207,9 +226,7 @@ def check_app() -> dict:
     On demande un jeton avec un jeton de renouvellement bidon : des identifiants faux sont refusés comme tels
     (401, invalid_client) ; des identifiants justes, pour le jeton seulement (400, invalid_grant)."""
     settings = _settings()
-    status, data = _call("POST", _url("FOULEE_GARMIN_TOKEN_URL", TOKEN_URL), headers={"Accept": "application/json"},
-                         form={"grant_type": "refresh_token", "refresh_token": "essai-foulee",
-                               "client_id": settings["client_id"], "client_secret": settings["client_secret"]})
+    status, data = _token_post({"grant_type": "refresh_token", "refresh_token": "essai-foulee"}, settings)
     reason = _reason(data)
     ok = status != 401 and "client" not in reason.lower()
     return {"ok": ok, "http": status, "motif": reason, "client_id": settings["client_id"],
