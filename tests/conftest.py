@@ -43,5 +43,12 @@ def isolated(tmp_path, monkeypatch):
     from foulee import sync
 
     monkeypatch.setattr(sync, "new_garmin_activities", lambda conn, today=None: [])
+    # Envoi des séances sur la montre : jamais le vrai Garmin (test_relais_garmin branche un faux Garmin)
+    from foulee.relais import garmin as relay_garmin
+
+    def no_garmin(*args, **kwargs):
+        raise AssertionError("Appel au vrai Garmin pendant les tests")
+
+    monkeypatch.setattr(relay_garmin, "transport", no_garmin)
     yield tmp_path
     updates.WATCH.forget()

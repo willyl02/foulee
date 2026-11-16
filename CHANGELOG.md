@@ -4,6 +4,22 @@ Les versions « bêta » (par exemple 0.4.0b1) sont des avant-premières : elles
 sur le canal bêta (Réglages → Mises à jour → « Recevoir les versions bêta »), puis sortent en
 version stable une fois éprouvées.
 
+## 0.8.1b7 — 16 novembre 2026 (bêta)
+
+- **Les séances du coach sur la montre, sans câble** : « Envoyer sur ma montre » sous chaque séance proposée
+  (page « Mon coach »). La première fois, Garmin Connect s'ouvre : on s'y connecte, chez Garmin (Foulée ne voit
+  jamais le mot de passe), et on clique sur « Accepter » ; la séance part aussitôt, les suivantes en un clic.
+  Elle arrive dans le calendrier Garmin Connect à sa date, bloc par bloc, avec ses allures (fourchette de ± 3 %
+  autour du % de VMA) ou sa zone de FC ; la montre la récupère à sa synchro. « Renvoyer » la remplace.
+- **Le coach peut l'envoyer lui-même** sur la montre des élèves reliés (une montre verte à côté de leur nom) :
+  case « Envoyer aussi sur leur montre Garmin » en proposant une séance, bouton montre sur la fiche. Une séance
+  modifiée est renvoyée toute seule ; supprimée, elle quitte le calendrier Garmin. L'élève choisit si son coach
+  peut le faire (carte « Ta montre Garmin », oui par défaut) et peut délier son compte à tout moment.
+- Comment : le relais est désormais l'appli « Foulée » du programme développeur de Garmin (Training API,
+  OAuth 2.0 avec PKCE). Il ne lit rien de la montre, il y dépose seulement des séances ; les autorisations sont
+  gardées chiffrées. À activer une fois sur la machine du relais : `sudo foulee relais garmin`. Le fichier .fit
+  (câble USB) reste disponible.
+
 ## 0.8.1b6 — 15 novembre 2026 (bêta)
 
 - **Foulée sur Mac** (bêta) : `Foulee-<version>-mac-arm64.dmg` (Apple Silicon) et `-mac-intel.dmg` (Intel),

@@ -371,9 +371,10 @@ wheels = [
 
 [[package]]
 name = "foulee"
-version = "0.8.1b6"
+version = "0.8.1b7"
 source = { editable = "." }
 dependencies = [
+    { name = "cryptography" },
     { name = "fastapi" },
     { name = "garmin-connect-personal-api-python" },
     { name = "garmin-fit-sdk" },
@@ -395,6 +396,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "cryptography", specifier = ">=44" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "garmin-connect-personal-api-python", specifier = ">=1.0.0" },
     { name = "garmin-fit-sdk", specifier = ">=21.0" },

@@ -2144,6 +2144,23 @@ a.co-pl:hover { box-shadow: inset 3px 0 0 var(--good), 0 0 0 1px var(--base); }
 .co-myprop header b { display: block; color: var(--ink); }
 .co-myprop header span:not(.co-chip):not(.co-ico) { display: block; color: var(--muted); font-size: 13px; }
 .co-myprop.is-manque .co-blocks, .co-myprop.is-fait .co-blocks { opacity: .75; }
+.co-chips { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+/* La montre Garmin : envoyer les séances du coach sur la montre (Training API, par le relais) */
+.co-watchcard p { margin: 0 0 8px; color: var(--ink-2); font-size: 14px; }
+.co-watchcard p.hint { color: var(--muted); font-size: 13px; }
+.co-watchcard h2 .co-chip { margin-left: auto; }
+.co-check { display: flex; align-items: flex-start; gap: 9px; margin: 10px 0 0; font-size: 14px; color: var(--ink-2); cursor: pointer; }
+.co-check input { margin: 3px 0 0; accent-color: var(--coach); }
+.co-watchwait .spinner { width: 22px; height: 22px; flex: none; border-radius: 50%; border: 3px solid var(--hair);
+  border-top-color: var(--coach); animation: co-spin .9s linear infinite; }
+@keyframes co-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .co-watchwait .spinner { animation: none; } }
+.co-check svg, .coach-card .hint > svg { width: 15px; height: 15px; vertical-align: -3px; flex: none; }
+.co-prop .co-watchmark { color: var(--good); display: inline-grid; place-items: center; width: 28px; height: 28px; }
+.co-prop .co-watchmark.warn { color: var(--warn); }
+.co-prop .co-watchmark svg { width: 15px; height: 15px; }
+.co-pickone .co-watchmini { display: inline-flex; vertical-align: -2px; margin-left: 4px; color: var(--good); }
+.co-pickone .co-watchmini svg { width: 13px; height: 13px; }
 .co-past { margin-top: 10px; }
 .co-past summary { cursor: pointer; color: var(--ink-2); font-size: 14px; padding: 6px 0; }
 .co-toggles { display: grid; }

@@ -20,6 +20,7 @@ from datetime import date, timedelta
 from typing import Any
 
 from .. import metrics, renfo
+from . import garmin
 from .store import RelayError, local_now, now
 
 KEEP_DAYS = 28                 # le relais ne garde que 4 semaines de séances
@@ -395,10 +396,15 @@ def update_proposal(conn: sqlite3.Connection, coach_id: int, proposal_id: int, p
     day, title, sport, content = _clean_proposal(payload)
     conn.execute("UPDATE propositions SET date = ?, titre = ?, sport = ?, contenu = ?, modifie_le = ? WHERE id = ?",
                  (day, title, sport, json.dumps(content, ensure_ascii=False), now(), proposal_id))
-    return _proposal_dict(conn.execute("SELECT * FROM propositions WHERE id = ?", (proposal_id,)).fetchone())
+    garmin.follow_update(conn, proposal_id)  # déjà sur la montre : renvoyée telle que modifiée
+    item = _proposal_dict(conn.execute("SELECT * FROM propositions WHERE id = ?", (proposal_id,)).fetchone())
+    garmin.decorate(conn, item["eleve_id"], [item])
+    return item
 
 
 def delete_proposal(conn: sqlite3.Connection, coach_id: int, proposal_id: int) -> bool:
+    if conn.execute("SELECT 1 FROM propositions WHERE id = ? AND coach_id = ?", (proposal_id, coach_id)).fetchone():
+        garmin.withdraw(conn, proposal_id)  # et hors du calendrier Garmin de l'élève
     return conn.execute("DELETE FROM propositions WHERE id = ? AND coach_id = ?",
                         (proposal_id, coach_id)).rowcount > 0
 
@@ -407,7 +413,9 @@ def proposals(conn: sqlite3.Connection, student_id: int, start: date, end: date,
               sessions: list[dict] | None = None) -> list[dict]:
     rows = conn.execute("SELECT * FROM propositions WHERE eleve_id = ? AND date BETWEEN ? AND ? ORDER BY date, id",
                         (student_id, start.isoformat(), end.isoformat())).fetchall()
-    return [_proposal_dict(row, sessions) for row in rows]
+    items = [_proposal_dict(row, sessions) for row in rows]
+    garmin.decorate(conn, student_id, items)  # déjà envoyée sur sa montre ?
+    return items
 
 
 def templates(conn: sqlite3.Connection, coach_id: int) -> list[dict]:
@@ -675,6 +683,7 @@ def overview(conn: sqlite3.Connection, coach: sqlite3.Row) -> list[dict]:
             "semaine": tally(days), "bande": strip(days, today), "charge_7j": round(load7) if sessions else None,
             "vma_kmh": content["profil"].get("vma_kmh"),
             "seances_28j": len(sessions), "objectif": goal, "non_lus": unread,
+            "montre": garmin.student_flags(conn, row["id"]),
             "prochain": _next_goal(goal, content["profil"], today),
             "renfo": {k: balance[k] for k in ("ratio_texte", "zone", "verdict", "seances")}
             if (balance := renfo_balance(sessions, today)) and balance["zone"] != "vide" else None,
@@ -718,7 +727,8 @@ def student_page(conn: sqlite3.Connection, coach: sqlite3.Row, student_id: int, 
             "objectif": goal, "objectifs": _upcoming_goals(content["profil"], today),
             "semaine": {"lundi": monday.isoformat(), "jours": days, "bilan": tally(days)},
             "seances": briefs, "jours": content["jours"], "total_28j": total, "propositions": upcoming,
-            "renfo": renfo_balance(sessions, today)}
+            "renfo": renfo_balance(sessions, today),
+            "montre": {**garmin.student_flags(conn, student_id), "disponible": garmin.configured()}}
 
 
 def _next_goal(goal: dict | None, profile: dict, today: date) -> dict | None:
@@ -761,7 +771,8 @@ def my_page(conn: sqlite3.Connection, student: sqlite3.Row) -> dict:
             "partage": {"seances": len(content["seances"]), "jours": len(content["jours"]),
                         "traces": sum("trace" in s for s in content["seances"])},
             "propositions": proposals(conn, student["id"], today - timedelta(days=14), today + timedelta(days=90),
-                                      content["seances"])}
+                                      content["seances"]),
+            "montre": garmin.status(conn, student)}
 
 
 def last_activity(conn: sqlite3.Connection, account: sqlite3.Row) -> str:

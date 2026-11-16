@@ -676,7 +676,8 @@ Un coach et ses élèves se relient par un **relais** : un petit serveur sur Int
 Foulée appellent. Chacun garde Foulée et tout son historique chez lui ; le relais ne garde que les comptes,
 les codes d'invitation, les messages, les séances proposées et l'extrait que chaque élève choisit de partager
 (séances des 4 dernières semaines en résumé, objectif, VMA ; GPS, sommeil, VFC et poids en option, jamais
-Strava). Le relais, c'est Foulée lui-même, en « mode relais » : il ne touche pas à Garmin.
+Strava). Le relais, c'est Foulée lui-même, en « mode relais » : il ne lit rien chez Garmin (il peut seulement, si
+l'élève le relie, déposer les séances du coach dans son calendrier Garmin : voir « Sur la montre » plus bas).
 
 ```
 Foulée de l'élève  ──►  relais (HTTPS, tunnel Cloudflare)  ◄──  Foulée du coach
@@ -720,15 +721,37 @@ ton adresse, par exemple `https://relais.mon-club.com`.
 
 **Ce que voit l'élève** (page « Mon coach ») : les séances proposées, bloc par bloc avec ses allures (et dans
 sa vue « Calendrier », en pointillé bleu, face à ce qu'il fait), la conversation avec son coach, et ce qu'il
-partage. Chaque séance proposée se télécharge en **fichier .fit pour la montre** (« Pour ma montre ») : chaque
-bloc devient une étape, les répétitions une boucle, les % de VMA une fourchette d'allure calculée avec la VMA
-de l'élève (± 3 %), la zone de FC une cible de FC. Montre branchée en USB, le fichier se copie dans le
-dossier `GARMIN\NewFiles` ; débranchée, la montre la range dans Entraînement → Entraînements. Sans câble ?
-Garmin Connect n'importe pas les fichiers d'entraînement (seulement des activités et des parcours), et l'API
-officielle de Garmin, celle de Foulée, ne fait que lire : l'élève recopie alors la séance dans Garmin Connect
-(Entraînement et planification → Entraînements → Créer), puis « Envoyer vers l'appareil ». Le coach peut télécharger
-le même fichier, avec les allures de l'élève, depuis sa fiche. Si l'élève répond « oui » à « Ton coach
-fait-il partie de ton club ? » (Réglages → Coach et élèves), le logo du club s'affiche sur la carte du coach.
+partage.
+
+**Sur la montre, sans câble** : sous chaque séance proposée, **« Envoyer sur ma montre »**. La première fois,
+Garmin Connect s'ouvre dans une autre fenêtre : l'élève s'y connecte, chez Garmin (Foulée ne voit jamais son
+mot de passe), et clique sur « Accepter » ; la séance part aussitôt, les suivantes en un clic. Elle arrive dans
+son **calendrier Garmin Connect**, à sa date : chaque bloc devient une étape, les répétitions une boucle, les %
+de VMA une fourchette d'allure calculée avec **sa** VMA (± 3 %), la zone de FC une cible de FC. La montre la
+récupère à sa synchro. « Renvoyer » la remplace ; une séance modifiée par le coach est renvoyée toute seule,
+supprimée elle quitte le calendrier Garmin. La carte « Ta montre Garmin » (page « Mon coach ») dit si le coach
+peut envoyer lui-même ses séances sur la montre (oui par défaut) et permet de délier le compte (l'autorisation
+est retirée chez Garmin aussi, comme quand on quitte le groupe). Côté coach : une petite montre verte marque les
+élèves reliés ; « Envoyer aussi sur leur montre Garmin » (cochée d'office) en proposant une séance, ou le bouton
+montre sur la fiche de l'élève.
+
+Comment ça marche : le relais est l'appli « Foulée » inscrite au programme développeur de Garmin (Connect
+Developer, Training API, OAuth 2.0 avec PKCE). Elle ne fait que déposer des séances dans le calendrier : elle ne
+lit rien de la montre. Les autorisations des élèves sont gardées **chiffrées** dans la base du relais (la clé est
+à part, dans son dossier des secrets). L'administrateur l'active une fois, sur la machine du relais :
+
+```bash
+sudo foulee relais garmin
+```
+
+(Client ID et Client Secret de l'appli Garmin, le secret ne s'affiche pas ; puis l'adresse publique du relais.
+Chez Garmin, l'« OAuth redirect URL » de l'appli est cette adresse suivie de `/garmin/retour`.)
+
+**Avec un câble** : chaque séance se télécharge aussi en **fichier .fit** (« Fichier .fit »). Montre branchée en
+USB, il se copie dans le dossier `GARMIN\NewFiles` ; débranchée, la montre la range dans Entraînement →
+Entraînements. Le coach peut télécharger le même fichier, avec les allures de l'élève, depuis sa fiche.
+
+Si l'élève répond « oui » à « Ton coach fait-il partie de ton club ? » (Réglages → Coach et élèves), le logo du club s'affiche sur la carte du coach.
 **Messages** : une conversation par élève, le fil du groupe (le coach y épingle ses annonces) et un
 fil sous chaque séance ; Foulée relève les nouveautés toutes les minutes (badge dans la colonne). L'extrait
 part après chaque synchro.

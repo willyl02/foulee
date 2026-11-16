@@ -452,6 +452,45 @@ def workout_file(conn: sqlite3.Connection, proposal_id: int, student_id: int | N
         raise CoachError(str(exc), 400) from None
 
 
+# ------------------------------------------------- séances sur la montre (Garmin)
+def _garmin(conn: sqlite3.Connection, method: str, path: str, payload: dict | None = None) -> dict:
+    try:
+        return _authed(conn, method, "/api/v1/garmin" + path, payload)
+    except CoachError as exc:
+        if exc.status == 404 and "Introuvable" in str(exc):
+            raise CoachError("Ton relais n'est pas encore à jour pour envoyer les séances sur la montre : il se "
+                             "met à jour seul chaque nuit, réessaie demain.", 404) from None
+        raise
+
+
+def garmin_status(conn: sqlite3.Connection) -> dict:
+    return _garmin(conn, "GET", "")
+
+
+def garmin_send(conn: sqlite3.Connection, proposal_id: int) -> dict:
+    """« Envoyer sur ma montre » : la séance part (avec ma VMA), ou le relais donne l'adresse de Garmin pour relier
+    mon compte d'abord (la séance part alors toute seule au retour de Garmin)."""
+    vma = db.get_settings(conn).get("vma_kmh")
+    return _garmin(conn, "POST", "/envoyer", {"proposition": int(proposal_id), "vma_kmh": vma})
+
+
+def garmin_link(conn: sqlite3.Connection) -> dict:
+    return _garmin(conn, "POST", "/relier", {})
+
+
+def garmin_unlink(conn: sqlite3.Connection) -> dict:
+    return _garmin(conn, "DELETE", "")
+
+
+def garmin_settings(conn: sqlite3.Connection, coach_allowed: bool) -> dict:
+    return _garmin(conn, "PUT", "", {"coach_peut_envoyer": bool(coach_allowed)})
+
+
+def garmin_coach_send(conn: sqlite3.Connection, proposal_ids: list) -> dict:
+    """Côté coach : envoie des séances proposées sur la montre des élèves reliés (qui le permettent)."""
+    return _garmin(conn, "POST", "/coach", {"propositions": [int(i) for i in proposal_ids if str(i).isdigit()]})
+
+
 def pace_for(vma_kmh: float | None, pct: float | None) -> str | None:
     if not vma_kmh or not pct:
         return None

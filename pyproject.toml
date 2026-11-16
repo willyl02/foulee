@@ -1,6 +1,6 @@
 [project]
 name = "foulee"
-version = "0.8.1b6"
+version = "0.8.1b7"
 description = "Foulée — hub local de données sport et santé (Garmin d'abord)"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -15,6 +15,7 @@ dependencies = [
     "tzdata>=2024.1 ; sys_platform == 'win32'",  # fuseaux horaires (heures des mesures Withings) : absents de Windows
     "pillow>=11",
     "segno>=1.6",
+    "cryptography>=44",  # relais : les autorisations Garmin des élèves, chiffrées dans sa base
 ]
 
 [project.scripts]

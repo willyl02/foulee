@@ -1,8 +1,10 @@
 // La fiche d'un élève (vue du coach) et la page d'une séance partagée, avec son fil (coach et élève).
+import * as api from "./api.js";
 import * as F from "./format.js";
 import { icon } from "./icons.js";
 import {
   avatar, blocksHtml, dayLabel, dur, km, loading, mountThread, rdel, rget, sessionFigures, sportIcon, statusChip, traceSvg,
+  watchLine, watchSummary,
 } from "./coach-ui.js";
 import { beam, headline, pairs } from "./tiles-renfo.js";
 
@@ -97,6 +99,7 @@ export async function renderStudent(ctx, sid) {
   const goal = data.objectif;
   const gp = goalPace(goal);
   const vma = data.profil?.vma_kmh;
+  const canWatch = Boolean(data.montre?.disponible && data.montre.relie && data.montre.coach_peut_envoyer);
   const week = data.semaine;
   const monday = F.parseDate(week.lundi);
   const prev = F.isoDate(F.addDays(monday, -7));
@@ -145,11 +148,14 @@ export async function renderStudent(ctx, sid) {
         ${renfoCard(data.renfo, sid, data.accord)}
         <section class="coach-card"><h2>${icon("layers")}Séances proposées</h2><div data-props>
           ${data.propositions.length ? data.propositions.map((p) => `<div class="co-prop"><div><b>${F.escape(p.titre)}</b><span>${F.escape(dayLabel(p.date))}${p.sport_label ? ` · ${F.escape(p.sport_label)}` : ""}</span></div>
-            ${statusChip(p.statut)}<span class="co-prop-tools">${p.seance ? `<a class="co-mini" href="#/coach/eleve/${sid}/seance/${encodeURIComponent(p.seance.cle)}" title="Voir la séance faite">${icon("right")}</a>` : ""}
+            ${statusChip(p.statut)}<span class="co-prop-tools">${p.montre ? `<i class="co-watchmark${p.montre.a_jour ? "" : " warn"}" title="${p.montre.a_jour ? `Sur sa montre (${p.montre.par === "coach" ? "envoyée par toi" : "envoyée par lui"}, ${F.escape(F.relative(p.montre.envoye_le))})` : F.escape(p.montre.erreur || "À renvoyer")}">${icon("watch")}</i>` : ""}
+            ${p.seance ? `<a class="co-mini" href="#/coach/eleve/${sid}/seance/${encodeURIComponent(p.seance.cle)}" title="Voir la séance faite">${icon("right")}</a>` : ""}
+            ${canWatch && p.statut !== "fait" && p.statut !== "manque" ? `<button type="button" class="co-mini" data-watch="${p.id}" title="${p.montre ? "La renvoyer sur sa montre" : "L'envoyer sur sa montre (calendrier Garmin Connect)"}">${icon("watch")}</button>` : ""}
             <a class="co-mini" href="/api/coach/eleves/${sid}/seances/${p.id}.fit" download title="Le fichier pour sa montre (.fit), avec ses allures">${icon("download")}</a>
             <a class="co-mini" href="#/coach/proposer?id=${p.id}&eleve=${sid}" title="Modifier">${icon("edit")}</a>
             <button type="button" class="co-mini" data-drop="${p.id}" title="Supprimer">${icon("trash")}</button></span></div>`).join("")
             : `<p class="co-empty">Aucune séance proposée.</p>`}</div>
+          ${watchLine(data.montre, e.nom)}
           <div class="inline-actions" style="margin:10px 0 0"><a class="btn btn-small" href="#/coach/proposer?eleves=${sid}">${icon("plus")}Proposer une séance</a></div></section>
         ${health.length ? `<section class="coach-card"><h2>${icon("heart")}Forme</h2><div class="co-health">${health.map(([key, label, fmt, color]) => `<div>
             <small>${label}</small><b>${fmt(lastOf(key))}</b>${spark(metric(key), { color })}</div>`).join("")}</div>
@@ -157,6 +163,14 @@ export async function renderStudent(ctx, sid) {
       </div>
     </div>`;
 
+  page.querySelectorAll("[data-watch]").forEach((btn) => btn.addEventListener("click", async () => {
+    btn.disabled = true;
+    try {
+      const res = await api.post("/api/coach/montres", { propositions: [Number(btn.dataset.watch)] });
+      toast(watchSummary(res));
+      renderStudent(ctx, sid);
+    } catch (err) { toast(err.message); btn.disabled = false; }
+  }));
   page.querySelectorAll("[data-drop]").forEach((btn) => btn.addEventListener("click", async () => {
     if (!window.confirm("Supprimer cette séance proposée ? Elle disparaît aussi du calendrier de l'élève.")) return;
     try { await rdel(`propositions/${btn.dataset.drop}`); toast("Séance supprimée."); renderStudent(ctx, sid); }

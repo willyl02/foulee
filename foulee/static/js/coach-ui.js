@@ -65,6 +65,26 @@ export function statusChip(statut) {
   return s ? `<span class="co-chip ${s.cls}">${icon(s.icon)}${s.label}</span>` : "";
 }
 
+/** La montre de l'élève, vue du coach (fiche) : reliée ou non, et s'il le laisse envoyer. */
+export function watchLine(montre, name) {
+  if (!montre?.disponible) return "";
+  const first = F.escape((name || "L'élève").split(" ")[0]);
+  if (!montre.relie) return `<p class="hint" style="margin:8px 0 0">${icon("watch")} ${first} n'a pas relié sa montre Garmin : il peut le faire depuis « Mon coach » (bouton « Envoyer sur ma montre »). D'ici là, le fichier .fit reste là.</p>`;
+  if (!montre.coach_peut_envoyer) return `<p class="hint" style="margin:8px 0 0">${icon("watch")} Montre Garmin reliée, mais ${first} préfère envoyer lui-même ses séances.</p>`;
+  return `<p class="hint" style="margin:8px 0 0">${icon("watch")} Montre Garmin reliée : le bouton montre envoie la séance dans son calendrier Garmin, avec ses allures.</p>`;
+}
+
+/** Le résultat d'un envoi sur les montres, en une phrase. */
+export function watchSummary(res) {
+  const list = (names) => names.length > 2 ? `${names.length} élèves` : names.map((n) => n.split(" ")[0]).join(" et ");
+  const parts = [];
+  if (res.envoyees?.length) parts.push(`Sur la montre de ${list(res.envoyees)}.`);
+  if (res.non_reliees?.length) parts.push(`${list(res.non_reliees)} : montre non reliée.`);
+  if (res.refusees?.length) parts.push(`${list(res.refusees)} préfère${res.refusees.length > 1 ? "nt" : ""} l'envoyer lui-même.`);
+  if (res.erreurs?.length) parts.push(res.erreurs.join(" · "));
+  return parts.join(" ") || "Rien à envoyer.";
+}
+
 /** Allure pour un % de VMA : « 4:01 /km ». */
 export function paceFor(vma, pct) {
   if (!vma || !pct) return "";

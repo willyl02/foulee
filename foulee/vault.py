@@ -45,6 +45,10 @@ SECRETS = {
     "strava": ("strava-acces", "strava-acces", None),        # jetons Strava du profil
     "calendrier": ("calendrier-lien", "calendrier-lien", None),  # lien de publication du calendrier (iCal)
     "relais": ("relais-jeton", "relais-jeton", None),  # jeton de session auprès du relais (coach et élèves)
+    # Sur la machine du relais seulement : l'appli Garmin du club (Client ID, Client Secret, adresse publique)
+    # et la clé qui chiffre, dans sa base, les autorisations Garmin des élèves
+    "relais-garmin-appli": ("relais-garmin-appli", "relais-garmin-appli", None),
+    "relais-garmin-cle": ("relais-garmin-cle", "relais-garmin-cle", None),
 }
 # un exemplaire par profil (l'appli Strava : un pour l'installation)
 PER_PROFILE = {"garmin", "withings", "strava", "calendrier", "relais"}

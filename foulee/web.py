@@ -1626,6 +1626,34 @@ def create_app() -> FastAPI:
         """Côté coach : la même séance, avec les allures de cet élève."""
         return fit_response(*coach_call(lambda conn: coach.workout_file(conn, proposal_id, student_id)))
 
+    # Séances sur la montre : le relais les envoie dans le calendrier Garmin Connect (Training API de Garmin)
+    @app.get("/api/coach/garmin")
+    def coach_garmin_status(request: Request) -> dict:
+        return coach_call(coach.garmin_status)
+
+    @app.post("/api/coach/garmin/relier")
+    def coach_garmin_link(request: Request) -> dict:
+        return coach_call(coach.garmin_link)
+
+    @app.put("/api/coach/garmin")
+    def coach_garmin_settings(request: Request, payload: dict = Body(...)) -> dict:
+        return coach_call(lambda conn: coach.garmin_settings(conn, bool(payload.get("coach_peut_envoyer"))))
+
+    @app.delete("/api/coach/garmin")
+    def coach_garmin_unlink(request: Request) -> dict:
+        return coach_call(coach.garmin_unlink)
+
+    @app.post("/api/coach/seances/{proposal_id}/montre")
+    def coach_garmin_send(proposal_id: int, request: Request) -> dict:
+        """« Envoyer sur ma montre » (élève)."""
+        return coach_call(lambda conn: coach.garmin_send(conn, proposal_id))
+
+    @app.post("/api/coach/montres")
+    def coach_garmin_send_students(request: Request, payload: dict = Body(...)) -> dict:
+        """Côté coach : ces séances proposées, sur la montre de leurs élèves."""
+        ids = payload.get("propositions")
+        return coach_call(lambda conn: coach.garmin_coach_send(conn, ids if isinstance(ids, list) else []))
+
     @app.get("/api/coach/accord")
     def coach_accord(request: Request) -> dict:
         def run(conn):
