@@ -4,6 +4,27 @@ Les versions « bêta » (par exemple 0.4.0b1) sont des avant-premières : elles
 sur le canal bêta (Réglages → Mises à jour → « Recevoir les versions bêta »), puis sortent en
 version stable une fois éprouvées.
 
+## 0.8.1 — 16 novembre 2026
+
+La version stable qui réunit les bêtas 0.8.1 ; le détail de chacune est dans l'historique des versions (CHANGELOG.md sur GitHub).
+
+- **Les séances du coach sur la montre, sans câble** : « Envoyer sur ma montre » sous chaque séance proposée. La première
+  fois, Garmin Connect s'ouvre : on s'y connecte, chez Garmin, et on clique sur « Accepter » (Foulée ne voit jamais le mot
+  de passe) ; ensuite, un clic suffit. La séance arrive dans le calendrier Garmin Connect à sa date, avec tes allures ;
+  la montre la récupère à sa synchro. Le coach peut aussi l'envoyer lui-même aux élèves reliés. Le fichier .fit reste là.
+- **Objectifs** : « Cap semi de Paris » devient la vue « Objectifs » : l'objectif principal et des objectifs secondaires
+  (courses de préparation), avec l'équivalence de chaque temps visé sur la distance du principal. Sur l'Accueil, la
+  tuile « Objectifs » montre le principal et les secondaires à venir.
+- **Renfo** : des exercices pour rééquilibrer l'avant et l'arrière, famille par famille ; le coach voit cet équilibre
+  sur « Mes élèves » et sur la fiche de chaque élève, avec un message tout prêt.
+- **VO2max** lue dans les fichiers FIT de la montre (la tuile était vide) ; **nouvelles séances plus vite** : Foulée
+  guette toutes les 20 minutes et synchronise dès qu'une séance arrive dans Garmin Connect ; **sélecteur de période**
+  qui agit sur chaque vue, retenu vue par vue.
+- **Un logo fixe** (le F de la balise) partout, la rubrique active marquée d'un trait rouge, et **Foulée dans sa propre
+  fenêtre**, sans barre d'adresse.
+- **Foulée sur ton téléphone depuis ton PC** avec Tailscale, en un bouton et un QR code.
+- **Foulée sur Mac** (bêta) : Apple Silicon et Intel, à glisser dans Applications.
+
 ## 0.8.1b7 — 16 novembre 2026 (bêta)
 
 - **Les séances du coach sur la montre, sans câble** : « Envoyer sur ma montre » sous chaque séance proposée
