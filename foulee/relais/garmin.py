@@ -179,12 +179,41 @@ def _token_request(params: dict) -> dict:
                          headers={"Accept": "application/json"},
                          form={**params, "client_id": settings["client_id"], "client_secret": settings["client_secret"]})
     if status >= 400 or not isinstance(data, dict) or not data.get("access_token"):
-        log.warning("Jetons Garmin refusés (HTTP %s)", status)
-        raise GarminError(f"Garmin a refusé l'autorisation (HTTP {status}).", 401 if status in (400, 401) else 502)
+        reason = _reason(data)
+        log.warning("Jetons Garmin refusés (HTTP %s) %s", status, reason)
+        hint = (" L'appli Garmin enregistrée sur le relais (Client ID ou Client Secret) ne correspond pas à celle du "
+                "portail : son administrateur peut le vérifier avec « foulee relais garmin tester »."
+                if status == 401 or "client" in reason.lower() else "")
+        raise GarminError(f"Garmin a refusé l'autorisation (HTTP {status}{' : ' + reason if reason else ''}).{hint}",
+                          401 if status in (400, 401) else 502)
     stamp = datetime.now().timestamp()
     return {"access": data["access_token"], "refresh": data.get("refresh_token"),
             "expire": stamp + int(data.get("expires_in") or 86400),
             "refresh_expire": stamp + int(data.get("refresh_token_expires_in") or 90 * 86400)}
+
+
+def _reason(data: Any) -> str:
+    """Le motif d'un refus de Garmin (« invalid_client »…), jamais rien d'autre de sa réponse."""
+    if isinstance(data, dict):
+        text = " ".join(str(data.get(k) or "") for k in ("error", "error_description", "message")).strip()
+    else:
+        text = str(data or "").strip()
+    return " ".join(text.split())[:160]
+
+
+def check_app() -> dict:
+    """« foulee relais garmin tester » : Garmin reconnaît-il le Client ID et le Client Secret enregistrés ?
+
+    On demande un jeton avec un jeton de renouvellement bidon : des identifiants faux sont refusés comme tels
+    (401, invalid_client) ; des identifiants justes, pour le jeton seulement (400, invalid_grant)."""
+    settings = _settings()
+    status, data = _call("POST", _url("FOULEE_GARMIN_TOKEN_URL", TOKEN_URL), headers={"Accept": "application/json"},
+                         form={"grant_type": "refresh_token", "refresh_token": "essai-foulee",
+                               "client_id": settings["client_id"], "client_secret": settings["client_secret"]})
+    reason = _reason(data)
+    ok = status != 401 and "client" not in reason.lower()
+    return {"ok": ok, "http": status, "motif": reason, "client_id": settings["client_id"],
+            "secret": len(settings["client_secret"]), "retour": redirect_uri(settings)}
 
 
 def _api(method: str, path: str, access: str, body: Any = None) -> tuple[int, Any]:

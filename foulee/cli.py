@@ -672,6 +672,25 @@ def _relay_garmin(args: argparse.Namespace) -> int:
         vault.delete_secret("relais-garmin-appli")
         _say("Appli Garmin retirée : l'envoi vers les montres est coupé (les élèves restent reliés).")
         return 0
+    if args.identifiant == "tester":
+        if not current:
+            _say("Aucune appli Garmin enregistrée : lance « foulee relais garmin ».")
+            return 1
+        try:
+            result = garmin.check_app()
+        except garmin.GarminError as exc:
+            _say(str(exc))
+            return 1
+        _say(f"Client ID {result['client_id']}, Client Secret de {result['secret']} caractères.")
+        _say(f"Réponse de Garmin : HTTP {result['http']} {result['motif']}".rstrip())
+        if result["ok"]:
+            _say("✓ Garmin reconnaît l'appli : Client ID et Client Secret sont bons.")
+            _say(f"  Vérifie aussi chez Garmin l'« OAuth redirect URL » : {result['retour']}")
+            return 0
+        _say("✗ Garmin ne reconnaît pas ce Client ID avec ce Client Secret. Recopie-les depuis le portail "
+             "(Apps → Foulée) : « foulee relais garmin », puis « oui » pour remplacer. Un secret régénéré chez "
+             "Garmin remplace l'ancien : c'est le dernier affiché qu'il faut.")
+        return 1
     if current:
         _say(f"Appli Garmin enregistrée : Client ID {current['client_id']}")
         _say(f"Adresse de retour à déclarer chez Garmin : {garmin.redirect_uri(current)}")
@@ -866,7 +885,7 @@ def build_parser() -> argparse.ArgumentParser:
                    help="serveur : lancer le relais ; admin / coach : créer un compte coach ; comptes : la liste ; "
                         "mot-de-passe, desactiver, reactiver, supprimer : sur un compte (identifiant) ; "
                         "garmin : enregistrer l'appli Garmin du club (envoi des séances sur les montres ; "
-                        "« garmin retirer » pour la retirer)")
+                        "« garmin tester » pour la vérifier, « garmin retirer » pour la retirer)")
     p.add_argument("identifiant", nargs="?", help="identifiant du compte visé")
     p.add_argument("--nom", help="nom affiché du nouveau compte")
     p.add_argument("--port", type=int, default=config.DEFAULT_PORT, help="port du relais (8770 par défaut)")

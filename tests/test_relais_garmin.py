@@ -376,3 +376,21 @@ def test_cli_registers_the_garmin_app(monkeypatch, capsys):
     assert garmin.app_settings() == {"client_id": "id-du-club", "client_secret": "le-secret",
                                      "adresse": "https://relais.mon-club.com"}
     assert cli.main(["relais", "garmin", "retirer"]) == 0 and garmin.app_settings() is None
+
+
+def test_cli_tests_the_garmin_app(monkeypatch, capsys):
+    from foulee import cli
+
+    garmin.save_app("id-du-club", "le-secret", "relais.mon-club.com")
+    replies = {"le-secret": (400, {"error": "invalid_grant"}), "mauvais": (401, {"error": "invalid_client"})}
+    monkeypatch.setattr(garmin, "transport", lambda method, url, **kw: replies[kw["form"]["client_secret"]])
+    assert cli.main(["relais", "garmin", "tester"]) == 0
+    out = capsys.readouterr().out
+    assert "Garmin reconnaît l'appli" in out and "le-secret" not in out and "9 caractères" in out
+    garmin.save_app("id-du-club", "mauvais", "relais.mon-club.com")
+    assert cli.main(["relais", "garmin", "tester"]) == 1
+    assert "invalid_client" in capsys.readouterr().out
+    with pytest.raises(garmin.GarminError) as refused:
+        garmin._token_request({"grant_type": "authorization_code", "code": "x"})
+    assert "invalid_client" in str(refused.value) and "garmin tester" in str(refused.value)
+    garmin.vault.delete_secret("relais-garmin-appli")
