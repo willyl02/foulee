@@ -678,8 +678,23 @@ def _relay_garmin(args: argparse.Namespace) -> int:
         if _ask("La remplacer ? (oui/non)", "non").lower() != "oui":
             return 0
     _say("Les valeurs de ton appli « Foulée » sur le portail développeur de Garmin (Apps → Foulée → Credential).")
-    client_id = _ask("Client ID :")
-    secret = getpass.getpass("Client Secret (ne s'affiche pas) : ").strip()
+    client_id = ""
+    while not client_id:
+        client_id = _ask("Client ID :").strip()
+    secret = ""
+    for _ in range(3):
+        secret = getpass.getpass("Client Secret (ne s'affiche pas ; colle-le avec un clic droit ou Ctrl+Maj+V, "
+                                 "puis Entrée) : ").strip()
+        if secret == client_id:
+            _say("C'est le Client ID : il faut le Client Secret, juste en dessous chez Garmin.")
+        elif secret:
+            _say(f"Client Secret reçu ({len(secret)} caractères).")
+            break
+        else:
+            _say("Rien reçu : dans un terminal, Ctrl+V ne colle pas. Clic droit → Coller, ou Ctrl+Maj+V.")
+        secret = ""
+    if not secret:
+        return 1
     address = _ask("Adresse publique du relais (ex. https://relais.mon-club.com) :",
                    current["adresse"] if current else "")
     try:
