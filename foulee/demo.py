@@ -241,7 +241,10 @@ def _build_profile(days: int, seed: int) -> dict:
     start = today - timedelta(days=days)
     race_day = today - timedelta(days=24)
     prep_start = today - timedelta(days=3)
-    settings_patch = {"historique_depuis": start.isoformat()}
+    settings_patch = {"historique_depuis": start.isoformat(),
+                      # un objectif d'exemple, toujours à venir (une vraie installation n'en a pas)
+                      "objectif": {"nom": "Semi-marathon (exemple)", "date": (today + timedelta(days=110)).isoformat(),
+                                   "distance_km": 21.0975, "temps_cible": "1:35:00"}}
 
     with db.session() as conn:
         db.set_meta(conn, "garmin_hr_zones", json.dumps({"floors": FLOORS, "max": HR_MAX, "rest": HR_REST,
