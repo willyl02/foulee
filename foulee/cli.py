@@ -758,6 +758,23 @@ def cmd_relais(args: argparse.Namespace) -> int:
                 seen = row["derniere_connexion"] or "jamais connecté"
                 _say(f"  {row['identifiant']:<24} {row['nom']:<24} {role:<28} {seen}{state}")
             return 0
+        if action == "groupes":
+            coaches = [r for r in store.accounts(conn) if r["role"] == "coach"]
+            if not coaches:
+                _say("Aucun coach. Crée le tien : foulee relais admin")
+            for c in coaches:
+                kids = store.students(conn, c["id"])
+                _say(f"{c['nom']} ({c['identifiant']}){' · admin' if c['admin'] else ''}"
+                     f"{'' if c['actif'] else ' [désactivé]'} : {len(kids)} élève{'s' if len(kids) > 1 else ''}")
+                for k in kids:
+                    watch = conn.execute("SELECT 1 FROM garmin_liens WHERE compte_id = ?", (k["id"],)).fetchone()
+                    notif = conn.execute("SELECT reglages FROM notifications WHERE compte_id = ?", (k["id"],)).fetchone()
+                    phone = bool(notif and (json.loads(notif["reglages"]).get("ntfy") or {}).get("actif"))
+                    tags = ", ".join(t for t in ("montre reliée" if watch else "", "notifications" if phone else "",
+                                                 "désactivé" if not k["actif"] else "") if t)
+                    _say(f"    {k['nom']:<24} {k['identifiant']:<20} {k['derniere_connexion'] or 'jamais connecté'}"
+                         f"{f'  ({tags})' if tags else ''}")
+            return 0
         if action in ("admin", "coach"):
             if action == "admin" and store.has_admin(conn) and not args.force:
                 _say("Un administrateur existe déjà (foulee relais comptes). Pour un coach : foulee relais coach")
@@ -882,9 +899,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_forget_key)
 
     p = sub.add_parser("relais", help="le relais du club (coach et élèves) : le lancer, gérer ses comptes")
-    p.add_argument("action", choices=["serveur", "admin", "coach", "comptes", "mot-de-passe", "desactiver",
+    p.add_argument("action", choices=["serveur", "admin", "coach", "comptes", "groupes", "mot-de-passe", "desactiver",
                                       "reactiver", "supprimer", "garmin"],
                    help="serveur : lancer le relais ; admin / coach : créer un compte coach ; comptes : la liste ; "
+                        "groupes : chaque coach et ses élèves ; "
                         "mot-de-passe, desactiver, reactiver, supprimer : sur un compte (identifiant) ; "
                         "garmin : enregistrer l'appli Garmin du club (envoi des séances sur les montres ; "
                         "« garmin tester » pour la vérifier, « garmin retirer » pour la retirer)")

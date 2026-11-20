@@ -4,6 +4,16 @@ Les versions « bêta » (par exemple 0.4.0b1) sont des avant-premières : elles
 sur le canal bêta (Réglages → Mises à jour → « Recevoir les versions bêta »), puis sortent en
 version stable une fois éprouvées.
 
+## 0.8.2b10 — 20 novembre 2026
+
+- **Corrigé : une séance déplacée dans Garmin Connect restait aussi à son ancien jour** (prévue aujourd'hui,
+  remise à demain : elle s'affichait les deux jours). Elle ne reste plus qu'à son nouveau jour ; une séance faite
+  aujourd'hui garde bien sa place.
+- **Relais : message d'accueil à la connexion SSH** de sa machine : version, état du relais et du tunnel, et les
+  commandes usuelles (comptes, groupes, coach, mot de passe, Garmin, mise à jour, journaux). Nouvelle commande
+  `sudo foulee relais groupes` : chaque coach et ses élèves (montre reliée, notifications).
+- Documentation : les guides et présentations portent la version de Foulée dans leur nom.
+
 ## 0.8.2b9 — 20 novembre 2026
 
 - **« Aujourd'hui » devient « Ma séance du jour »** (au lieu de répéter la forme du jour de l'Accueil) :

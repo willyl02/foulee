@@ -582,9 +582,21 @@ def store(conn: sqlite3.Connection, events: list[dict], today: date | None = Non
         # (faite, ou son heure passée) reste là, pour dire ce soir « fait » ou « manqué ».
         fresh = {(event["title"][:200], None if event["all_day"] else _iso(event["start"]))
                  for event, day in rows if day == today}
+        # … sauf si elle a seulement changé de jour (déplacée dans Garmin Connect) : même identifiant ailleurs dans
+        # le calendrier, ou même titre dans les six jours qui viennent, sans séance faite aujourd'hui pour elle
+        moved_uids = {(event["uid"] or "")[:200] for event, day in rows if day != today and event["uid"]}
+        later_titles = {event["title"][:200] for event, day in rows if today < day <= today + timedelta(days=6)}
+        done_today = conn.execute("SELECT id, date, sport, name, duration_s, moving_s FROM activities WHERE date = ?",
+                                  (today.isoformat(),)).fetchall()
+
+        def moved(r: sqlite3.Row) -> bool:
+            if r["uid"] and r["uid"] in moved_uids:
+                return True
+            return r["title"] in later_titles and not any(_fits(r["sport"], a["sport"]) for a in done_today)
+
         kept = [r for r in conn.execute("SELECT * FROM calendar_events WHERE date = ? AND " + NOT_COACH,
                                         (today.isoformat(),))
-                if (r["title"], r["start_local"]) not in fresh]
+                if (r["title"], r["start_local"]) not in fresh and not moved(r)]
     now = db.now_iso()
     # Les séances proposées par le coach (uid « coach:… ») ont leur propre mise à jour (coach.py)
     conn.execute("DELETE FROM calendar_events WHERE (date >= ? OR date < ?) AND " + NOT_COACH,

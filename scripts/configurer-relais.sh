@@ -6,6 +6,8 @@
 #   foulee-relais          le relais, sur 127.0.0.1:8770 (le tunnel Cloudflare l'amène sur Internet en HTTPS)
 #   foulee-relais-maj      la mise à jour automatique depuis GitHub, chaque nuit vers 4 h 30
 #                          (canal de FOULEE_CANAL : « beta » pendant les essais, puis « stable »)
+# Et le message d'accueil à la connexion SSH (/etc/update-motd.d/90-foulee, modèle scripts/motd-relais.sh) :
+# l'état du relais et les commandes usuelles (FOULEE_MOTD=0 dans /etc/default/foulee pour s'en passer).
 
 set -euo pipefail
 
@@ -105,3 +107,13 @@ EOF
 
 systemctl daemon-reload
 systemctl enable --now foulee-relais.service foulee-relais-maj.timer >/dev/null 2>&1
+
+# --- Message d'accueil à la connexion SSH : l'état du relais et les commandes usuelles
+MOTD=/etc/update-motd.d/90-foulee
+[[ -d /etc/update-motd.d ]] || MOTD=/etc/profile.d/foulee-motd.sh  # sans update-motd : au shell de connexion
+if grep -q '^FOULEE_MOTD=0' "$ENV_FILE"; then
+    rm -f /etc/update-motd.d/90-foulee /etc/profile.d/foulee-motd.sh
+else
+    sed -e "s|@ROOT@|$ROOT|g" -e "s|@ENV@|$ENV_FILE|g" "$ROOT/scripts/motd-relais.sh" > "$MOTD"
+    chmod 0755 "$MOTD"
+fi

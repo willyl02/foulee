@@ -216,3 +216,21 @@ def test_cli_creates_admin(monkeypatch, capsys):
     assert cli.main(["relais", "admin", "autre", "--nom", "X"]) == 1  # déjà un administrateur
     assert cli.main(["relais", "comptes"]) == 0
     assert "w.lequin" in capsys.readouterr().out
+
+
+def test_cli_lists_groups(relay, capsys):
+    """« foulee relais groupes » : chaque coach et ses élèves (montre reliée, notifications)."""
+    from foulee import cli
+    from foulee.relais import notifs
+
+    william = auth(login(relay).json()["jeton"])
+    code = relay.post("/api/v1/invitations", headers=william).json()["invitation"]["code"]
+    joined = relay.post("/api/v1/inscription", json={"code": code, "identifiant": "lucas", "nom": "Lucas B.",
+                                                     "mot_de_passe": PASSWORD}).json()
+    with store.session() as conn:
+        lucas = conn.execute("SELECT * FROM comptes WHERE id = ?", (joined["compte"]["id"],)).fetchone()
+        notifs.save_settings(conn, lucas, {"ntfy": {"actif": True}})
+    capsys.readouterr()
+    assert cli.main(["relais", "groupes"]) == 0
+    out = capsys.readouterr().out
+    assert "1 élève" in out and "Lucas B." in out and "lucas" in out and "notifications" in out

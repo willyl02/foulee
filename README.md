@@ -566,7 +566,7 @@ Dans un terminal :
 | `reparse` | Reconstruire les tables depuis les réponses brutes (après une mise à jour de Foulée) |
 | `claude-config` | Montrer où Claude Desktop range sa configuration et si Foulée y figure ; `--ecrire` pour l'ajouter, `--retirer` pour l'enlever |
 | `acces-reseau` | Sur un serveur : choisir le mot de passe de l'accès par le réseau local |
-| `relais` | Sur la machine du relais du club : `relais serveur` le lance ; `relais admin` / `relais coach` créent un compte coach ; `relais comptes` les liste ; `relais mot-de-passe`, `desactiver`, `reactiver`, `supprimer` + identifiant |
+| `relais` | Sur la machine du relais du club : `relais serveur` le lance ; `relais admin` / `relais coach` créent un compte coach ; `relais comptes` les liste ; `relais groupes` montre chaque coach et ses élèves ; `relais mot-de-passe`, `desactiver`, `reactiver`, `supprimer` + identifiant. Ces commandes s'affichent à chaque connexion SSH à la machine du relais |
 | `reset-views` | Restaurer les vues d'origine |
 | `forget-key` | Supprimer la clé de ce PC |
 
