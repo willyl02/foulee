@@ -104,6 +104,7 @@ export function blockSize(b) {
   const size = [];
   if (b.duree_min) size.push(b.duree_min >= 1 ? `${String(b.duree_min).replace(".", ",")} min` : `${Math.round(b.duree_min * 60)} s`);
   if (b.distance_m) size.push(b.distance_m >= 1000 ? `${String(b.distance_m / 1000).replace(".", ",")} km` : `${b.distance_m} m`);
+  if (b.libre && !size.length) size.push("libre (touche Lap)");
   return `${(b.repetitions || 1) > 1 ? `${b.repetitions} × ` : ""}${size.join(" / ")}`;
 }
 
@@ -114,8 +115,8 @@ export function blockIntensity(b) {
 }
 
 export function blockRest(b) {
-  if ((b.repetitions || 1) < 2 || !(b.recup_min || b.recup_texte)) return "";
-  const rest = b.recup_min ? (b.recup_min >= 1 ? `${String(b.recup_min).replace(".", ",")} min` : `${Math.round(b.recup_min * 60)} s`) : "";
+  if ((b.repetitions || 1) < 2 || !(b.recup_min || b.recup_texte || b.recup_libre)) return "";
+  const rest = b.recup_min ? (b.recup_min >= 1 ? `${String(b.recup_min).replace(".", ",")} min` : `${Math.round(b.recup_min * 60)} s`) : b.recup_libre ? "libre (Lap)" : "";
   return `récup ${[rest, b.recup_texte].filter(Boolean).join(" ")}`;
 }
 

@@ -542,14 +542,16 @@ def block_text(block: dict, vma_kmh: float | None) -> str:
     if block.get("distance_m"):
         meters = block["distance_m"]
         size.append(f"{meters / 1000:g} km" if meters >= 1000 else f"{meters:g} m")
+    if block.get("libre") and not size:
+        size.append("libre (touche Lap)")
     text = f"{block.get('nom') or 'Bloc'} : " + (f"{reps} × " if reps > 1 else "") + " / ".join(size)
     if block.get("pct_vma"):
         pace = pace_for(vma_kmh, block["pct_vma"])
         text += f" à {block['pct_vma']:g} % VMA" + (f" ({pace})" if pace else "")
     elif block.get("zone_fc"):
         text += f" en zone FC {block['zone_fc']:g}"
-    if reps > 1 and (block.get("recup_min") or block.get("recup_texte")):
-        rest = f"{block['recup_min']:g} min" if block.get("recup_min") else ""
+    if reps > 1 and (block.get("recup_min") or block.get("recup_texte") or block.get("recup_libre")):
+        rest = f"{block['recup_min']:g} min" if block.get("recup_min") else "libre (Lap)" if block.get("recup_libre") else ""
         text += f", récup {rest} {block.get('recup_texte') or ''}".rstrip()
     if block.get("note"):
         text += f" — {block['note']}"

@@ -340,8 +340,13 @@ def clean_blocks(raw: Any) -> list[dict]:
                  "recup_texte": _txt(item.get("recup_texte"), 40),
                  "note": _txt(item.get("note"), 200),
                  "genre": genre}
-        if block["duree_min"] is None and block["distance_m"] is None and not block["note"]:
-            raise RelayError(f"Bloc « {block['nom']} » : indique une durée ou une distance.")
+        if item.get("libre") and block["duree_min"] is None and block["distance_m"] is None:
+            block["libre"] = True  # jusqu'à la touche Lap (sur piste, de ligne à ligne)
+        if item.get("recup_libre") and block["recup_min"] is None:
+            block["recup_libre"] = True
+        if block["duree_min"] is None and block["distance_m"] is None and not block["note"] and not block.get("libre"):
+            raise RelayError(f"Bloc « {block['nom']} » : indique une durée ou une distance (ou « libre », à la "
+                             "touche Lap).")
         blocks.append({k: v for k, v in block.items() if v is not None})
     if not blocks:
         raise RelayError("Ajoute au moins un bloc à la séance.")

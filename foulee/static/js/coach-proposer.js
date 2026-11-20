@@ -32,30 +32,33 @@ const EXAMPLES = [
 ];
 
 const clone = (x) => JSON.parse(JSON.stringify(x));
+// « libre » : la montre passe à l'étape suivante à la touche Lap (sur piste, de ligne à ligne)
+const UNITS = [["min", "min"], ["s", "s"], ["m", "m"], ["km", "km"], ["lap", "libre (Lap)"]];
+const REST_UNITS = [["min", "min"], ["s", "s"], ["lap", "libre (Lap)"]];
 const num = (v) => { const n = Number(String(v).replace(",", ".")); return Number.isFinite(n) && n > 0 ? n : null; };
 const show = (n) => (n == null ? "" : String(Math.round(n * 100) / 100).replace(".", ","));
 
 function blockForm(b, i, n) {
   const genre = GENRES[b.genre] || GENRES.corps;
-  const qtyUnit = b.distance_m ? (b.distance_m >= 1000 && b.distance_m % 100 === 0 ? "km" : "m") : (b.duree_min && b.duree_min < 1 ? "s" : "min");
+  const qtyUnit = b.libre ? "lap" : b.distance_m ? (b.distance_m >= 1000 && b.distance_m % 100 === 0 ? "km" : "m") : (b.duree_min && b.duree_min < 1 ? "s" : "min");
   const qty = qtyUnit === "km" ? b.distance_m / 1000 : qtyUnit === "m" ? b.distance_m : qtyUnit === "s" ? Math.round((b.duree_min || 0) * 60) : b.duree_min;
   const effort = b.pct_vma ? "vma" : b.zone_fc ? "fc" : "aucune";
-  const restUnit = b.recup_min && b.recup_min < 1 ? "s" : "min";
+  const restUnit = b.recup_libre ? "lap" : b.recup_min && b.recup_min < 1 ? "s" : "min";
   const rest = restUnit === "s" ? Math.round(b.recup_min * 60) : b.recup_min;
   return `<div class="co-bform" data-block="${i}" style="--genre:${genre.color}">
     <div class="co-brow">
       <select data-k="genre" aria-label="Type de bloc">${Object.entries(GENRES).map(([k, g]) => `<option value="${k}" ${k === (b.genre || "corps") ? "selected" : ""}>${g.label}</option>`).join("")}</select>
       <input data-k="nom" type="text" maxlength="60" value="${F.escape(b.nom || "")}" placeholder="Nom du bloc" aria-label="Nom du bloc">
       <span class="co-reps"><input data-k="repetitions" type="number" min="1" max="50" value="${b.repetitions || 1}" aria-label="Répétitions"><span>×</span></span>
-      <span class="co-qty"><input data-k="qty" type="text" inputmode="decimal" value="${F.escape(show(qty))}" placeholder="durée" aria-label="Durée ou distance">
-        <select data-k="unit" aria-label="Unité">${["min", "s", "m", "km"].map((u) => `<option ${u === qtyUnit ? "selected" : ""}>${u}</option>`).join("")}</select></span>
+      <span class="co-qty"><input data-k="qty" type="text" inputmode="decimal" value="${F.escape(qtyUnit === "lap" ? "" : show(qty))}" placeholder="${qtyUnit === "lap" ? "touche Lap" : "durée"}" aria-label="Durée ou distance" ${qtyUnit === "lap" ? "disabled" : ""}>
+        <select data-k="unit" aria-label="Unité">${UNITS.map(([u, label]) => `<option value="${u}" ${u === qtyUnit ? "selected" : ""}>${label}</option>`).join("")}</select></span>
     </div>
     <div class="co-brow sub">
       <span class="co-effort"><select data-k="effort" aria-label="Intensité"><option value="vma" ${effort === "vma" ? "selected" : ""}>% VMA</option><option value="fc" ${effort === "fc" ? "selected" : ""}>Zone FC</option><option value="aucune" ${effort === "aucune" ? "selected" : ""}>Sans intensité</option></select>
         ${effort === "vma" ? `<input data-k="pct_vma" type="number" min="30" max="140" value="${b.pct_vma ?? ""}" aria-label="Pourcentage de VMA"><span>%</span>`
           : effort === "fc" ? `<input data-k="zone_fc" type="number" min="1" max="5" value="${b.zone_fc ?? ""}" aria-label="Zone de FC">` : ""}</span>
-      ${(b.repetitions || 1) > 1 ? `<span class="co-rest"><span>récup</span><input data-k="rest" type="text" inputmode="decimal" value="${F.escape(show(rest))}" aria-label="Récupération">
-        <select data-k="restunit" aria-label="Unité de récupération">${["min", "s"].map((u) => `<option ${u === restUnit ? "selected" : ""}>${u}</option>`).join("")}</select>
+      ${(b.repetitions || 1) > 1 ? `<span class="co-rest"><span>récup</span><input data-k="rest" type="text" inputmode="decimal" value="${F.escape(restUnit === "lap" ? "" : show(rest))}" placeholder="${restUnit === "lap" ? "Lap" : ""}" aria-label="Récupération" ${restUnit === "lap" ? "disabled" : ""}>
+        <select data-k="restunit" aria-label="Unité de récupération">${REST_UNITS.map(([u, label]) => `<option value="${u}" ${u === restUnit ? "selected" : ""}>${label}</option>`).join("")}</select>
         <input data-k="recup_texte" type="text" maxlength="40" value="${F.escape(b.recup_texte || "")}" placeholder="trot, marche…" aria-label="Façon de récupérer"></span>` : ""}
       <input data-k="note" class="co-note" type="text" maxlength="200" value="${F.escape(b.note || "")}" placeholder="Précision (facultatif)" aria-label="Précision">
     </div>
@@ -72,7 +75,8 @@ function readBlock(el, old) {
   const qty = num(v("qty"));
   const effort = v("effort");
   const b = { genre: v("genre"), nom: v("nom").trim(), repetitions: Math.max(1, Math.min(50, Math.round(Number(v("repetitions")) || 1))) };
-  if (qty) {
+  if (unit === "lap") b.libre = true;  // jusqu'à la touche Lap : ni durée ni distance
+  else if (qty) {
     if (unit === "km") b.distance_m = Math.round(qty * 1000);
     else if (unit === "m") b.distance_m = Math.round(qty);
     else b.duree_min = unit === "s" ? Math.round(qty) / 60 : qty;
@@ -81,7 +85,8 @@ function readBlock(el, old) {
   if (effort === "fc") { const z = num(v("zone_fc")); if (z) b.zone_fc = Math.round(z); else if (!el.querySelector('[data-k="zone_fc"]')) b.zone_fc = old?.zone_fc || 2; }
   if (effort === "vma" && !b.pct_vma && !el.querySelector('[data-k="pct_vma"]')) b.pct_vma = 70;
   const rest = num(v("rest"));
-  if (b.repetitions > 1 && rest) b.recup_min = v("restunit") === "s" ? Math.round(rest) / 60 : rest;
+  if (b.repetitions > 1 && v("restunit") === "lap") b.recup_libre = true;
+  else if (b.repetitions > 1 && rest) b.recup_min = v("restunit") === "s" ? Math.round(rest) / 60 : rest;
   else if (b.repetitions > 1 && !el.querySelector('[data-k="rest"]') && old?.recup_min) b.recup_min = old.recup_min;
   if (b.repetitions > 1 && (v("recup_texte").trim() || (!el.querySelector('[data-k="recup_texte"]') && old?.recup_texte))) b.recup_texte = v("recup_texte").trim() || old.recup_texte;
   if (v("note").trim()) b.note = v("note").trim();
@@ -192,7 +197,7 @@ export async function renderEditor(ctx) {
       el.addEventListener("input", () => { collect(); drawSide(); });
       el.addEventListener("change", (e) => {
         collect();
-        if (["effort", "repetitions", "genre"].includes(e.target.dataset.k)) {
+        if (["effort", "repetitions", "genre", "unit", "restunit"].includes(e.target.dataset.k)) {
           if (e.target.dataset.k === "effort" && e.target.value === "vma" && !state.blocs[i].pct_vma) state.blocs[i].pct_vma = 70;
           drawBlocks();
         } else drawSide();

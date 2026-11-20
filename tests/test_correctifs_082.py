@@ -78,3 +78,20 @@ def test_the_coach_gets_zones_and_a_light_curve(monkeypatch):
     clean = club._clean_session(raw, "2026-10-01")
     assert clean["tours"][1]["zone"] == 5 and clean["tours"][0]["zone_pct"] == 73
     assert clean["courbe"]["t"][:3] == curve["t"][:3] and len(clean["courbe"]["fc"]) == len(clean["courbe"]["t"])
+
+
+def test_free_reps_end_at_the_lap_key():
+    """Demande de Jason : des répétitions « libres », sans temps ni distance (sur piste, de ligne à ligne)."""
+    from foulee import coach, garmin_training, workout_fit
+    from foulee.relais import club
+
+    blocks = club.clean_blocks([{"genre": "corps", "nom": "Lignes droites", "repetitions": 6, "libre": True,
+                                 "pct_vma": 100, "recup_libre": True, "recup_texte": "marche"}])
+    assert blocks[0]["libre"] and blocks[0]["recup_libre"] and "duree_min" not in blocks[0]
+    item = {"titre": "Piste", "sport": "course", "blocs": blocks}
+    steps = workout_fit.steps_for(item, 16.0)
+    assert [s["duration_type"] for s in steps] == ["open", "open", "repeat_until_steps_cmplt"]
+    workout_fit.decode(workout_fit.build(item, 16.0))  # un vrai fichier, que la montre lit
+    repeat = garmin_training.build(item, 16.0)["segments"][0]["steps"][0]
+    assert [s["durationType"] for s in repeat["steps"]] == ["OPEN", "OPEN"] and repeat["repeatValue"] == 6
+    assert "touche Lap" in coach.block_text(blocks[0], 16.0) and "récup libre (Lap)" in coach.block_text(blocks[0], 16.0)
