@@ -207,6 +207,7 @@ export async function renderCoachSettings(ctx) {
       el.querySelector("[data-rename]").addEventListener("click", () => {
         // Renommer sur place : Entrée enregistre, Échap annule
         const title = el.querySelector("[data-title]");
+        el.classList.add("renaming");
         title.outerHTML = `<form class="lib-rename" data-rename-form><input type="text" maxlength="80" value="${F.escape(t.titre)}" aria-label="Nouveau nom">
           <button type="submit" class="btn btn-small btn-primary">${icon("check")}OK</button><button type="button" class="btn btn-small btn-ghost" data-cancel>Annuler</button></form>`;
         const form = el.querySelector("[data-rename-form]");

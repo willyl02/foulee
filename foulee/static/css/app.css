@@ -2189,8 +2189,10 @@ a.lv-who:hover b { text-decoration: underline; }
 .lib-sk svg { display: block; width: 100%; }
 .lib-tools { flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
 .co-card-head .co-btools { flex-wrap: wrap; gap: 4px; }
-.lib-rename { display: flex; align-items: center; gap: 6px; }
-.lib-rename input { flex: 1; min-width: 0; }
+.lib-rename { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+.lib-rename input { flex: 1 1 180px; min-width: 0; }
+.lib-item.renaming { grid-template-columns: minmax(0, 1fr) auto; }
+.lib-item.renaming .lib-sk { display: none; }
 @media (max-width: 760px) {
   .lib-item { grid-template-columns: minmax(0, 1fr); }
   .lib-sk:empty { display: none; }
