@@ -77,7 +77,9 @@ SESSION_NUM = {"duree_s": (0, 200000, 0), "deplacement_s": (0, 200000, 0), "dist
                "cadence": (0, 400, 0), "puissance": (0, 3000, 0), "calories": (0, 30000, 0),
                "effet_aerobie": (0, 5, 1), "effet_anaerobie": (0, 5, 1), "charge": (0, 3000, 0), "effort": (0, 10, 0)}
 LAP_NUM = {"duree_s": (0, 100000, 0), "distance_m": (0, 500000, 0), "fc_moy": (20, 250, 0),
-           "vitesse_kmh": (0, 120, 1), "denivele_m": (0, 10000, 0)}
+           "vitesse_kmh": (0, 120, 1), "denivele_m": (0, 10000, 0), "debut_s": (0, 200000, 1),
+           "fin_s": (0, 200000, 1), "zone": (1, 5, 0), "zone_pct": (0, 100, 0)}
+CURVE_MAX = 400  # points de la courbe allégée (allure, FC) d'une séance
 DAY_NUM = {"sommeil_h": (0, 24, 1), "sommeil_score": (0, 100, 0), "vfc": (0, 300, 0), "fc_repos": (20, 150, 0),
            "poids_kg": (20, 400, 1)}
 
@@ -120,6 +122,14 @@ def _clean_session(raw: dict, oldest: str) -> dict | None:
             sets.append(item)
     if sets:
         out["renfo"] = sets
+    curve = raw.get("courbe")
+    if laps and isinstance(curve, dict) and isinstance(curve.get("t"), list):
+        times = [_num(x, 0, 200000, 0) for x in curve["t"][:CURVE_MAX]]
+        speeds = [_num(x, 0, 40, 2) for x in (curve.get("v") or [])[:len(times)]]
+        hrs = [_num(x, 20, 250, 0) for x in (curve.get("fc") or [])[:len(times)]]
+        if len(times) >= 2 and all(x is not None for x in times):
+            out["courbe"] = {"t": times, "v": speeds + [None] * (len(times) - len(speeds)),
+                             "fc": hrs + [None] * (len(times) - len(hrs))}
     trace = raw.get("trace")
     if isinstance(trace, list) and trace:
         points = []

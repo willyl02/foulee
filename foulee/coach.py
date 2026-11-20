@@ -335,7 +335,33 @@ def trace_points(streams: dict | None, mask: bool) -> list[list[float]] | None:
     return [[round(la, 5), round(lo, 5)] for la, lo in points[::step]]
 
 
-def _shared_session(conn: sqlite3.Connection, row: sqlite3.Row, accord: dict) -> dict:
+CURVE_POINTS = 240
+
+
+def light_curve(streams: dict | None) -> dict | None:
+    """Allure (vitesse, m/s) et FC allégées à CURVE_POINTS points, sur l'axe du temps des tours : de quoi
+    dessiner l'analyse fraction par fraction chez le coach (jamais de position)."""
+    if not streams or not streams.get("t"):
+        return None
+    times, speeds, hrs = streams["t"], streams.get("spd") or [], streams.get("hr") or []
+    n = len(times)
+    step = max(1, -(-n // CURVE_POINTS))
+    t, v, fc = [], [], []
+    for i in range(0, n, step):
+        def mean(values: list) -> float | None:
+            nums = [x for x in values[i:i + step] if x is not None]
+            return sum(nums) / len(nums) if nums else None
+
+        t.append(round(times[i]))
+        speed, hr = mean(speeds), mean(hrs)
+        v.append(round(speed, 2) if speed is not None else None)
+        fc.append(round(hr) if hr is not None else None)
+    if not any(x is not None for x in v + fc):
+        return None
+    return {"t": t, "v": v, "fc": fc}
+
+
+def _shared_session(conn: sqlite3.Connection, row: sqlite3.Row, accord: dict, floors: list[float]) -> dict:
     from . import analysis, metrics, renfo
 
     extra = json.loads(row["extra"]) if row["extra"] else {}
@@ -353,13 +379,20 @@ def _shared_session(conn: sqlite3.Connection, row: sqlite3.Row, accord: dict) ->
         "avantage": benefit["libelle"] if benefit else None, "charge": row["load"],
     }
     laps = []
-    for lap in conn.execute("SELECT * FROM laps WHERE activity_id = ? ORDER BY idx", (row["id"],)):
+    rows = [dict(lap) for lap in conn.execute("SELECT * FROM laps WHERE activity_id = ? ORDER BY idx", (row["id"],))]
+    streams = analysis.load_streams(conn, row["id"]) if row["has_streams"] and len(rows) > 1 else None
+    analysed = analysis.lap_analysis(rows, streams, floors) if len(rows) > 1 else []
+    for lap, seg in zip(rows, analysed):
         laps.append({"duree_s": lap["duration_s"], "distance_m": lap["distance_m"], "fc_moy": lap["avg_hr"],
                      "vitesse_kmh": round(lap["avg_speed"] * 3.6, 1) if lap["avg_speed"] else None,
                      "allure": metrics.fmt_pace(lap["avg_speed"]) if running and lap["avg_speed"] else None,
-                     "denivele_m": lap["elev_gain_m"], "intensite": lap["intensity"]})
+                     "denivele_m": lap["elev_gain_m"], "intensite": lap["intensity"],
+                     "debut_s": seg["debut_s"], "fin_s": seg["fin_s"], "zone": seg["zone"], "zone_pct": seg["zone_pct"]})
     if len(laps) > 1:
         item["tours"] = laps
+        curve = light_curve(streams)
+        if curve:
+            item["courbe"] = curve  # allure et FC allégées : l'analyse fraction par fraction chez le coach
     sets = []
     for e in conn.execute("SELECT * FROM exercises WHERE activity_id = ? ORDER BY idx", (row["id"],)):
         info = renfo.describe(dict(e))
@@ -378,7 +411,7 @@ def _shared_session(conn: sqlite3.Connection, row: sqlite3.Row, accord: dict) ->
 def snapshot(conn: sqlite3.Connection, accord: dict, today: date | None = None) -> dict:
     """L'extrait des 4 dernières semaines, selon l'accord. Jamais les séances venues de Strava (ses règles
     l'interdisent), jamais de clé ni de jeton."""
-    from . import calendrier, objectifs
+    from . import analysis, calendrier, db, objectifs
 
     today = today or date.today()
     since = (today - timedelta(days=SHARE_DAYS)).isoformat()
@@ -386,7 +419,8 @@ def snapshot(conn: sqlite3.Connection, accord: dict, today: date | None = None) 
     if accord.get("seances"):
         rows = conn.execute("SELECT * FROM activities WHERE date >= ? AND source <> 'strava' AND id NOT LIKE "
                             "'strava:%' ORDER BY start_local DESC", (since,)).fetchall()
-        out["seances"] = [_shared_session(conn, row, accord) for row in rows]
+        floors = analysis.hr_profile(conn, db.get_settings(conn))["floors"]
+        out["seances"] = [_shared_session(conn, row, accord, floors) for row in rows]
         planned = calendrier.plan(conn, today - timedelta(days=SHARE_DAYS), today + timedelta(days=28), today)
         out["plan"] = [{"date": p["date"], "heure": p["heure"], "titre": p["titre"], "type": p["type"],
                         "sport": p["sport"], "statut": p["statut"]} for p in planned if not p.get("coach")]

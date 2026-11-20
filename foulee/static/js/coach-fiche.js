@@ -1,6 +1,7 @@
 // La fiche d'un élève (vue du coach) et la page d'une séance partagée, avec son fil (coach et élève).
 import * as api from "./api.js";
 import * as F from "./format.js";
+import { analysisHTML, wireAnalysis } from "./analyse.js";
 import { icon } from "./icons.js";
 import {
   avatar, blocksHtml, dayLabel, dur, km, loading, mountThread, rdel, rget, sessionFigures, sportIcon, statusChip, traceSvg,
@@ -211,12 +212,14 @@ export async function renderSession(ctx, sid, key) {
   const name = who?.nom || "";
   const crumb = coachSide ? `<a href="#/coach">Mes élèves</a> › <a href="#/coach/eleve/${sid}">${F.escape(name || "Élève")}</a> ›` : `<a href="#/coach">Mon coach</a> ›`;
   const when = s.debut ? F.whenActivity(s.debut) : F.dateLong(s.date, { year: true });
+  const analysis = s.tours?.length > 1 ? analysisHTML(s.tours, s.courbe, { running }) : "";
 
   page.innerHTML = `${ctx.head(`<div class="co-crumb">${crumb}</div><h1 class="co-title"><span class="co-ico lg">${sportIcon(s.sport)}</span>${F.escape(s.nom || s.sport_label || "Séance")}</h1>`,
     `<span>${F.escape(when)}${s.sport_label ? ` · ${F.escape(s.sport_label.toLowerCase())}` : ""}${s.avantage ? ` · ${F.escape(s.avantage)}` : ""}</span>
      ${prop ? `<span class="co-chip blue">${icon("layers")}${coachSide ? "proposée par toi" : "proposée par ton coach"}</span>${statusChip(prop.statut)}` : data.prevue ? `<span class="co-chip">${icon("calendar")}prévue : ${F.escape(data.prevue.titre)}</span>` : ""}`,
     coachSide ? `<a class="btn" href="#/coach/messages?fil=eleve-${sid}">${icon("chat")}Conversation</a>` : "")}
     ${ctx.tabs(coachSide ? "eleves" : "coach")}
+    ${analysis ? `<section class="coach-card co-analyse"><h2>${icon("wave")}Analyse fraction par fraction <span class="co-count">${s.tours.length}</span></h2>${analysis}</section>` : ""}
     <div class="co-grid2">
       <div class="co-page">
         <section class="coach-card"><div class="co-stats">${stats.map(([k, v]) => `<div><small>${k}</small><b>${F.escape(v)}</b></div>`).join("")}</div>
@@ -234,6 +237,7 @@ export async function renderSession(ctx, sid, key) {
       </div>
     </div>`;
 
+  wireAnalysis(page);
   mountThread(page.querySelector("[data-thread]"), {
     fil: data.fil, role, style: "comments", toast, onRead: () => ctx.poke(),
     placeholder: coachSide ? `Un mot à ${name || "l'élève"} sur cette séance…` : "Un mot à ton coach sur cette séance…",

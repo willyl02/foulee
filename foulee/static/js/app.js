@@ -28,7 +28,7 @@ const RENDERERS = {
   kpi: D.kpi, serie: D.serie, charge: D.charge, zones: D.zones, calendrier: D.calendrier, nuage: D.nuage,
   postes: D.postes, objectif: O.objectif, objectifs: O.objectifs, fractions: D.fractions, note: D.note,
   activites: A.activites, derniere_seance: A.derniere_seance, seance_resume: A.seance_resume,
-  seance_carte: A.seance_carte, seance_courbes: A.seance_courbes, seance_tours: A.seance_tours,
+  seance_carte: A.seance_carte, seance_courbes: A.seance_courbes, seance_tours: A.seance_tours, seance_analyse: A.seance_analyse,
   seance_mesures: A.seance_mesures,
   renfo: R.renfo, renfo_exercices: R.renfo_exercices, seance_renfo: R.seance_renfo, renfo_equilibre: R.renfo_equilibre, renfo_conseils: R.renfo_conseils,
   seance_effet: T.seance_effet,

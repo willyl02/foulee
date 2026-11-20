@@ -2263,3 +2263,45 @@ a.co-pl:hover { box-shadow: inset 3px 0 0 var(--good), 0 0 0 1px var(--base); }
 .app-window .radio input { margin: 3px 0 0; accent-color: var(--accent, var(--ink)); }
 .app-window .radio b { display: block; font-size: 15px; }
 .app-window .radio small { display: block; margin-top: 2px; font-size: 13.5px; color: var(--ink-2); line-height: 1.4; }
+
+/* ---- Analyse fraction par fraction (façon intervals.icu) : vue Séance, pages coach et élève ---- */
+.analyse { position: relative; padding-left: 64px; }
+.an-band { position: relative; height: 96px; margin-bottom: 6px; }
+.an-col { position: absolute; top: 0; bottom: 0; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 1px; overflow: hidden; font-size: 12px; line-height: 1.25; text-align: center;
+  border-left: 1px solid var(--hair); background: color-mix(in srgb, var(--surface-2) 70%, transparent); }
+.an-col:first-child { border-left: 0; }
+.an-col.is-rest { background: transparent; }
+.an-col > span { white-space: nowrap; }
+.an-t { font-weight: 600; color: var(--ink); }
+.an-v { color: var(--s1); font-variant-numeric: tabular-nums; }
+.an-fc { color: var(--s2); font-variant-numeric: tabular-nums; }
+.an-zone { color: var(--ink); font-weight: 600; }
+.an-pct { color: var(--sl-rem); font-variant-numeric: tabular-nums; }
+.an-col.an-z4 .an-zone, .an-col.an-z5 .an-zone { color: var(--bad); }
+.an-plot { position: relative; height: 118px; margin-left: -64px; padding-left: 64px; }
+.an-plot + .an-plot { margin-top: 4px; }
+.an-plot svg { display: block; width: 100%; height: 100%; overflow: visible;
+  background: color-mix(in srgb, var(--surface-2) 55%, transparent); border-radius: 4px; }
+.an-axis { position: absolute; left: 0; top: 0; bottom: 0; width: 58px; display: flex; flex-direction: column;
+  justify-content: space-between; font-size: 11px; color: var(--muted); text-align: right; line-height: 1.4; }
+.an-line { fill: none; stroke-width: 1.6; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+.an-line-v { stroke: var(--s1); }
+.an-line-fc { stroke: var(--s2); }
+.an-sep { stroke: var(--hair); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.an-shade { fill: var(--s1); opacity: 0.07; }
+.an-shade.an-z4, .an-shade.an-z5 { fill: var(--s2); opacity: 0.09; }
+.an-ticks { position: relative; height: 18px; font-size: 11px; color: var(--muted); }
+.an-ticks span { position: absolute; transform: translateX(-50%); top: 3px; }
+.an-cursor { position: absolute; top: 0; bottom: 18px; width: 1px; background: var(--ink-2); pointer-events: none; }
+.an-tip { position: absolute; top: -6px; transform: translate(-50%, -100%); padding: 4px 8px; border-radius: 6px;
+  font-size: 12px; white-space: nowrap; background: var(--surface); box-shadow: var(--shadow); pointer-events: none; }
+@media (max-width: 700px) {
+  .analyse { padding-left: 0; }
+  .an-plot { margin-left: 0; padding-left: 0; }
+  .an-axis { display: none; }
+  .an-band { height: 84px; font-size: 11px; }
+}
+.an-col.is-narrow > span { display: none; }
+.an-col.is-narrow > .an-zone { display: block; font-size: 11px; }
+.an-col.is-thin > .an-zone { display: none; }

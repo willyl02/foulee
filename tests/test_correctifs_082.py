@@ -48,3 +48,33 @@ def test_a_strength_session_planned_in_garmin_is_strength():
                                          "garmin-1", db.now_iso()))
         calendrier.store(conn, [], today=__import__("datetime").date(2026, 11, 20))
         assert conn.execute("SELECT sport FROM calendar_events WHERE title = ?", (title,)).fetchone()[0] == "renfo"
+
+
+def test_lap_by_lap_analysis_like_intervals_icu():
+    floors = [100, 130, 145, 155, 165]  # bas des zones 1 à 5
+    laps = [{"start_s": 0, "duration_s": 600, "elapsed_s": 600, "avg_hr": 128, "avg_speed": 3.0, "intensity": "warmup"},
+            {"start_s": 600, "duration_s": 300, "elapsed_s": 300, "avg_hr": 166, "avg_speed": 5.0, "intensity": "active"},
+            {"start_s": 900, "duration_s": 120, "elapsed_s": 120, "avg_hr": 140, "avg_speed": 2.0, "intensity": "rest"}]
+    t = list(range(0, 1021))
+    hr = [125] * 600 + [150] * 60 + [168] * 240 + [140] * 121  # le premier quart de l'effort sous la zone 5
+    segs = analysis.lap_analysis(laps, {"t": t, "hr": hr}, floors)
+    assert [s["zone"] for s in segs] == [1, 5, 2]
+    assert segs[1]["zone_pct"] == 80 and segs[0]["zone_pct"] == 100
+    assert segs[1]["debut_s"] == 600 and segs[1]["fin_s"] == 900
+    assert analysis.lap_analysis(laps, None, floors)[1]["zone_pct"] is None  # sans courbe : la zone seule
+
+
+def test_the_coach_gets_zones_and_a_light_curve(monkeypatch):
+    from foulee import coach
+    from foulee.relais import club
+
+    streams = {"t": list(range(0, 2000)), "spd": [3.5] * 2000, "hr": [150] * 2000}
+    curve = coach.light_curve(streams)
+    assert len(curve["t"]) <= coach.CURVE_POINTS and curve["fc"][0] == 150 and curve["v"][0] == 3.5
+    raw = {"date": "2026-11-13", "cle": "garmin:1", "sport": "course",
+           "tours": [{"duree_s": 600, "debut_s": 0, "fin_s": 600, "zone": 2, "zone_pct": 73, "fc_moy": 140},
+                     {"duree_s": 300, "debut_s": 600, "fin_s": 900, "zone": 5, "zone_pct": 100, "fc_moy": 166}],
+           "courbe": curve}
+    clean = club._clean_session(raw, "2026-10-01")
+    assert clean["tours"][1]["zone"] == 5 and clean["tours"][0]["zone_pct"] == 73
+    assert clean["courbe"]["t"][:3] == curve["t"][:3] and len(clean["courbe"]["fc"]) == len(clean["courbe"]["t"])

@@ -3,6 +3,7 @@
 import * as api from "./api.js";
 import * as C from "./charts.js";
 import * as F from "./format.js";
+import { analysisHTML, wireAnalysis } from "./analyse.js";
 import { icon } from "./icons.js";
 import { sourceText } from "./sources.js";
 import { message } from "./tiles-data.js";
@@ -323,6 +324,24 @@ export const seance_courbes = {
         ctx.bus.dispatchEvent(new CustomEvent("cursor", { detail: best }));
       });
     }));
+  },
+};
+
+// ------------------------------------------------------------- séance : analyse (façon intervals.icu)
+export const seance_analyse = {
+  title: () => "Analyse fraction par fraction",
+  async render(body, p, ctx) {
+    const a = await ctx.activityDetail();
+    if (!a) return message(body, "Choisis une séance en haut de la vue.");
+    if (!a.analyse?.length) return message(body, a.tours?.length === 1 ? "Un seul tour : rien à découper pour cette séance." : "Pas de tours pour cette séance (fichier FIT absent).");
+    const s = await ctx.activityStreams();
+    const curve = s?.t?.length ? { t: s.t, v: s.spd || [], fc: s.hr || [] } : null;
+    const foot = FOOT_SPORTS.includes(a.sport);
+    ctx.sub(`${a.analyse.length} tours · temps, ${foot ? "allure" : "vitesse"}, FC moyenne, zone et part du tour dans cette zone`);
+    const html = analysisHTML(a.analyse, curve, { running: foot });
+    if (!html) return message(body, "Rien à analyser pour cette séance.");
+    body.innerHTML = html;
+    wireAnalysis(body);
   },
 };
 

@@ -261,6 +261,13 @@ TILE_TYPES: list[dict[str, Any]] = [
         ],
     },
     {
+        "type": "seance_analyse", "label": "Séance : analyse fraction par fraction", "icone": "wave",
+        "categorie": "Séances",
+        "description": "Façon intervals.icu : pour chaque tour, son temps, son allure, sa FC moyenne, sa zone et la "
+                       "part du tour passée dans cette zone, au-dessus des courbes d'allure et de FC.",
+        "taille": {"w": 12, "h": 3}, "params": [],
+    },
+    {
         "type": "seance_tours", "label": "Séance : tours", "icone": "table", "categorie": "Séances",
         "description": "Tours enregistrés par la montre, ou découpage au kilomètre.",
         "taille": {"w": 12, "h": 2},
@@ -400,6 +407,7 @@ def default_views() -> list[dict]:
                 _tile("seance_resume", 12, 1),
                 _tile("seance_renfo", 12, 3),
                 _tile("seance_effet", 12, 2),
+                _tile("seance_analyse", 12, 3),
                 _tile("seance_carte", 6, 3),
                 _tile("seance_courbes", 6, 3),
                 _tile("seance_mesures", 12, 2),
@@ -532,6 +540,7 @@ def ensure_default_views(conn: sqlite3.Connection) -> None:
         db.set_meta(conn, "vue_objectifs", "1")
         db.set_meta(conn, "vue_renfo_conseils", "1")
         db.set_meta(conn, "vue_periodes", "1")
+        db.set_meta(conn, "vue_seance_analyse", "1")
         conn.commit()
         return
     if db.get_meta(conn, "vue_seance_renfo") is None:
@@ -599,6 +608,11 @@ def ensure_default_views(conn: sqlite3.Connection) -> None:
         # 0.8.1 : les exercices pour rééquilibrer, juste sous l'équilibre avant / arrière de la vue « Renfo »
         _insert_tile(conn, RENFO_VIEW, "renfo_conseils", 12, 3, after=("renfo_equilibre", "renfo"))
         db.set_meta(conn, "vue_renfo_conseils", "1")
+        conn.commit()
+    if db.get_meta(conn, "vue_seance_analyse") is None:
+        # 0.8.2 : l'analyse fraction par fraction, en pleine largeur, avant la carte et les courbes
+        _insert_tile(conn, "seance", "seance_analyse", 12, 3, after=("seance_effet", "seance_renfo", "seance_resume"))
+        db.set_meta(conn, "vue_seance_analyse", "1")
         conn.commit()
     if db.get_meta(conn, "renfo_vue") is None and sync_renfo_view(conn):
         # 0.6 : exercices retrouvés par la mise à niveau de la base, la vue « Renfo » sans attendre une synchro
