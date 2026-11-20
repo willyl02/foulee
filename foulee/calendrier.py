@@ -496,10 +496,15 @@ WORKOUT_WORDS = re.compile(
     r"(footing|fractionn|endurance|seuil|vma|sortie|\bsl\b|\bef\b|renfo|renforcement|muscu|gainage|\bppg\b|"
     r"côtes|\bcotes\b|tempo|récup|recup|séance|seance|entraînement|entrainement|workout|interval|fartlek|"
     r"pyramide|allure|\bas\d+|\bvélo\b|\bvelo\b|natation|piscine|yoga|étirement|etirement|mobilit|\bhiit\b|"
-    r"cardio|home ?trainer|\brun\b|jogging|échauffement|echauffement)", re.I)
+    r"cardio|home ?trainer|\brun\b|jogging|échauffement|echauffement|squat|hip ?thrust|fentes?\b|pompes|"
+    r"\d+\s?x\s?\d+)", re.I)
 SPORT_WORDS = [
     (None, r"triathlon|duathlon|aquathlon|swimrun|\braid\b|multisport"),  # plusieurs sports : toute séance compte
-    ("renfo", r"renfo|renforcement|muscu|musculation|gainage|\bppg\b|strength|abdos|\bcore\b|circuit|crossfit"),
+    ("renfo", r"renfo|renforcement|muscu|musculation|gainage|\bppg\b|strength|abdos|\bcore\b|circuit|crossfit|"
+              # le nom des exercices suffit (« 5x10 Squat arrière avec poids(65kg) + 5x10 Hip thrust(47kg) »)
+              r"squat|hip ?thrust|fentes?\b|lunges?|soulev[ée] de terre|deadlift|d[ée]velopp[ée]|bench|pompes|"
+              r"push[- ]?ups?|tractions|pull[- ]?ups?|kettlebell|halt[èe]res?|dumbbell|burpees?|planche|plank|"
+              r"pont fessier|glute|mollets|chaise|step[- ]?ups?|presse|leg press|\d+\s?kg\b"),
     ("velo", r"\bv[ée]lo\b|\bbike\b|cyclisme|\bcycling\b|spinning|\bvtt\b|home ?trainer|zwift|\bride\b|gravel|"
              r"granfondo|gran fondo|cyclosportive"),
     ("natation", r"natation|\bnage\b|\bswim|piscine"),
@@ -530,10 +535,7 @@ def classify(event: dict) -> tuple[str, str | None]:
         kind = "seance"
     else:
         return "autre", None
-    for sport, pattern in SPORT_WORDS:
-        if re.search(pattern, title, re.I):
-            return kind, sport
-    return kind, "course"
+    return kind, sport_of(title)
 
 
 # ------------------------------------------------------------------ base
@@ -601,7 +603,29 @@ def store(conn: sqlite3.Connection, events: list[dict], today: date | None = Non
         conn.execute(INSERT, (row["date"], row["start_local"], row["end_local"], row["all_day"], row["title"],
                               row["description"], row["location"], row["kind"], row["sport"], row["uid"],
                               row["fetched_at"]))
+    resort(conn)
     return {"evenements": len(rows), "a_venir": upcoming, "courses": races}
+
+
+def sport_of(title: str) -> str | None:
+    for sport, pattern in SPORT_WORDS:
+        if re.search(pattern, title, re.I):
+            return sport
+    return "course"
+
+
+def resort(conn: sqlite3.Connection) -> int:
+    """Les séances déjà passées gardent le sport lu à l'époque : on le relit avec les règles d'aujourd'hui (0.8.2 :
+    « 5x10 Squat… + 5x10 Hip thrust » était rangée en course à pied, et la séance de renfo faite ne s'y
+    rattachait pas)."""
+    changed = 0
+    for row in conn.execute("SELECT id, title, sport FROM calendar_events WHERE kind = 'seance' AND "
+                            + NOT_COACH).fetchall():
+        sport = sport_of(row["title"])
+        if sport != row["sport"]:
+            conn.execute("UPDATE calendar_events SET sport = ? WHERE id = ?", (sport, row["id"]))
+            changed += 1
+    return changed
 
 
 def apply(conn: sqlite3.Connection, events: list[dict], info: dict) -> dict[str, Any]:

@@ -35,3 +35,16 @@ def test_a_profile_only_read_is_upgraded_first():
         names = {r["id"]: r["name"] for r in conn.execute("SELECT id, name FROM views")}
         assert names.get("objectifs") == "Objectifs" and "cap-semi" not in names
         assert db.get_meta(conn, "init_version") == __version__
+
+
+def test_a_strength_session_planned_in_garmin_is_strength():
+    from foulee import calendrier
+
+    title = "5x10 Squat arrière avec poids(65kg) + 5x10 Hip thrust(47kg)"
+    assert calendrier.classify({"title": title, "garmin": True, "all_day": True}) == ("seance", "renfo")
+    assert calendrier.classify({"title": "VMA courte", "garmin": True, "all_day": True}) == ("seance", "course")
+    with db.session() as conn:  # rangée en course à pied par une version d'avant : relue à la synchro suivante
+        conn.execute(calendrier.INSERT, ("2026-11-18", None, None, 1, title, None, None, "seance", "course",
+                                         "garmin-1", db.now_iso()))
+        calendrier.store(conn, [], today=__import__("datetime").date(2026, 11, 20))
+        assert conn.execute("SELECT sport FROM calendar_events WHERE title = ?", (title,)).fetchone()[0] == "renfo"
