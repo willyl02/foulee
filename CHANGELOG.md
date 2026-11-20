@@ -4,6 +4,26 @@ Les versions « bêta » (par exemple 0.4.0b1) sont des avant-premières : elles
 sur le canal bêta (Réglages → Mises à jour → « Recevoir les versions bêta »), puis sortent en
 version stable une fois éprouvées.
 
+## 0.8.2b1 — 20 novembre 2026
+
+- **Analyse fraction par fraction**, façon intervals.icu : sur chaque séance (vue « Séance », et dans les pages coach et
+  élève), une colonne par tour, aussi large que sa durée, avec son temps, son allure, sa FC moyenne, la zone de cette FC
+  et la part du tour passée dans cette zone, au-dessus des courbes d'allure et de FC. Le survol donne l'allure et la FC
+  à chaque instant. L'élève partage pour cela, avec ses tours, une courbe allégée (allure et FC, jamais de position).
+- **Calendrier** : chaque séance prévue a son esquisse (une barre par étape, aussi large que sa durée, aussi haute que
+  son intensité, aux couleurs des allures VMA), lue dans la séance du coach ou dans le texte du calendrier Garmin
+  (« 5 × 200 m à 100 % VMA ») ; à défaut, une séance type devinée du nom, en pâle. Le calendrier du mois grandit.
+- **Coach et élève** : un grand calendrier de neuf semaines (quatre passées, celle-ci, quatre à venir) sur la fiche de
+  l'élève et dans « Mon coach » : séances prévues avec leur esquisse, séances faites (un clic les ouvre), courses visées.
+- **Répétitions libres** (demande de Jason) : dans l'éditeur de séance, « libre (Lap) » à la place d'une durée ou d'une
+  distance, pour l'effort comme pour la récup ; la montre passe à la suite à la touche Lap (sur piste, de ligne à
+  ligne). Sur la montre comme dans le fichier .fit.
+- **Corrigé** : une nouvelle installation n'a plus d'objectif d'office (c'était le semi de Paris du développeur) ; un
+  profil qu'on regarde sans le synchroniser est quand même mis à niveau (« Cap semi de Paris » restait sur des profils
+  créés avant la 0.8.1) ; une séance de renfo prévue dans Garmin (« 5x10 Squat… + 5x10 Hip thrust… ») n'est plus
+  rangée en course à pied, et la séance faite s'y rattache ; l'Accueil se remet à jour sans F5 (jour, « Bonjour /
+  Bonsoir », « il y a… », nouvelles données après une synchro automatique).
+
 ## 0.8.1 — 16 novembre 2026
 
 La version stable qui réunit les bêtas 0.8.1 ; le détail de chacune est dans l'historique des versions (CHANGELOG.md sur GitHub).

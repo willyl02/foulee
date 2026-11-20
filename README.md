@@ -252,9 +252,13 @@ ton calendrier Garmin Connect, face à ce que tu as réellement fait :
 Ce que tu obtiens :
 
 - **La vue Calendrier** : la prochaine course avec son compte à rebours et les prochaines
-  séances, puis le mois jour par jour (séances prévues, courses, séances faites). Un clic
-  sur un jour donne le détail : la consigne de la séance, l'heure et le lieu d'une course,
-  la séance faite (un clic l'ouvre). Sur téléphone, des pastilles remplacent les titres.
+  séances, puis le mois jour par jour (séances prévues, courses, séances faites). Chaque
+  séance prévue a son **esquisse** : une barre par étape, aussi large que sa durée, aussi
+  haute que son intensité, aux couleurs des allures VMA (lue dans le texte de la séance,
+  « 3 × 10 min à 85 % VMA » ; devinée de son nom, en pâle, quand il n'y a pas de chiffres).
+  Un clic sur un jour donne le détail : l'esquisse en grand, la consigne de la séance,
+  l'heure et le lieu d'une course, la séance faite (un clic l'ouvre). Sur téléphone, des
+  pastilles remplacent les titres.
 - **Dans « Ta semaine »** (Accueil) : les séances prévues de chaque jour, cochées quand
   elles sont faites, barrées quand elles sont manquées, et le bilan de la semaine
   (« Prévues 4/6 faites »).
@@ -284,7 +288,7 @@ Garmin Connect (une nouvelle publication donne un nouveau lien).
 | Aujourd'hui | Nuit, VFC, FC de repos, Body Battery au réveil, stress, km sur 7 jours, fraîcheur, dernière séance |
 | Entraînement | Km par semaine, forme et fatigue (charge chronique, aiguë, fraîcheur, ratio), zones FC et d'allure, liste des séances |
 | Renfo | Dès ta première séance de renfo détaillée : muscles travaillés (carte du corps face et dos, séries par muscle), régularité face à ton objectif, équilibre avant / arrière (rapport 1:x, paire par paire, semaine après semaine), exercices pour rééquilibrer (combien de séries ajouter pour viser 1:1,5, et lesquels), chaque exercice et sa progression, temps, séries et tonnage par semaine, séances |
-| Séance | Résumé, exercices de renfo (avec la carte du corps et l'équilibre avant / arrière de la séance), effet d'entraînement (jauges aérobie et anaérobie de Garmin), carte, courbes synchronisées (FC, allure, altitude, cadence…), autres mesures (dynamique de course, puissance, respiration…), tours ou découpage au km |
+| Séance | Résumé, exercices de renfo (avec la carte du corps et l'équilibre avant / arrière de la séance), effet d'entraînement (jauges aérobie et anaérobie de Garmin), analyse fraction par fraction (façon intervals.icu : temps, allure, FC moyenne, zone et % du tour dans la zone, au-dessus des courbes), carte, courbes synchronisées (FC, allure, altitude, cadence…), autres mesures (dynamique de course, puissance, respiration…), tours ou découpage au km |
 | Récup & postes | Comparaison d'un poste de travail à l'autre, sommeil, VFC, FC de repos, nuage sommeil → VFC, calendrier |
 | Objectifs | Le centre de tes objectifs : le principal (compte à rebours, temps visé, allure cible, part de ta VMA) et les secondaires (courses de préparation…), avec l'équivalence de leur temps sur la distance du principal, les courses de ton calendrier à ajouter d'un clic, les objectifs passés et ton temps réalisé ; puis fractions rapides face à l'allure cible, volume, charge, zones, VO2max |
 | Mon club | Si tu l'as coché dans les Réglages : ton club FFA (avec son logo si tu l'as importé), coordonnées, site, carte, ta licence, et son classement sur athle.fr en un clic |
@@ -714,14 +718,19 @@ ton adresse, par exemple `https://relais.mon-club.com`.
   objectifs secondaires, l'équilibre avant / arrière de son renfo (rapport, tendance, paire par paire, ce
   que tu peux lui dire, et « Lui en parler » avec un message tout prêt), ses séances proposées, sa forme
   (sommeil, VFC, FC au repos, poids) s'il la partage ;
-- chaque **séance** en détail : chiffres, tours, renfo, tracé simplifié (sans fond de carte), ce qui était
-  proposé, et un **fil** pour en parler ;
-- **proposer une séance** à un ou plusieurs élèves : un déroulé en blocs (durée ou distance, répétitions,
-  % de VMA ou zone de FC, récupération), des exemples et ses modèles ; chacun la reçoit avec **ses** allures.
+- son **calendrier** sur neuf semaines (quatre passées, celle-ci, quatre à venir) : son plan et tes séances
+  avec leur esquisse, ses séances faites (un clic les ouvre), ses courses visées ;
+- chaque **séance** en détail : l'**analyse fraction par fraction** (façon intervals.icu : pour chaque tour, son
+  temps, son allure, sa FC moyenne, sa zone et la part du tour dans cette zone, au-dessus des courbes d'allure et
+  de FC), chiffres, tours, renfo, tracé simplifié (sans fond de carte), ce qui était proposé, et un **fil** pour
+  en parler ;
+- **proposer une séance** à un ou plusieurs élèves : un déroulé en blocs (durée ou distance, ou **« libre
+  (Lap) »** : jusqu'à la touche Lap, sur piste de ligne à ligne ; répétitions, % de VMA ou zone de FC,
+  récupération), des exemples et ses modèles ; chacun la reçoit avec **ses** allures.
 
-**Ce que voit l'élève** (page « Mon coach ») : les séances proposées, bloc par bloc avec ses allures (et dans
-sa vue « Calendrier », en pointillé bleu, face à ce qu'il fait), la conversation avec son coach, et ce qu'il
-partage.
+**Ce que voit l'élève** (page « Mon coach ») : son calendrier de neuf semaines (le même que celui de son
+coach), les séances proposées, bloc par bloc avec ses allures (et dans sa vue « Calendrier », en pointillé bleu,
+face à ce qu'il fait), la conversation avec son coach, et ce qu'il partage.
 
 **Sur la montre, sans câble** : sous chaque séance proposée, **« Envoyer sur ma montre »**. La première fois,
 Garmin Connect s'ouvre dans une autre fenêtre : l'élève s'y connecte, chez Garmin (Foulée ne voit jamais son
