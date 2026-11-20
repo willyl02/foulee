@@ -34,6 +34,7 @@ const P = {
   up: '<path d="M7 17 17 7M9 7h8v8"/>',
   down: '<path d="M7 7l10 10M17 9v8H9"/>',
   moveup: '<path d="M12 19V5M6 11l6-6 6 6"/>',
+  bell: '<path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/>',
   globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
   flat: '<path d="M5 12h14"/>',
   menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',

@@ -15,7 +15,7 @@ from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from .. import __version__
-from . import API_VERSION, club, garmin, store
+from . import API_VERSION, club, garmin, notifs, store
 
 log = logging.getLogger("foulee.relais")
 
@@ -316,6 +316,18 @@ def create_relay_app() -> FastAPI:
     def drop_template(template_id: int, request: Request) -> dict:
         return run(request, lambda conn, me: {"modeles": club.delete_template(conn, me["id"], template_id)},
                    role="coach")
+
+    @app.get("/api/v1/notifications")
+    def notification_settings(request: Request) -> dict:
+        return run(request, lambda conn, me: notifs.page(conn, me))
+
+    @app.put("/api/v1/notifications")
+    def notification_save(request: Request, payload: dict = Body(...)) -> dict:
+        return run(request, lambda conn, me: notifs.save_settings(conn, me, payload))
+
+    @app.post("/api/v1/notifications/essai")
+    def notification_test(request: Request) -> dict:
+        return run(request, lambda conn, me: notifs.test(conn, me))
 
     @app.get("/api/v1/fils")
     def list_threads(request: Request) -> dict:

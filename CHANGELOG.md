@@ -4,6 +4,16 @@ Les versions « bêta » (par exemple 0.4.0b1) sont des avant-premières : elles
 sur le canal bêta (Réglages → Mises à jour → « Recevoir les versions bêta »), puis sortent en
 version stable une fois éprouvées.
 
+## 0.8.2b8 — 20 novembre 2026
+
+- **Notifications sur le téléphone, avec ntfy** (appli gratuite, Android et iPhone, sans compte) : Réglages →
+  Club et coach → Notifications. Élève : prévenu quand le coach envoie une séance, la modifie ou l'annule, et quand
+  il écrit ; coach : quand un élève écrit. QR code pour s'abonner, notification d'essai, choix des événements,
+  **heures calmes** (22 h – 7 h par défaut : la notification attend leur fin), détail masquable. C'est le relais
+  qui envoie : Foulée n'a pas besoin d'être ouvert. Le relais du club doit être en 0.8.2b8.
+- L'**e-mail** est préparé (réglages et interface) : il arrivera avec la clé d'un service d'envoi posée sur le relais.
+- Page de confidentialité : ntfy ajouté aux prestataires (seulement si on active les notifications).
+
 ## 0.8.2b7 — 20 novembre 2026
 
 - **Réglages réorganisés, comme ceux de Windows et du Mac** : cinq thèmes à gauche (Moi, Entraînement, Connexions,

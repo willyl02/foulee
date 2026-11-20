@@ -26,6 +26,7 @@ import ipaddress
 import json
 import mimetypes
 import os
+import re
 import secrets
 import sqlite3
 import sys
@@ -997,6 +998,16 @@ def create_app() -> FastAPI:
         out = io.BytesIO()  # un vrai fichier SVG (avec xmlns), affichable seul dans une balise <img>
         segno.make(f"https://{name}/", error="m").save(out, kind="svg", dark="#15201b", light="#ffffff", border=2, scale=4,
                                                          xmldecl=False)
+        return Response(out.getvalue(), media_type="image/svg+xml", headers={"Cache-Control": "no-store"})
+
+    @app.get("/api/notifications/qr.svg")
+    def notifications_qr(adresse: str = "") -> Response:
+        """Le QR code de l'abonnement ntfy (serveur + sujet), à scanner avec le téléphone."""
+        if not re.fullmatch(r"https?://[A-Za-z0-9.-]+(:\d{1,5})?(/[A-Za-z0-9._~-]+)*/foulee-[A-Za-z0-9_-]{8,60}", adresse):
+            raise HTTPException(400, "Adresse d'abonnement illisible.")
+        out = io.BytesIO()
+        segno.make(adresse, error="m").save(out, kind="svg", dark="#15201b", light="#ffffff", border=2, scale=4,
+                                            xmldecl=False)
         return Response(out.getvalue(), media_type="image/svg+xml", headers={"Cache-Control": "no-store"})
 
     @app.put("/api/acces-reseau")

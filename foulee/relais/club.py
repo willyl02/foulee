@@ -21,7 +21,7 @@ from typing import Any
 
 from .. import metrics, renfo
 from .. import appariement
-from . import garmin
+from . import garmin, notifs
 from .store import RelayError, local_now, now
 
 KEEP_DAYS = 28                 # le relais ne garde que 4 semaines de séances
@@ -376,7 +376,7 @@ def _clean_proposal(payload: dict) -> tuple[str, str, str, dict]:
 
 def _proposal_dict(row: sqlite3.Row) -> dict:
     content = json.loads(row["contenu"])
-    return {"id": row["id"], "eleve_id": row["eleve_id"], "date": row["date"], "titre": row["titre"],
+    return {"id": row["id"], "eleve_id": row["eleve_id"], "coach_id": row["coach_id"], "date": row["date"], "titre": row["titre"],
             "sport": row["sport"], "sport_label": metrics.SPORTS.get(row["sport"]), "blocs": content.get("blocs", []),
             "consigne": content.get("consigne"), "cree_le": row["cree_le"], "modifie_le": row["modifie_le"]}
 
@@ -424,7 +424,10 @@ def create_proposals(conn: sqlite3.Connection, coach_id: int, payload: dict) -> 
                             stamp))
         created.append(cur.lastrowid)
     rows = conn.execute(f"SELECT * FROM propositions WHERE id IN ({','.join('?' * len(created))})", created)
-    return [_proposal_dict(row) for row in rows]
+    items = [_proposal_dict(row) for row in rows]
+    for item in items:
+        notifs.proposal_event(conn, "seance", item)
+    return items
 
 
 def update_proposal(conn: sqlite3.Connection, coach_id: int, proposal_id: int, payload: dict) -> dict:
@@ -436,13 +439,18 @@ def update_proposal(conn: sqlite3.Connection, coach_id: int, proposal_id: int, p
                  (day, title, sport, json.dumps(content, ensure_ascii=False), now(), proposal_id))
     garmin.follow_update(conn, proposal_id)  # déjà sur la montre : renvoyée telle que modifiée
     item = _proposal_dict(conn.execute("SELECT * FROM propositions WHERE id = ?", (proposal_id,)).fetchone())
+    if max(item["date"], row["date"]) >= _today().isoformat():  # une séance passée qu'on range : pas de quoi prévenir
+        notifs.proposal_event(conn, "seance_modifiee", item)
     garmin.decorate(conn, item["eleve_id"], [item])
     return item
 
 
 def delete_proposal(conn: sqlite3.Connection, coach_id: int, proposal_id: int) -> bool:
-    if conn.execute("SELECT 1 FROM propositions WHERE id = ? AND coach_id = ?", (proposal_id, coach_id)).fetchone():
+    row = conn.execute("SELECT * FROM propositions WHERE id = ? AND coach_id = ?", (proposal_id, coach_id)).fetchone()
+    if row:
         garmin.withdraw(conn, proposal_id)  # et hors du calendrier Garmin de l'élève
+        if row["date"] >= _today().isoformat():
+            notifs.proposal_event(conn, "seance_annulee", _proposal_dict(row))
     return conn.execute("DELETE FROM propositions WHERE id = ? AND coach_id = ?",
                         (proposal_id, coach_id)).rowcount > 0
 
@@ -681,6 +689,7 @@ def post(conn: sqlite3.Connection, account: sqlite3.Row, thread: str, text: Any)
     cur = conn.execute("INSERT INTO messages(coach_id, fil, auteur_id, texte, cree_le) VALUES (?,?,?,?,?)",
                        (group, thread, account["id"], body, now()))
     mark_read(conn, account["id"], thread, cur.lastrowid)
+    notifs.message_event(conn, account, thread, group, body)
     row = conn.execute("SELECT * FROM messages WHERE id = ?", (cur.lastrowid,)).fetchone()
     return _message(row, account["id"], conn, {})
 

@@ -570,6 +570,32 @@ details.token .key-row { margin-top: 6px; }
 
 /* ------------------------------------------------------------------ toasts */
 .toasts { position: fixed; right: 18px; bottom: 18px; display: grid; gap: 8px; z-index: 50; }
+/* Réglages → Notifications (ntfy, bientôt e-mail) */
+.nf-card { padding: 14px 16px; border-radius: 12px; background: var(--surface); box-shadow: 0 0 0 1px var(--hair); margin-bottom: 14px; }
+.nf-head { display: flex; align-items: center; gap: 12px; }
+.nf-head > svg { width: 22px; height: 22px; flex: none; color: var(--gr-red); }
+.nf-head > div { display: grid; gap: 1px; flex: 1; min-width: 0; }
+.nf-head span { color: var(--ink-2); font-size: 13.5px; }
+.nf-head .switch { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; }
+.nf-head .switch span { color: var(--ink); font-weight: 600; }
+.nf-steps { margin: 12px 0 0; padding-left: 20px; display: grid; gap: 10px; font-size: 14.5px; }
+.nf-sub { display: flex; gap: 14px; align-items: center; margin-top: 8px; }
+.nf-sub img { border-radius: 8px; box-shadow: 0 0 0 1px var(--hair); background: #fff; flex: none; }
+.nf-sub > div { display: grid; gap: 6px; min-width: 0; }
+.nf-sub code { font-size: 13px; padding: 4px 8px; border-radius: 6px; background: var(--surface-2); overflow-wrap: anywhere; user-select: all; }
+.nf-last { display: inline-flex; align-items: center; gap: 5px; margin-left: 8px; font-size: 13px; }
+.nf-last svg { width: 15px; height: 15px; }
+.nf-last.ok { color: var(--good); } .nf-last.bad { color: var(--bad); }
+.nf-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; margin-bottom: 12px; }
+.nf-box { border: 0; margin: 0; padding: 12px 14px; border-radius: 12px; background: var(--surface); box-shadow: 0 0 0 1px var(--hair); display: grid; gap: 6px; align-content: start; }
+.nf-box legend { float: left; width: 100%; padding: 0 0 4px; font-weight: 600; }
+.nf-hours { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.nf-more { margin: 0 0 14px; }
+.nf-more summary { cursor: pointer; color: var(--ink-2); font-size: 14px; margin-bottom: 8px; }
+.nf-soon { opacity: 0.75; }
+.nf-tag { margin-left: auto; font: 600 12px var(--font); padding: 2px 9px; border-radius: 99px; background: var(--surface-2); color: var(--ink-2); }
+@media (max-width: 700px) { .nf-grid { grid-template-columns: minmax(0, 1fr); } .nf-sub { flex-direction: column; align-items: flex-start; } }
+
 /* application partenaire (Club en ligne…) dans un cadre */
 .xa-head { align-items: flex-end; }
 .xa-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-left: auto; }
