@@ -4,6 +4,14 @@ Les versions « bêta » (par exemple 0.4.0b1) sont des avant-premières : elles
 sur le canal bêta (Réglages → Mises à jour → « Recevoir les versions bêta »), puis sortent en
 version stable une fois éprouvées.
 
+## 0.8.2b7 — 20 novembre 2026
+
+- **Réglages réorganisés, comme ceux de Windows et du Mac** : cinq thèmes à gauche (Moi, Entraînement, Connexions,
+  Club et coach, Application), leurs rubriques à droite, et une **recherche** qui fouille toutes les rubriques
+  (« VMA », « Strava », « mise à jour »…). Sur téléphone : la liste des thèmes, puis le thème choisi.
+- **Tout s'enregistre tout de suite** : plus de bouton « Enregistrer les réglages » ; « Enregistré » s'affiche en
+  haut de la page après chaque changement.
+
 ## 0.8.2b6 — 20 novembre 2026
 
 - **Application partenaire** (Réglages → Application partenaire) : le site du club, par défaut **Club en ligne**
