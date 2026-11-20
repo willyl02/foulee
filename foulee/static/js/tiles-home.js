@@ -48,7 +48,7 @@ export const profil = {
       }
     }
     const last = b.synchro?.derniere_reussie;
-    chips.push(`<span class="chip chip-muted">${icon("sync")}${last ? `Synchro ${F.escape(F.relative(last))}` : "Jamais synchronisé"}</span>`);
+    chips.push(`<span class="chip chip-muted">${icon("sync")}${last ? `<span data-rel="${F.escape(last)}" data-rel-prefix="Synchro ">Synchro ${F.escape(F.relative(last))}</span>` : "Jamais synchronisé"}</span>`);
     const name = b.profil?.prenom_affiche;
     const avatar = b.profil?.photo
       ? `<img class="hello-photo" src="/api/profil/photo?v=${b.profil.photo_maj || 0}" alt="">`

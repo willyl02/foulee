@@ -107,7 +107,46 @@ async function start() {
   if (state.boot.synchro?.en_cours) pollSync();
   // Pastilles de connexion : revérifiées toutes les 2 minutes et au retour sur l'onglet (synchros automatiques)
   setInterval(refreshConn, 120000);
-  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") refreshConn(); });
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") { refreshConn(); watchClock(); } });
+  // L'heure passe pendant que la fenêtre reste ouverte : « il y a… » remis à jour chaque minute, et la page
+  // redessinée au changement de jour ou de moment (« Bonjour » / « Bonsoir »)
+  state.clockKey = clockKey();
+  setInterval(watchClock, 60000);
+}
+
+/** Le jour et le moment de la journée tels que la page les affiche (Bonjour de 4 h à 18 h, Bonsoir ensuite). */
+function clockKey() {
+  const now = new Date();
+  return `${F.isoDate(now)} ${now.getHours() >= 4 && now.getHours() < 18 ? "jour" : "soir"}`;
+}
+
+/** Chaque minute : les « il y a… » à jour ; au changement de jour ou de moment, la page relue en silence. */
+function watchClock() {
+  document.querySelectorAll("[data-rel]").forEach((el) => {
+    el.textContent = `${el.dataset.relPrefix || ""}${F.relative(el.dataset.rel)}`;
+  });
+  const key = clockKey();
+  if (key === state.clockKey || document.visibilityState !== "visible") return;
+  state.clockKey = key;
+  quietRefresh();
+}
+
+/** Relit le serveur et redessine la page en cours, sauf si on y fait quelque chose (saisie, fenêtre ouverte,
+ * vue en modification) : on réessaiera au prochain signal. Garde la position dans la page. */
+async function quietRefresh() {
+  const busy = state.editing || document.querySelector("dialog[open]") ||
+    (document.activeElement && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName));
+  if (busy) { state.refreshPending = true; return; }
+  state.refreshPending = false;
+  api.clearCache();
+  try { await loadBoot(); } catch (e) { return; }  // serveur injoignable : au prochain signal
+  renderBrand();
+  renderStrip();
+  renderNav();
+  renderSyncLine();
+  const y = window.scrollY;
+  rerender();
+  requestAnimationFrame(() => window.scrollTo(0, y));
 }
 
 function noData() { return !state.boot.volumes.daily && !state.boot.volumes.activities && !state.boot.strava?.seances; }
@@ -819,7 +858,7 @@ function renderSyncLine(job) {
     return;
   }
   const last = s.derniere_reussie;
-  line.innerHTML = last ? `Dernière synchro <strong>${F.escape(F.relative(last))}</strong>` : "Jamais synchronisé";
+  line.innerHTML = last ? `Dernière synchro <strong data-rel="${F.escape(last)}">${F.escape(F.relative(last))}</strong>` : "Jamais synchronisé";
   if (s.derniere?.statut === "echec") line.innerHTML += "<br>La dernière tentative a échoué.";
 }
 
@@ -885,11 +924,14 @@ async function refreshConn() {
   try { status = await api.get("/api/sync", null, { fresh: true }); } catch (e) { return; }  // serveur injoignable : plus tard
   if (state.syncPolling) return;
   const { connexions, en_cours: busy, derniere_reussie: lastOk, derniere: last } = status;
+  const before = state.boot.synchro?.derniere_reussie;
   if (connexions) state.boot.connexions = connexions;
   state.boot.synchro = { ...state.boot.synchro, en_cours: busy, derniere_reussie: lastOk, derniere: last };
   paintConn();
   renderSyncLine(busy ? { en_cours: true, message: "Synchro automatique" } : undefined);
-  if (busy) state.connTimer = setTimeout(refreshConn, 15000);
+  if (busy) { state.connTimer = setTimeout(refreshConn, 15000); return; }
+  // Une synchro automatique vient de finir (ou une page en attente) : ses nouvelles données, sans F5
+  if ((lastOk && lastOk !== before) || state.refreshPending) quietRefresh();
 }
 
 /** Bilan d'une synchro, source par source (Garmin, Withings, Strava, calendrier), dans un seul message. */
