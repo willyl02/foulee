@@ -20,6 +20,7 @@ from datetime import date, timedelta
 from typing import Any
 
 from .. import metrics, renfo
+from .. import appariement
 from . import garmin
 from .store import RelayError, local_now, now
 
@@ -373,18 +374,32 @@ def _clean_proposal(payload: dict) -> tuple[str, str, str, dict]:
     return day, title, sport, content
 
 
-def _proposal_dict(row: sqlite3.Row, sessions: list[dict] | None = None) -> dict:
+def _proposal_dict(row: sqlite3.Row) -> dict:
     content = json.loads(row["contenu"])
-    item = {"id": row["id"], "eleve_id": row["eleve_id"], "date": row["date"], "titre": row["titre"],
+    return {"id": row["id"], "eleve_id": row["eleve_id"], "date": row["date"], "titre": row["titre"],
             "sport": row["sport"], "sport_label": metrics.SPORTS.get(row["sport"]), "blocs": content.get("blocs", []),
             "consigne": content.get("consigne"), "cree_le": row["cree_le"], "modifie_le": row["modifie_le"]}
-    if sessions is not None:
-        done = next((s for s in sessions if s["date"] == row["date"] and _fits(row["sport"], s.get("sport"))), None)
-        day = date.fromisoformat(row["date"])
-        item["statut"] = "fait" if done else "manque" if day < _today() else \
-            "aujourdhui" if day == _today() else "a_venir"
-        item["seance"] = {"cle": done["cle"], "nom": done.get("nom")} if done else None
-    return item
+
+
+def _with_status(items: list[dict], sessions: list[dict], plan: list[dict], vma: float | None) -> None:
+    """Fait ou pas ? Les séances du coach et celles de son plan, le même jour, se disputent ses séances faites :
+    chacune va à la séance prévue qui lui ressemble le plus (nom donné par la montre, durée ; voir appariement).
+    Une séance du coach revenue par son calendrier Garmin n'est pas une rivale : c'est la même."""
+    rivals = [p for p in plan or [] if p.get("type") != "autre" and not any(
+        appariement.same_session(i["titre"], i["date"], p.get("titre") or "", p.get("date") or "") for i in items)]
+    candidates = [{"cle": ("coach", i["id"]), "date": i["date"], "titre": i["titre"], "sport": i["sport"],
+                   "blocs": i["blocs"]} for i in items]
+    candidates += [{"cle": ("plan", n), "date": p["date"], "titre": p.get("titre"), "sport": p.get("sport"),
+                    "type": p.get("type"), "blocs": p.get("blocs")} for n, p in enumerate(rivals)]
+    done = [{"cle": s["cle"], "date": s["date"], "sport": s.get("sport"), "nom": s.get("nom"),
+             "duree_s": s.get("deplacement_s") or s.get("duree_s"), "row": s} for s in sessions]
+    matched = appariement.assign(candidates, done, _fits, vma)
+    today = _today()
+    for item in items:
+        found = matched.get(("coach", item["id"]))
+        day = date.fromisoformat(item["date"])
+        item["statut"] = "fait" if found else "manque" if day < today else "aujourdhui" if day == today else "a_venir"
+        item["seance"] = {"cle": found["cle"], "nom": found.get("nom")} if found else None
 
 
 def students_of(conn: sqlite3.Connection, coach_id: int) -> dict[int, sqlite3.Row]:
@@ -433,10 +448,14 @@ def delete_proposal(conn: sqlite3.Connection, coach_id: int, proposal_id: int) -
 
 
 def proposals(conn: sqlite3.Connection, student_id: int, start: date, end: date,
-              sessions: list[dict] | None = None) -> list[dict]:
+              content: dict | None = None) -> list[dict]:
+    """Les séances proposées à un élève sur la période ; avec ce qu'il partage (content), leur état."""
     rows = conn.execute("SELECT * FROM propositions WHERE eleve_id = ? AND date BETWEEN ? AND ? ORDER BY date, id",
                         (student_id, start.isoformat(), end.isoformat())).fetchall()
-    items = [_proposal_dict(row, sessions) for row in rows]
+    items = [_proposal_dict(row) for row in rows]
+    if content is not None:
+        _with_status(items, content.get("seances") or [], content.get("plan") or [],
+                     (content.get("profil") or {}).get("vma_kmh"))
     garmin.decorate(conn, student_id, items)  # déjà envoyée sur sa montre ?
     return items
 
@@ -664,7 +683,8 @@ def week(content: dict, props: list[dict], monday: date) -> list[dict]:
     for offset in range(7):
         day = (monday + timedelta(days=offset)).isoformat()
         done = [_session_brief(s) for s in content["seances"] if s["date"] == day]
-        planned = [{"source": "plan", **p} for p in content["plan"] if p["date"] == day and p["type"] != "autre"]
+        planned = [{"source": "plan", **p} for p in content["plan"] if p["date"] == day and p["type"] != "autre"
+                   and not any(appariement.same_session(x["titre"], x["date"], p.get("titre") or "", day) for x in props)]
         planned += [{"source": "coach", "id": p["id"], "titre": p["titre"], "sport": p["sport"],
                      "statut": p["statut"], "blocs": p.get("blocs") or []} for p in props if p["date"] == day]
         days.append({"date": day, "prevu": planned, "fait": sorted(done, key=lambda s: s.get("debut") or "")})
@@ -676,7 +696,7 @@ def month(conn: sqlite3.Connection, student_id: int, content: dict, today: date)
     week() : le grand calendrier des pages coach et élève."""
     start = _monday(today) - timedelta(days=28)
     end = start + timedelta(days=63) - timedelta(days=1)
-    props = proposals(conn, student_id, start, end, content["seances"])
+    props = proposals(conn, student_id, start, end, content)
     days = []
     for offset in range(9):
         days += week(content, props, start + timedelta(days=7 * offset))
@@ -699,7 +719,7 @@ def overview(conn: sqlite3.Connection, coach: sqlite3.Row) -> list[dict]:
                             (coach["id"],)).fetchall():
         content, received = shared(conn, row["id"])
         accord = get_accord(conn, row["id"])
-        props = proposals(conn, row["id"], monday, monday + timedelta(days=6), content["seances"])
+        props = proposals(conn, row["id"], monday, monday + timedelta(days=6), content)
         days = week(content, props, monday)
         sessions = content["seances"]
         last = sessions[0] if sessions else None
@@ -737,8 +757,8 @@ def student_page(conn: sqlite3.Connection, coach: sqlite3.Row, student_id: int, 
     monday = monday or _monday(today)
     content, received = shared(conn, student_id)
     sessions = content["seances"]
-    props_week = proposals(conn, student_id, monday, monday + timedelta(days=6), sessions)
-    upcoming = proposals(conn, student_id, today - timedelta(days=14), today + timedelta(days=90), sessions)
+    props_week = proposals(conn, student_id, monday, monday + timedelta(days=6), content)
+    upcoming = proposals(conn, student_id, today - timedelta(days=14), today + timedelta(days=90), content)
     counts = {row2["fil"]: row2["n"] for row2 in conn.execute(
         "SELECT fil, COUNT(*) AS n FROM messages WHERE coach_id = ? AND fil LIKE ? GROUP BY fil",
         (coach["id"], f"seance-{student_id}-%"))}
@@ -789,10 +809,13 @@ def student_session(conn: sqlite3.Connection, account: sqlite3.Row, student_id: 
     session = next((s for s in content["seances"] if s["cle"] == key), None)
     if session is None:
         raise RelayError("Séance introuvable : elle n'est plus partagée (plus de 4 semaines, ou partage retiré).")
-    plan = next((p for p in content["plan"] if p["date"] == session["date"] and p["type"] != "autre"), None)
     props = proposals(conn, student_id, date.fromisoformat(session["date"]), date.fromisoformat(session["date"]),
-                      content["seances"])
-    return {"seance": session, "prevue": plan, "proposition": props[0] if props else None,
+                      content)
+    # ce qui était proposé : la séance du coach à laquelle elle répond (sinon, rien : elle répondait à son plan)
+    mine = next((p for p in props if (p.get("seance") or {}).get("cle") == key), None)
+    plan = None if mine else next((p for p in content["plan"] if p["date"] == session["date"] and p["type"] != "autre"
+                                   and p.get("statut") == "fait"), None)
+    return {"seance": session, "prevue": plan, "proposition": mine,
             "vma_kmh": content["profil"].get("vma_kmh"), "fil": f"seance-{student_id}-{key}"}
 
 
@@ -807,7 +830,7 @@ def my_page(conn: sqlite3.Connection, student: sqlite3.Row) -> dict:
             "partage": {"seances": len(content["seances"]), "jours": len(content["jours"]),
                         "traces": sum("trace" in s for s in content["seances"])},
             "propositions": proposals(conn, student["id"], today - timedelta(days=14), today + timedelta(days=90),
-                                      content["seances"]),
+                                      content),
             "mois": month(conn, student["id"], content, today),
             "objectifs": [g for g in [_clean_goal(content["profil"]["objectif"]) if content["profil"].get("objectif")
                                       else None, *(content["profil"].get("objectifs") or [])] if g and g.get("date")],

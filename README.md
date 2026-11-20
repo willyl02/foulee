@@ -264,7 +264,11 @@ Ce que tu obtiens :
   (« Prévues 4/6 faites »).
 - **Fait ou manqué** : une séance du même sport le même jour rend une séance prévue
   « faite » (une course à pied ou un trail pour un footing, du renfo pour le renfo) ; un
-  jour passé sans rien de tel la rend « manquée ». Le calendrier publié par Garmin ne
+  jour passé sans rien de tel la rend « manquée ». Avec plusieurs séances prévues le même
+  jour (ton plan et celle du coach), chaque séance faite va à celle qui lui ressemble le
+  plus : le nom que lui donne la montre (« Mézy-Moulins - 21KM-S3-2-Seuil 60 »), puis sa
+  durée face à celle prévue. La séance du coach envoyée sur ta montre, qui revient par le
+  calendrier Garmin, ne s'affiche qu'une fois. Le calendrier publié par Garmin ne
   contient que l'avenir : Foulée garde lui-même ce qu'il a lu, jour après jour.
 - **Une pastille « Calendrier »** : verte quand la dernière lecture a réussi (le calendrier
   est relu avec la synchro automatique, toutes les 3 heures par défaut), rouge sinon. Si

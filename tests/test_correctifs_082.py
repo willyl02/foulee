@@ -124,3 +124,86 @@ def test_coach_and_student_get_a_nine_week_calendar_with_sketches(relay):
     with db.session() as conn:  # côté élève (« Mon coach ») : le même calendrier, et ses objectifs
         mine = coach.my_page(conn)
     assert len(mine["mois"]["jours"]) == 63 and mine["objectifs"][0]["nom"] == "Semi-marathon (exemple)"
+
+
+# ------------------------------------------------- points 3 et 4 : quelle séance faite pour quelle séance prévue
+def _calendar_day(conn, today):
+    from foulee import calendrier
+
+    day = "2026-11-17"
+    rows = [("21KM-S3-2-Seuil 60", "seance", "course", "garmin-plan-1", None),
+            ("VMA courte", "seance", "course", "garmin-ws-1", "Bien respecter les allures 100% VMA"),  # revenue de Garmin
+            ("VMA courte (coach)", "seance", "course", "coach:5", "Échauffement : 20 min à 65 % VMA")]
+    for title, kind, sport, uid, text in rows:
+        conn.execute(calendrier.INSERT, (day, None, None, 1, title, text, None, kind, sport, uid, db.now_iso()))
+    db.set_meta(conn, "relais_propositions", json.dumps([{"id": 5, "date": day, "titre": "VMA courte", "blocs": [
+        {"genre": "echauffement", "duree_min": 20, "pct_vma": 65},
+        {"genre": "corps", "repetitions": 10, "distance_m": 200, "pct_vma": 100, "recup_min": 0.67},
+        {"genre": "calme", "duree_min": 10, "pct_vma": 55}]}]))
+    return day
+
+
+def test_the_session_done_goes_to_the_planned_session_it_resembles():
+    """17 novembre : William fait « 21KM-S3-2-Seuil 60 » de son plan ; la « VMA courte » de son coach, prévue le
+    même jour, ne doit pas passer « faite »."""
+    from datetime import date
+
+    from foulee import calendrier
+
+    with db.session() as conn:
+        day = _calendar_day(conn, date(2026, 11, 17))
+        conn.execute("INSERT INTO activities(id, source, source_id, start_local, date, sport, name, duration_s, moving_s) "
+                     "VALUES ('garmin:7', 'garmin', '7', ?, ?, 'course', 'Mézy-Moulins - 21KM-S3-2-Seuil 60', 3660, 3640)",
+                     (f"{day} 05:30:00", day))
+        items = calendrier.plan(conn, date(2026, 11, 17), date(2026, 11, 17), today=date(2026, 11, 18))
+    by_title = {i["titre"]: i for i in items}
+    assert "VMA courte" not in by_title  # point 4 : la copie revenue de Garmin n'est plus un doublon
+    assert by_title["21KM-S3-2-Seuil 60"]["statut"] == "fait"
+    assert by_title["VMA courte (coach)"]["statut"] == "manque"
+    assert by_title["VMA courte (coach)"]["blocs"][1]["repetitions"] == 10
+
+
+def test_the_coach_session_done_is_recognised_by_its_name_and_length():
+    from datetime import date
+
+    from foulee import calendrier
+
+    with db.session() as conn:
+        day = _calendar_day(conn, date(2026, 11, 17))
+        conn.execute("INSERT INTO activities(id, source, source_id, start_local, date, sport, name, duration_s, moving_s) "
+                     "VALUES ('garmin:8', 'garmin', '8', ?, ?, 'course', 'Chartèves - VMA courte', 2820, 2700)",
+                     (f"{day} 18:00:00", day))
+        items = {i["titre"]: i for i in calendrier.plan(conn, date(2026, 11, 17), date(2026, 11, 17),
+                                                         today=date(2026, 11, 18))}
+    assert items["VMA courte (coach)"]["statut"] == "fait" and items["21KM-S3-2-Seuil 60"]["statut"] == "manque"
+
+
+def test_one_planned_one_done_still_go_together():
+    from foulee import appariement, calendrier
+
+    planned = [{"cle": 1, "date": "2026-11-20", "titre": "Footing", "sport": "course"}]
+    done = [{"cle": "a", "date": "2026-11-20", "sport": "course", "nom": "Course à pied", "duree_s": 2400}]
+    assert appariement.assign(planned, done, calendrier._fits)[1]["cle"] == "a"
+    renfo = [{"cle": 2, "date": "2026-11-18", "titre": "5x10 Squat arrière + 5x10 Hip thrust", "sport": "renfo"}]
+    assert not appariement.assign(renfo, [dict(done[0], date="2026-11-18")], calendrier._fits)  # pas une course
+
+
+def test_the_relay_does_not_credit_the_coach_with_another_session():
+    from foulee.relais import club
+
+    day = club._today().isoformat()
+    items = [{"id": 5, "date": day, "titre": "VMA courte", "sport": "course", "blocs": [
+        {"genre": "corps", "repetitions": 10, "distance_m": 200, "pct_vma": 100, "recup_min": 0.67}]}]
+    plan = [{"date": day, "titre": "21KM-S3-2-Seuil 60", "type": "seance", "sport": "course", "statut": "fait"},
+            {"date": day, "titre": "VMA courte", "type": "seance", "sport": "course"}]  # la copie Garmin (0.8.1)
+    seuil = [{"cle": "garmin:7", "date": day, "sport": "course", "nom": "Mézy-Moulins - 21KM-S3-2-Seuil 60",
+              "duree_s": 3660}]
+    club._with_status(items, seuil, plan, 16.0)
+    assert items[0]["statut"] != "fait" and items[0]["seance"] is None
+    vma = [{"cle": "garmin:8", "date": day, "sport": "course", "nom": "Chartèves - VMA courte", "duree_s": 2800}]
+    club._with_status(items, seuil + vma, plan, 16.0)
+    assert items[0]["statut"] == "fait" and items[0]["seance"]["cle"] == "garmin:8"
+    # la semaine du coach : la séance du coach une seule fois, pas aussi sa copie revenue de Garmin
+    days = club.week({"plan": plan, "seances": seuil + vma}, items, club._monday(club._today()))
+    titles = [p["titre"] for d in days for p in d["prevu"]]
+    assert titles.count("VMA courte") == 1

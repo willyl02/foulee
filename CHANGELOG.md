@@ -4,6 +4,17 @@ Les versions « bêta » (par exemple 0.4.0b1) sont des avant-premières : elles
 sur le canal bêta (Réglages → Mises à jour → « Recevoir les versions bêta »), puis sortent en
 version stable une fois éprouvées.
 
+## 0.8.2b2 — 20 novembre 2026
+
+- **Quelle séance faite pour quelle séance prévue** : quand plusieurs séances sont prévues le même jour (ton plan et
+  celle du coach), chaque séance faite va à celle qui lui ressemble le plus : le nom que lui donne la montre (« Mézy-
+  Moulins - 21KM-S3-2-Seuil 60 » répond à « 21KM-S3-2-Seuil 60 »), puis sa durée face à celle des blocs prévus. Avant,
+  la première prévue du jour prenait la première faite : la séance de Jason passait « faite » alors que tu avais fait
+  celle de ton plan. Même règle chez toi (calendrier, « Ta semaine ») et chez le coach (statut de ses séances, fiche,
+  calendrier), et « Ce qui était proposé » n'apparaît plus sous une séance qui répondait à ton plan.
+- **Plus de doublon** : la séance du coach envoyée sur ta montre revient aussi par ton calendrier Garmin ; elle ne
+  s'affiche plus deux fois (« VMA courte » et « VMA courte (coach) »), ni chez toi ni chez le coach.
+
 ## 0.8.2b1 — 20 novembre 2026
 
 - **Analyse fraction par fraction**, façon intervals.icu : sur chaque séance (vue « Séance », et dans les pages coach et

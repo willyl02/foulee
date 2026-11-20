@@ -26,7 +26,7 @@ from urllib.parse import urlsplit
 
 import requests
 
-from . import __version__, config, db, metrics, vault
+from . import __version__, appariement, config, db, metrics, vault
 
 LOG = logging.getLogger("foulee.calendrier")
 
@@ -806,24 +806,39 @@ def plan(conn: sqlite3.Connection, start: date, end: date, today: date | None = 
     if not events:
         return []
     if activities is None:
-        activities = conn.execute("SELECT id, date, sport, name FROM activities WHERE date BETWEEN ? AND ? "
-                                  "ORDER BY start_local", (start.isoformat(), end.isoformat())).fetchall()
-    used: set[str] = set()
-    matched: dict[int, Any] = {}
-    # Les courses d'abord : la séance d'un jour de course, c'est la course
-    for row in sorted(events, key=lambda r: (r["date"], r["kind"] != "course", r["start_local"] or "", r["id"])):
-        if row["kind"] == "autre":
-            continue
-        found = next((a for a in activities if a["date"] == row["date"] and a["id"] not in used
-                      and _fits(row["sport"], a["sport"])), None)
-        if found is not None:
-            used.add(found["id"])
-            matched[row["id"]] = found
+        activities = conn.execute("SELECT id, date, sport, name, duration_s, moving_s FROM activities WHERE date "
+                                  "BETWEEN ? AND ? ORDER BY start_local", (start.isoformat(), end.isoformat())).fetchall()
     try:  # les blocs des séances du coach, tels qu'il les a écrits (meta du relais)
         proposals = {int(p["id"]): p for p in json.loads(db.get_meta(conn, "relais_propositions") or "[]")
                      if isinstance(p, dict) and str(p.get("id", "")).isdigit()}
     except (TypeError, ValueError):
         proposals = {}
+    # La séance du coach envoyée sur la montre revient aussi par le calendrier Garmin (« VMA courte ») : c'est la
+    # même que « VMA courte (coach) », on ne la montre qu'une fois
+    coach_rows = [r for r in events if (r["uid"] or "").startswith("coach:")]
+    events = [r for r in events if (r["uid"] or "").startswith("coach:") or not any(
+        appariement.same_session(c["title"], c["date"], r["title"], r["date"]) for c in coach_rows)]
+    sketches = {}
+    for row in events:
+        if row["kind"] != "seance" or row["sport"] in ("renfo", "souplesse"):
+            continue
+        uid = row["uid"] or ""
+        coach_item = proposals.get(int(uid[6:])) if uid.startswith("coach:") and uid[6:].isdigit() else None
+        sketches[row["id"]] = (coach_item.get("blocs") or [], False) if coach_item else \
+            sketch_blocks(row["title"], row["description"])
+
+    def seconds(a: Any) -> float | None:
+        keys = a.keys() if hasattr(a, "keys") else ()
+        value = (a["moving_s"] if "moving_s" in keys else None) or (a["duration_s"] if "duration_s" in keys else None)
+        return float(value) if value else None
+
+    candidates = [{"cle": row["id"], "date": row["date"], "titre": row["title"], "sport": row["sport"],
+                   "type": row["kind"], "blocs": sketches.get(row["id"], ([], False))[0]}
+                  for row in events if row["kind"] != "autre"]
+    done = [{"cle": a["id"], "date": a["date"], "sport": a["sport"], "nom": a["name"], "duree_s": seconds(a), "row": a}
+            for a in activities]
+    vma = (db.get_settings(conn).get("vma_kmh") or None)
+    matched = {key: d["row"] for key, d in appariement.assign(candidates, done, _fits, vma).items()}
     out = []
     for row in events:
         day = date.fromisoformat(row["date"])
@@ -844,13 +859,10 @@ def plan(conn: sqlite3.Connection, start: date, end: date, today: date | None = 
             "seance_nom": done["name"] if done is not None else None, "journee": bool(row["all_day"]),
         })
         item = out[-1]
-        if row["kind"] == "seance" and item["sport"] not in ("renfo", "souplesse"):
-            coach_item = proposals.get(item["coach_id"]) if item["coach_id"] else None
-            blocks, approx = (coach_item.get("blocs") or [], False) if coach_item else \
-                sketch_blocks(row["title"], row["description"])
-            if blocks:
-                item["blocs"] = blocks
-                item["esquisse_approchee"] = approx
+        blocks, approx = sketches.get(row["id"], ([], False))
+        if blocks:
+            item["blocs"] = blocks
+            item["esquisse_approchee"] = approx
     return out
 
 
