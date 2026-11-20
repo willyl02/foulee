@@ -4,6 +4,16 @@ Les versions « bêta » (par exemple 0.4.0b1) sont des avant-premières : elles
 sur le canal bêta (Réglages → Mises à jour → « Recevoir les versions bêta »), puis sortent en
 version stable une fois éprouvées.
 
+## 0.8.2b6 — 20 novembre 2026
+
+- **Application partenaire** (Réglages → Application partenaire) : le site du club, par défaut **Club en ligne**
+  (`https://app.clubenligne.fr/`), s'ouvre dans Foulée, avec précédent, suivant, recharger et « Ouvrir dans le
+  navigateur ». Nom et adresse modifiables, jusqu'à une page précise du site ; une coche l'ajoute dans la colonne.
+- **Colonne de gauche** : trois parties séparées d'un trait (tes vues, l'application partenaire, le coach), et les
+  vues se **réordonnent en les glissant** (ou Alt + ↑ / ↓), sans passer par « Modifier la vue ».
+- Corrigé : dans « Mon coach » et sur la fiche d'un élève, le grand calendrier (surtout replié) touchait les cartes
+  du dessous.
+
 ## 0.8.2b5 — 20 novembre 2026
 
 - **Renfo : mes séances, sur ma montre.** Dans la tuile « Renfo : exercices pour rééquilibrer », « En faire une

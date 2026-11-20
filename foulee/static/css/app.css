@@ -124,6 +124,11 @@ a { color: inherit; }
 .nav-item[aria-current="page"] svg { color: var(--gr-red); }
 .nav-add { color: var(--muted); }
 .nav-item.dragging { opacity: 0.4; }
+.nav-item.drop-before::after, .nav-item.drop-after::after { content: ""; position: absolute; left: 8px; right: 8px; height: 2px;
+  border-radius: 2px; background: var(--gr-red); pointer-events: none; }
+.nav-item.drop-before::after { top: -2px; }
+.nav-item.drop-after::after { bottom: -2px; }
+.nav-sep { height: 1px; margin: 8px 12px; background: var(--hair); flex: none; }
 
 .rail-foot { margin-top: auto; display: flex; flex-direction: column; gap: 10px; padding: 0 4px; }
 .sync-line { font-size: 13px; color: var(--muted); line-height: 1.35; }
@@ -521,6 +526,15 @@ details.token .key-row { margin-top: 6px; }
 
 /* ------------------------------------------------------------------ toasts */
 .toasts { position: fixed; right: 18px; bottom: 18px; display: grid; gap: 8px; z-index: 50; }
+/* application partenaire (Club en ligne…) dans un cadre */
+.xa-head { align-items: flex-end; }
+.xa-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-left: auto; }
+.xa-bar .icon-btn { width: 38px; height: 38px; padding: 0; display: inline-grid; place-items: center; }
+.xa-frame { border-radius: 12px; overflow: hidden; background: #fff; box-shadow: 0 0 0 1px var(--hair); }
+.xa-frame iframe { display: block; width: 100%; height: 70vh; border: 0; }
+.xa-form { align-items: start; margin: 12px 0; }
+.xa-url { grid-column: span 2; }
+@media (max-width: 640px) { .xa-label { display: none; } .xa-url { grid-column: auto; } }
 .to-top { position: fixed; right: 22px; bottom: 22px; z-index: 40; display: grid; place-items: center; width: 44px; height: 44px;
   border-radius: 50%; border: 0; background: var(--btn-ink); color: var(--btn-text); box-shadow: var(--shadow); cursor: pointer; }
 .to-top svg { width: 20px; height: 20px; }
@@ -1845,7 +1859,7 @@ a.chip:hover { box-shadow: inset 0 0 0 1px var(--base); }
 
 /* ---------------------------------------------------------- coach et élèves (relais du club) */
 a.nav-item { text-decoration: none; }
-.nav-coach { margin-top: 6px; }
+.nav-coach { margin-top: 0; }
 .coach-form { margin: 12px 0 4px; max-width: 760px; }
 .coach-page { display: grid; gap: 16px; max-width: 980px; }
 .coach-card { background: var(--surface); border-radius: 14px; box-shadow: 0 0 0 1px var(--hair); padding: 16px 18px; }
@@ -2430,6 +2444,7 @@ a.lv-who:hover b { text-decoration: underline; }
 
 /* ---- Grand calendrier des pages coach et élève (neuf semaines) ---- */
 .co-cal h2 .co-sub, .co-sub { margin-left: 6px; font-size: 13px; font-weight: 400; color: var(--muted); }
+details.co-cal { margin: 0 0 16px; }  /* posée directement dans la page, au-dessus des cartes : pas de « gap » pour l'écarter */
 details.co-cal > summary { display: flex; align-items: center; gap: 10px; list-style: none; cursor: pointer; }
 details.co-cal > summary::-webkit-details-marker { display: none; }
 details.co-cal > summary h2 { margin: 0; flex: 1; min-width: 0; }

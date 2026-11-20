@@ -55,6 +55,7 @@ from . import (
     keyinput,
     metrics,
     objectifs,
+    partenaire,
     profile,
     reglages,
     renfo,
@@ -288,6 +289,7 @@ def create_app() -> FastAPI:
                 "objectif": analysis.objective(settings), "profil_fc": analysis.hr_profile(conn, settings),
                 "club": club.summary(settings.get("club")), "club_licences": club.LICENCE_TYPES,
                 "club_logo": club.logo_version(),  # date du logo (pour l'adresse de l'image), ou None
+                "partenaire": partenaire.resolve(settings.get("partenaire")),
                 "garmin_profil": analysis.garmin_profile(conn),
                 "planning": schedule.describe(settings["horaires"]),
                 "modeles_horaires": schedule.MODELES,
