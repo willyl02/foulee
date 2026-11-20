@@ -4,6 +4,18 @@ Les versions « bêta » (par exemple 0.4.0b1) sont des avant-premières : elles
 sur le canal bêta (Réglages → Mises à jour → « Recevoir les versions bêta »), puis sortent en
 version stable une fois éprouvées.
 
+## 0.8.2b5 — 20 novembre 2026
+
+- **Renfo : mes séances, sur ma montre.** Dans la tuile « Renfo : exercices pour rééquilibrer », « En faire une
+  séance pour ma montre » compose une séance avec les exercices conseillés (séries, répétitions ou durée, récup,
+  échauffement et étirements) ; « Mes séances de renfo » les garde. « Envoyer sur ma montre » la dépose dans le
+  calendrier Garmin Connect (avec un compte élève relié au relais du club), sinon « Fichier .fit ». Sur la montre,
+  chaque série dit l'exercice et ses répétitions : Lap quand elle est finie, la récup suit.
+- **Grand calendrier (coach et élève)** : plus lisible (couleurs plus franches, esquisses plus nettes, titres sur
+  deux lignes au lieu d'être coupés net), et il se **replie** d'un clic sur son titre ; Foulée retient ton choix.
+- **Revenir en haut** : un bouton rond en bas à droite dès qu'on a bien descendu dans une page (Réglages…).
+- Le relais du club doit être en 0.8.2b5 pour l'envoi des séances de renfo (il se met à jour seul la nuit).
+
 ## 0.8.2b4 — 20 novembre 2026
 
 - **Corrigé : Foulée restait sur « Chargement… »** (écran noir) depuis la 0.8.2b1 chez qui a un bloqueur de pub ou

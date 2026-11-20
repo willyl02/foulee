@@ -376,6 +376,11 @@ def create_relay_app() -> FastAPI:
         return garmin_run(request, lambda conn, me: garmin.student_send(conn, me, int(proposal), payload.get("vma_kmh")),
                           role="eleve")
 
+    @app.post("/api/v1/garmin/perso")
+    def garmin_personal(request: Request, payload: dict = Body(...)) -> dict:
+        """Une séance que l'élève s'est composée (son renfo…), sur sa montre."""
+        return garmin_run(request, lambda conn, me: garmin.personal_send(conn, me, payload), role="eleve")
+
     @app.put("/api/v1/garmin")
     def garmin_settings(request: Request, payload: dict = Body(...)) -> dict:
         def action(conn, me):

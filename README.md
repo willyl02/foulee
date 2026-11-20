@@ -766,6 +766,10 @@ sudo foulee relais garmin
 (Client ID et Client Secret de l'appli Garmin, le secret ne s'affiche pas ; puis l'adresse publique du relais.
 Chez Garmin, l'« OAuth redirect URL » de l'appli est cette adresse suivie de `/garmin/retour`.)
 
+**Ses propres séances de renfo** : dans la vue Renfo, la tuile « exercices pour rééquilibrer » en fait une
+séance (« En faire une séance pour ma montre ») ; l'élève la règle, la garde dans « Mes séances de renfo » et
+l'envoie sur sa montre par le même chemin (ou en fichier .fit, sans relais).
+
 **Avec un câble** : chaque séance se télécharge aussi en **fichier .fit** (« Fichier .fit »). Montre branchée en
 USB, il se copie dans le dossier `GARMIN\NewFiles` ; débranchée, la montre la range dans Entraînement →
 Entraînements. Le coach peut télécharger le même fichier, avec les allures de l'élève, depuis sa fiche.

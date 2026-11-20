@@ -184,7 +184,29 @@ async function loadBoot() {
   watchCoach(state.boot, { toast });
 }
 
+/** « Revenir en haut » : un bouton rond en bas à droite dès qu'on a bien descendu dans une page longue
+ * (Réglages, fiche d'un élève…). */
+function setupToTop() {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "to-top";
+  button.hidden = true;
+  button.title = "Revenir en haut de la page";
+  button.setAttribute("aria-label", "Revenir en haut de la page");
+  button.innerHTML = icon("moveup");
+  button.addEventListener("click", () => {
+    const smooth = !matchMedia("(prefers-reduced-motion: reduce)").matches;
+    window.scrollTo({ top: 0, behavior: smooth ? "smooth" : "auto" });
+  });
+  document.body.append(button);
+  let ticking = false;
+  const update = () => { ticking = false; button.hidden = window.scrollY < 700; };
+  window.addEventListener("scroll", () => { if (!ticking) { ticking = true; requestAnimationFrame(update); } }, { passive: true });
+  window.addEventListener("hashchange", () => setTimeout(update, 50));
+}
+
 function setupChrome() {
+  setupToTop();
   $("#sync-btn").innerHTML = `${icon("sync")}Synchroniser`;
   $("#sync-btn").addEventListener("click", startSync);
   $("#settings-btn").innerHTML = `${icon("settings")}Réglages`;

@@ -26,7 +26,7 @@ export function monthCalendar(mois, { vma = null, goals = [], sessionHref, coach
       const state = p.statut === "fait" ? "done" : p.statut === "manque" ? "miss" : "next";
       const who = p.source === "coach" ? (coachSide ? "proposée par toi" : "de ton coach") : coachSide ? "son plan" : "ton plan";
       return `<div class="cc-pl ${state}${p.source === "coach" ? " coach" : ""}" title="${F.escape(`${p.titre} (${who})`)}">
-        <span class="cc-pl-t">${p.statut === "fait" ? icon("check") : p.statut === "manque" ? icon("close") : ""}${F.escape(p.titre)}</span>
+        <span class="cc-pl-t">${p.statut === "fait" ? icon("check") : p.statut === "manque" ? icon("close") : ""}<span class="cc-txt">${F.escape(p.titre)}</span></span>
         ${p.blocs?.length && p.statut !== "manque" ? sketchSVG(p.blocs, { vma, height: 14, approx: p.esquisse_approchee }) : ""}</div>`;
     }).join("");
     const done = day.fait.map((s) => `<a class="cc-done" href="${sessionHref(s)}" title="${F.escape(s.nom || s.sport_label || "Séance")}">
@@ -43,4 +43,22 @@ export function monthCalendar(mois, { vma = null, goals = [], sessionHref, coach
       <span class="cc-pl done">${icon("check")}faite</span><span class="cc-pl miss">${icon("close")}manquée</span><span class="cc-done">séance faite</span>
       <span class="cc-race">${icon("flag")}course visée</span></div>
   </div>`;
+}
+
+// Replié ou déplié : retenu dans ce navigateur, pour les deux pages (fiche de l'élève, « Mon coach »)
+const FOLD_KEY = "foulee-calendrier-replie";
+function folded() {
+  try { return localStorage.getItem(FOLD_KEY) === "1"; } catch (e) { return false; }
+}
+document.addEventListener("toggle", (e) => {
+  if (!e.target.matches?.("details.co-cal")) return;
+  try { localStorage.setItem(FOLD_KEY, e.target.open ? "0" : "1"); } catch (err) { /* rien à retenir */ }
+}, true);
+
+/** La carte entière : titre, chevron pour la replier (état retenu), et le calendrier. */
+export function calendarCard(title, sub, mois, options) {
+  const body = monthCalendar(mois, options);
+  if (!body) return "";
+  return `<details class="coach-card co-cal"${folded() ? "" : " open"}><summary><h2>${icon("calendar")}${F.escape(title)}${sub ? ` <span class="co-sub">${F.escape(sub)}</span>` : ""}</h2>
+    <span class="co-fold" title="Replier ou déplier le calendrier" aria-hidden="true">${icon("chevron")}</span></summary>${body}</details>`;
 }

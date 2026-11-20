@@ -578,6 +578,46 @@ def student_send(conn: sqlite3.Connection, student: sqlite3.Row, proposal_id: in
         raise GarminError(str(exc)) from None
 
 
+def personal_send(conn: sqlite3.Connection, account: sqlite3.Row, payload: dict) -> dict:
+    """Une séance que l'élève s'est composée lui-même (son renfo, par exemple) : dans son calendrier Garmin, à sa
+    date. Elle n'est pas gardée sur le relais ; chaque envoi en ajoute une."""
+    from . import club
+
+    if not isinstance(payload, dict):
+        raise GarminError("Séance illisible.")
+    try:
+        title = club._txt(payload.get("titre"), 80)
+        if not title:
+            raise GarminError("Donne un nom à ta séance.")
+        item = {"titre": title, "sport": payload.get("sport") if payload.get("sport") in garmin_training.SPORTS else "renfo",
+                "blocs": club.clean_blocks(payload.get("blocs")), "consigne": club._txt(payload.get("consigne"), 1500)}
+    except store.RelayError as exc:
+        raise GarminError(str(exc)) from None
+    today = store.local_now().date().isoformat()
+    day = club._day(payload.get("date")) or today
+    day = max(day, today)
+    if link_row(conn, account["id"]) is None:
+        return {"a_relier": True, "adresse": authorize_url(conn, account["id"])}
+    try:
+        workout = garmin_training.build(item, None)
+    except WorkoutError as exc:
+        raise GarminError(str(exc)) from None
+    try:
+        status, data = _with_retry(conn, account["id"], "POST", "/workoutportal/workout/v2", workout)
+    except NeedLink as need:
+        return {"a_relier": True, "adresse": need.url, "raison": need.reason or None}
+    workout_id = data.get("workoutId") if isinstance(data, dict) else None
+    if status >= 400 or not workout_id:
+        log.warning("Séance perso refusée par Garmin (HTTP %s) : %s", status, str(data)[:300])
+        raise GarminError(f"Garmin a refusé la séance (HTTP {status}).", 502)
+    status, data = _with_retry(conn, account["id"], "POST", "/training-api/schedule/", {"workoutId": workout_id, "date": day})
+    if status >= 400:
+        _with_retry(conn, account["id"], "DELETE", f"/training-api/workout/v2/{workout_id}")
+        raise GarminError(f"Garmin n'a pas pu planifier la séance au {_day_label(day)} (HTTP {status}).", 502)
+    log.info("Séance perso envoyée sur le compte Garmin de %s", account["id"])
+    return {"envoi": {"date": day, "envoye_le": store.now(), "par": "eleve"}}
+
+
 def coach_send(conn: sqlite3.Connection, coach: sqlite3.Row, proposal_ids: list[Any]) -> dict:
     """Le coach envoie des séances proposées sur la montre de ses élèves (ceux qui sont reliés et le permettent)."""
     ids = [int(i) for i in proposal_ids if str(i).isdigit()][:60]

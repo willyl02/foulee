@@ -510,6 +510,14 @@ def garmin_send(conn: sqlite3.Connection, proposal_id: int) -> dict:
     return _garmin(conn, "POST", "/envoyer", {"proposition": int(proposal_id), "vma_kmh": vma})
 
 
+def garmin_personal(conn: sqlite3.Connection, item: dict) -> dict:
+    """Une séance que je me suis composée (renfo…), dans mon calendrier Garmin par le relais du club."""
+    if (status(conn).get("compte") or {}).get("role") != "eleve":
+        raise CoachError("L'envoi sur la montre passe par le relais du club, avec un compte élève relié : "
+                         "télécharge plutôt le fichier .fit.", 409)
+    return _garmin(conn, "POST", "/perso", item)
+
+
 def garmin_link(conn: sqlite3.Connection) -> dict:
     return _garmin(conn, "POST", "/relier", {})
 

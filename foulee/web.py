@@ -58,6 +58,7 @@ from . import (
     profile,
     reglages,
     renfo,
+    renfo_seances,
     retours,
     schedule,
     telephone,
@@ -1615,6 +1616,41 @@ def create_app() -> FastAPI:
     def fit_response(name: str, data: bytes) -> Response:
         return Response(data, media_type="application/vnd.ant.fit",
                         headers={"Content-Disposition": f'attachment; filename="{name}"', "Cache-Control": "no-store"})
+
+    # Mes séances de renfo : composées ici, gardées dans la base du profil, sur la montre ou en .fit
+    @app.get("/api/renfo/seances")
+    def renfo_sessions() -> dict:
+        with db.session(readonly=True) as conn:
+            link = coach.status(conn)
+            role = (link.get("compte") or {}).get("role") if link.get("relie") else None
+            return {"seances": renfo_seances.saved(conn), "bibliotheque": renfo_seances.library(),
+                    "montre": role == "eleve"}
+
+    @app.put("/api/renfo/seances")
+    def renfo_sessions_save(payload: dict = Body(...)) -> dict:
+        try:
+            with db.session() as conn:
+                return {"seances": renfo_seances.save(conn, payload.get("seances"))}
+        except renfo_seances.SessionError as exc:
+            raise HTTPException(400, str(exc)) from None
+
+    @app.post("/api/renfo/seance.fit")
+    def renfo_session_fit(payload: dict = Body(...)) -> Response:
+        from . import workout_fit
+
+        try:
+            item = renfo_seances.to_item(payload.get("seance"))
+            return fit_response(workout_fit.file_name(item), workout_fit.build(item, None))
+        except (renfo_seances.SessionError, workout_fit.WorkoutError) as exc:
+            raise HTTPException(400, str(exc)) from None
+
+    @app.post("/api/renfo/seance/montre")
+    def renfo_session_watch(payload: dict = Body(...)) -> dict:
+        try:
+            item = renfo_seances.to_item(payload.get("seance"), payload.get("date"))
+        except renfo_seances.SessionError as exc:
+            raise HTTPException(400, str(exc)) from None
+        return coach_call(lambda conn: coach.garmin_personal(conn, item))
 
     @app.get("/api/coach/seances/{proposal_id}.fit")
     def coach_workout_fit(proposal_id: int) -> Response:
