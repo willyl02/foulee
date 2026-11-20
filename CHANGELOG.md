@@ -4,6 +4,13 @@ Les versions « bêta » (par exemple 0.4.0b1) sont des avant-premières : elles
 sur le canal bêta (Réglages → Mises à jour → « Recevoir les versions bêta »), puis sortent en
 version stable une fois éprouvées.
 
+## 0.8.2b4 — 20 novembre 2026
+
+- **Corrigé : Foulée restait sur « Chargement… »** (écran noir) depuis la 0.8.2b1 chez qui a un bloqueur de pub ou
+  de pistage (extension, protection contre le suivi d'Edge) : le fichier de l'analyse fraction par fraction
+  s'appelait « analyse.js », un nom que ces bloqueurs refusent, et toute l'interface s'arrêtait avec lui. Il est
+  renommé, et un test vérifie désormais qu'aucun fichier de l'interface ne porte un nom de ce genre.
+
 ## 0.8.2b3 — 20 novembre 2026
 
 - **Groupes de niveau** (coach) : une nouvelle page « Groupes et séances types » pour créer tes groupes (nom, VMA

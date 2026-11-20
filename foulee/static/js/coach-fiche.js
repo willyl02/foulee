@@ -1,7 +1,7 @@
 // La fiche d'un élève (vue du coach) et la page d'une séance partagée, avec son fil (coach et élève).
 import * as api from "./api.js";
 import * as F from "./format.js";
-import { analysisHTML, wireAnalysis } from "./analyse.js";
+import { analysisHTML, wireAnalysis } from "./fractions.js";
 import { monthCalendar } from "./coach-cal.js";
 import { levelChip } from "./coach-reglages.js";
 import { icon } from "./icons.js";

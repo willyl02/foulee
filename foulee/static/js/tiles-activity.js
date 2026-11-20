@@ -3,7 +3,7 @@
 import * as api from "./api.js";
 import * as C from "./charts.js";
 import * as F from "./format.js";
-import { analysisHTML, wireAnalysis } from "./analyse.js";
+import { analysisHTML, wireAnalysis } from "./fractions.js";
 import { icon } from "./icons.js";
 import { sourceText } from "./sources.js";
 import { message } from "./tiles-data.js";
