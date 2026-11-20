@@ -618,6 +618,7 @@ def my_page(conn: sqlite3.Connection) -> dict:
 
 # ------------------------------------------------------- passerelle vers le relais
 PROXY_PATHS = re.compile(r"^(groupe|eleves/\d+/fiche|eleves/\d+/seances/[A-Za-z0-9:_.-]+|propositions(/\d+)?|"
+                         r"niveaux|eleves/\d+/niveau|"
                          r"modeles(/\d+)?|fils(/[A-Za-z0-9:_.-]+)?|messages/\d+(/epingle)?|nouveautes|"
                          r"moi/seances/[A-Za-z0-9:_.-]+|partage/accord)$")
 

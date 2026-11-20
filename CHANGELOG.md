@@ -4,6 +4,19 @@ Les versions « bêta » (par exemple 0.4.0b1) sont des avant-premières : elles
 sur le canal bêta (Réglages → Mises à jour → « Recevoir les versions bêta »), puis sortent en
 version stable une fois éprouvées.
 
+## 0.8.2b3 — 20 novembre 2026
+
+- **Groupes de niveau** (coach) : une nouvelle page « Groupes et séances types » pour créer tes groupes (nom, VMA
+  mini et maxi, couleur), ou en faire proposer trois d'après les VMA de tes élèves. Chaque élève va dans le groupe
+  de sa VMA : celle de ton **test au club** (VAMEVAL, demi-Cooper…) si tu la notes sur cette page, sinon celle qu'il
+  partage. Tu peux aussi placer un élève à la main. L'aperçu montre qui va où avant d'enregistrer.
+- **« Mes élèves » rangés par groupe** (ou par VMA, ou par nom), avec « Proposer au groupe » ; dans « Proposer une
+  séance », un clic sur un groupe coche tous ses élèves ; le groupe de l'élève s'affiche sur sa fiche.
+- **Bibliothèque de séances** sur la même page : tes séances types avec leur esquisse et leur durée, à proposer en
+  un clic, modifier, renommer, dupliquer ou supprimer ; « Nouvelle séance type » en compose une sans l'envoyer.
+- Pour le coach, il faut que le relais du club soit en 0.8.2b3 : il se met à jour seul la nuit (ou tout de suite,
+  sur la machine du relais : `sudo bash /opt/foulee/scripts/mettre-a-jour-serveur.sh`).
+
 ## 0.8.2b2 — 20 novembre 2026
 
 - **Quelle séance faite pour quelle séance prévue** : quand plusieurs séances sont prévues le même jour (ton plan et

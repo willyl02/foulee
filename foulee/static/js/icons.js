@@ -33,6 +33,7 @@ const P = {
   height: '<path d="M12 3v18M8 7l4-4 4 4M8 17l4 4 4-4"/>',
   up: '<path d="M7 17 17 7M9 7h8v8"/>',
   down: '<path d="M7 7l10 10M17 9v8H9"/>',
+  moveup: '<path d="M12 19V5M6 11l6-6 6 6"/>',
   flat: '<path d="M5 12h14"/>',
   menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
   close: '<path d="M6 6l12 12M18 6 6 18"/>',

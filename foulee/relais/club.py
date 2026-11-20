@@ -493,6 +493,147 @@ def delete_template(conn: sqlite3.Connection, coach_id: int, template_id: int) -
     return templates(conn, coach_id)
 
 
+def update_template(conn: sqlite3.Connection, coach_id: int, template_id: int, payload: dict) -> list[dict]:
+    """Renommer ou modifier un modèle de la bibliothèque (le titre seul suffit pour renommer)."""
+    row = conn.execute("SELECT * FROM modeles WHERE id = ? AND coach_id = ?", (template_id, coach_id)).fetchone()
+    if row is None:
+        raise RelayError("Modèle introuvable.")
+    content = json.loads(row["contenu"])
+    title = _txt(payload.get("titre"), 80) or row["titre"]
+    if conn.execute("SELECT 1 FROM modeles WHERE coach_id = ? AND titre = ? AND id <> ?",
+                    (coach_id, title, template_id)).fetchone():
+        raise RelayError(f"Tu as déjà un modèle « {title} ».")
+    sport = payload.get("sport") if payload.get("sport") in metrics.SPORTS else row["sport"]
+    if "blocs" in payload:
+        content["blocs"] = clean_blocks(payload.get("blocs"))
+    if "consigne" in payload:
+        content["consigne"] = _txt(payload.get("consigne"), 1500)
+    conn.execute("UPDATE modeles SET titre = ?, sport = ?, contenu = ? WHERE id = ?",
+                 (title, sport, json.dumps(content, ensure_ascii=False), template_id))
+    return templates(conn, coach_id)
+
+
+# ------------------------------------------------------------------ groupes de niveau
+COLORS = ("bleu", "vert", "jaune", "orange", "rouge", "violet", "gris")
+MAX_LEVELS = 12
+
+
+def levels(conn: sqlite3.Connection, coach_id: int) -> list[dict]:
+    rows = conn.execute("SELECT * FROM niveaux WHERE coach_id = ? ORDER BY position, id", (coach_id,)).fetchall()
+    return [{"id": r["id"], "nom": r["nom"], "vma_min": r["vma_min"], "vma_max": r["vma_max"], "couleur": r["couleur"]}
+            for r in rows]
+
+
+def save_levels(conn: sqlite3.Connection, coach_id: int, payload: dict) -> dict:
+    """Remplace la liste des groupes (ceux qui manquent sont supprimés ; un élève placé à la main dans un groupe
+    supprimé retrouve le groupe de sa VMA)."""
+    items = payload.get("niveaux")
+    if not isinstance(items, list) or len(items) > MAX_LEVELS:
+        raise RelayError(f"{MAX_LEVELS} groupes au plus.")
+    mine = {r["id"] for r in conn.execute("SELECT id FROM niveaux WHERE coach_id = ?", (coach_id,))}
+    kept = set()
+    for position, raw in enumerate(items):
+        if not isinstance(raw, dict):
+            continue
+        name = _txt(raw.get("nom"), 40)
+        if not name:
+            raise RelayError(f"Donne un nom au groupe n° {position + 1}.")
+        low, high = _num(raw.get("vma_min"), 5, 30, 1), _num(raw.get("vma_max"), 5, 30, 1)
+        if low is not None and high is not None and low >= high:
+            raise RelayError(f"Groupe « {name} » : la VMA mini doit être plus basse que la VMA maxi.")
+        color = raw.get("couleur") if raw.get("couleur") in COLORS else COLORS[position % len(COLORS)]
+        level_id = raw.get("id") if isinstance(raw.get("id"), int) and raw.get("id") in mine else None
+        if level_id:
+            conn.execute("UPDATE niveaux SET nom = ?, vma_min = ?, vma_max = ?, couleur = ?, position = ? WHERE id = ?",
+                         (name, low, high, color, position, level_id))
+        else:
+            level_id = conn.execute("INSERT INTO niveaux(coach_id, nom, vma_min, vma_max, couleur, position) "
+                                    "VALUES (?,?,?,?,?,?)", (coach_id, name, low, high, color, position)).lastrowid
+        kept.add(level_id)
+    for gone in mine - kept:
+        conn.execute("DELETE FROM niveaux WHERE id = ?", (gone,))
+    return level_page(conn, coach_id)
+
+
+def _follow(conn: sqlite3.Connection, student_ids: list[int]) -> dict[int, sqlite3.Row]:
+    if not student_ids:
+        return {}
+    rows = conn.execute(f"SELECT * FROM eleves_suivi WHERE eleve_id IN ({','.join('?' * len(student_ids))})",
+                        student_ids).fetchall()
+    return {r["eleve_id"]: r for r in rows}
+
+
+def level_of(vma: float | None, forced: int | None, groups: list[dict]) -> dict | None:
+    """Le groupe d'un élève : celui où le coach l'a placé, sinon le premier dont les bornes contiennent sa VMA
+    (mini comprise, maxi non comprise ; une borne vide ne limite pas)."""
+    if forced:
+        found = next((g for g in groups if g["id"] == forced), None)
+        if found:
+            return found
+    if vma is None:
+        return None
+    return next((g for g in groups if (g["vma_min"] is None or vma >= g["vma_min"])
+                 and (g["vma_max"] is None or vma < g["vma_max"])), None)
+
+
+def coach_view(conn: sqlite3.Connection, coach_id: int, student_id: int, shared_vma: float | None,
+               groups: list[dict] | None = None, follow: sqlite3.Row | None = None) -> dict:
+    """VMA de référence (test du club, sinon partagée) et groupe d'un élève, tels que le coach les voit."""
+    groups = levels(conn, coach_id) if groups is None else groups
+    if follow is None:
+        follow = _follow(conn, [student_id]).get(student_id)
+    test = follow["vma_test"] if follow else None
+    vma = test or shared_vma
+    level = level_of(vma, follow["niveau_force"] if follow else None, groups)
+    return {"vma_kmh": vma, "vma_partagee": shared_vma, "vma_test": test,
+            "vma_test_le": follow["vma_test_le"] if follow else None,
+            "vma_source": "test" if test else "partagee" if shared_vma else None,
+            "niveau": level, "niveau_force": bool(follow and follow["niveau_force"] and level)}
+
+
+def level_page(conn: sqlite3.Connection, coach_id: int) -> dict:
+    """La page « Réglages coach » : ses groupes et, pour chaque élève, sa VMA et son groupe."""
+    groups = levels(conn, coach_id)
+    students = students_of(conn, coach_id)
+    follow = _follow(conn, list(students))
+    out = []
+    for sid, row in students.items():
+        content, _ = shared(conn, sid)
+        out.append({"id": sid, "nom": row["nom"], "actif": bool(row["actif"]),
+                    **coach_view(conn, coach_id, sid, content["profil"].get("vma_kmh"), groups, follow.get(sid))})
+    out.sort(key=lambda s: (-(s["vma_kmh"] or 0), s["nom"].lower()))
+    return {"niveaux": groups, "eleves": out, "couleurs": list(COLORS)}
+
+
+def set_student_level(conn: sqlite3.Connection, coach_id: int, student_id: int, payload: dict) -> dict:
+    """VMA mesurée au club (vide : on reprend celle qu'il partage) et groupe imposé (vide : selon la VMA)."""
+    if student_id not in students_of(conn, coach_id):
+        raise PermissionError("Élève introuvable dans ton groupe.")
+    current = _follow(conn, [student_id]).get(student_id)
+    test = current["vma_test"] if current else None
+    tested_on = current["vma_test_le"] if current else None
+    forced = current["niveau_force"] if current else None
+    if "vma_test" in payload:
+        raw = payload.get("vma_test")
+        test = None if raw in (None, "") else _num(str(raw).replace(",", "."), 5, 30, 1)
+        if raw not in (None, "") and test is None:
+            raise RelayError("VMA entre 5 et 30 km/h.")
+        tested_on = (_txt(payload.get("vma_test_le"), 10) or _today().isoformat()) if test else None
+    if "niveau" in payload:
+        raw = payload.get("niveau")
+        forced = None
+        if raw not in (None, ""):
+            mine = {g["id"] for g in levels(conn, coach_id)}
+            if not str(raw).isdigit() or int(raw) not in mine:
+                raise RelayError("Groupe inconnu.")
+            forced = int(raw)
+    conn.execute("INSERT INTO eleves_suivi(eleve_id, vma_test, vma_test_le, niveau_force, modifie_le) "
+                 "VALUES (?,?,?,?,?) ON CONFLICT(eleve_id) DO UPDATE SET vma_test = excluded.vma_test, "
+                 "vma_test_le = excluded.vma_test_le, niveau_force = excluded.niveau_force, "
+                 "modifie_le = excluded.modifie_le", (student_id, test, tested_on, forced, now()))
+    return level_page(conn, coach_id)
+
+
 # ------------------------------------------------------------------ messages
 def thread_access(conn: sqlite3.Connection, account: sqlite3.Row, thread: str) -> tuple[int, int | None]:
     """(groupe = id du coach, élève concerné) si ce compte a droit à ce fil ; sinon refus."""
@@ -714,9 +855,12 @@ def overview(conn: sqlite3.Connection, coach: sqlite3.Row) -> list[dict]:
     today = _today()
     monday = _monday(today)
     reads = {t["fil"]: t["non_lus"] for t in threads(conn, coach)}
+    groups = levels(conn, coach["id"])
     out = []
-    for row in conn.execute("SELECT * FROM comptes WHERE role = 'eleve' AND coach_id = ? ORDER BY nom COLLATE NOCASE",
-                            (coach["id"],)).fetchall():
+    rows = conn.execute("SELECT * FROM comptes WHERE role = 'eleve' AND coach_id = ? ORDER BY nom COLLATE NOCASE",
+                        (coach["id"],)).fetchall()
+    follow = _follow(conn, [r["id"] for r in rows])
+    for row in rows:
         content, received = shared(conn, row["id"])
         accord = get_accord(conn, row["id"])
         props = proposals(conn, row["id"], monday, monday + timedelta(days=6), content)
@@ -736,7 +880,7 @@ def overview(conn: sqlite3.Connection, coach: sqlite3.Row) -> list[dict]:
             "inscrit_le": row["cree_le"], "derniere_connexion": row["derniere_connexion"],
             "accord": accord, "partage_recu_le": received, "derniere_seance": _session_brief(last),
             "semaine": tally(days), "bande": strip(days, today), "charge_7j": round(load7) if sessions else None,
-            "vma_kmh": content["profil"].get("vma_kmh"),
+            **coach_view(conn, coach["id"], row["id"], content["profil"].get("vma_kmh"), groups, follow.get(row["id"])),
             "seances_28j": len(sessions), "objectif": goal, "non_lus": unread,
             "montre": garmin.student_flags(conn, row["id"]),
             "prochain": _next_goal(goal, content["profil"], today),
@@ -784,6 +928,8 @@ def student_page(conn: sqlite3.Connection, coach: sqlite3.Row, student_id: int, 
             "seances": briefs, "jours": content["jours"], "total_28j": total, "propositions": upcoming,
             "mois": month(conn, student_id, content, today),
             "renfo": renfo_balance(sessions, today),
+            "suivi": coach_view(conn, coach["id"], student_id, content["profil"].get("vma_kmh")),
+            "niveaux": levels(conn, coach["id"]),
             "montre": {**garmin.student_flags(conn, student_id), "disponible": garmin.configured()}}
 
 

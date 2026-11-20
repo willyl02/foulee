@@ -728,9 +728,15 @@ ton adresse, par exemple `https://relais.mon-club.com`.
   temps, son allure, sa FC moyenne, sa zone et la part du tour dans cette zone, au-dessus des courbes d'allure et
   de FC), chiffres, tours, renfo, tracé simplifié (sans fond de carte), ce qui était proposé, et un **fil** pour
   en parler ;
-- **proposer une séance** à un ou plusieurs élèves : un déroulé en blocs (durée ou distance, ou **« libre
-  (Lap) »** : jusqu'à la touche Lap, sur piste de ligne à ligne ; répétitions, % de VMA ou zone de FC,
-  récupération), des exemples et ses modèles ; chacun la reçoit avec **ses** allures.
+- **proposer une séance** à un ou plusieurs élèves, ou à tout un groupe de niveau d'un clic : un déroulé en
+  blocs (durée ou distance, ou **« libre (Lap) »** : jusqu'à la touche Lap, sur piste de ligne à ligne ;
+  répétitions, % de VMA ou zone de FC, récupération), des exemples et ses séances types ; chacun la reçoit avec
+  **ses** allures ;
+- **groupes de niveau et bibliothèque** (page « Groupes et séances types ») : des groupes bornés par la VMA (nom,
+  VMA mini et maxi, couleur ; ou trois groupes proposés d'après les VMA du groupe), la VMA du **test au club** de
+  chaque élève (elle passe avant celle qu'il partage pour le classer), un élève placé à la main s'il le faut ;
+  « Mes élèves » se range alors par groupe. La bibliothèque garde ses séances types : les proposer en un clic, les
+  modifier, les renommer, les dupliquer, en créer une sans l'envoyer.
 
 **Ce que voit l'élève** (page « Mon coach ») : son calendrier de neuf semaines (le même que celui de son
 coach), les séances proposées, bloc par bloc avec ses allures (et dans sa vue « Calendrier », en pointillé bleu,

@@ -295,6 +295,23 @@ def create_relay_app() -> FastAPI:
     def new_template(request: Request, payload: dict = Body(...)) -> dict:
         return run(request, lambda conn, me: {"modeles": club.save_template(conn, me["id"], payload)}, role="coach")
 
+    @app.put("/api/v1/modeles/{template_id}")
+    def edit_template(template_id: int, request: Request, payload: dict = Body(...)) -> dict:
+        return run(request, lambda conn, me: {"modeles": club.update_template(conn, me["id"], template_id, payload)},
+                   role="coach")
+
+    @app.get("/api/v1/niveaux")
+    def get_levels(request: Request) -> dict:
+        return run(request, lambda conn, me: club.level_page(conn, me["id"]), role="coach")
+
+    @app.put("/api/v1/niveaux")
+    def put_levels(request: Request, payload: dict = Body(...)) -> dict:
+        return run(request, lambda conn, me: club.save_levels(conn, me["id"], payload), role="coach")
+
+    @app.put("/api/v1/eleves/{student_id}/niveau")
+    def put_student_level(student_id: int, request: Request, payload: dict = Body(...)) -> dict:
+        return run(request, lambda conn, me: club.set_student_level(conn, me["id"], student_id, payload), role="coach")
+
     @app.delete("/api/v1/modeles/{template_id}")
     def drop_template(template_id: int, request: Request) -> dict:
         return run(request, lambda conn, me: {"modeles": club.delete_template(conn, me["id"], template_id)},

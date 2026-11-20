@@ -427,7 +427,12 @@ def _shared_vma(conn: sqlite3.Connection, student_id: int) -> float | None:
     from . import club
 
     content, _ = club.shared(conn, student_id)
-    return content.get("profil", {}).get("vma_kmh")
+    shared_vma = content.get("profil", {}).get("vma_kmh")
+    if shared_vma:
+        return shared_vma
+    # sans VMA partagée : celle que le coach a mesurée au club, si elle est notée
+    row = conn.execute("SELECT vma_test FROM eleves_suivi WHERE eleve_id = ?", (student_id,)).fetchone()
+    return row["vma_test"] if row and row["vma_test"] else None
 
 
 def _with_retry(conn: sqlite3.Connection, account_id: int, method: str, path: str, body: Any = None):

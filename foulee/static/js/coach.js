@@ -4,7 +4,8 @@
 //   #/coach/eleve/<id>/seance/<c> une séance d'un élève et son fil (coach)
 //   #/coach/seance/<c>            une de mes séances partagées et son fil (élève)
 //   #/coach/messages?fil=…        la messagerie (les deux)
-//   #/coach/proposer              proposer une séance (coach)
+//   #/coach/proposer              proposer une séance (coach) ; ?groupe=<id>, ?modele=<id> (&edition=1 : le modifier)
+//   #/coach/reglages              groupes de niveau, VMA des élèves, bibliothèque de séances types (coach)
 //   #/coach/partage               ce que je partage avec mon coach (élève)
 // Le relevé des nouveautés (toutes les minutes) met à jour le badge de la colonne et prévient d'un message.
 import * as api from "./api.js";
@@ -14,6 +15,7 @@ import { renderGroup } from "./coach-groupe.js";
 import { renderStudent, renderSession } from "./coach-fiche.js";
 import { renderMessages } from "./coach-messages.js";
 import { renderEditor } from "./coach-proposer.js";
+import { renderCoachSettings } from "./coach-reglages.js";
 import { renderMyCoach, renderAccord } from "./coach-eleve.js";
 
 // ------------------------------------------------------------ relevé
@@ -109,6 +111,7 @@ export async function renderCoachPage(page, boot, { toast, onUnlinked, path = "/
         else await renderStudent(ctx, Number(parts[1]));
       } else if (parts[0] === "messages") await renderMessages(ctx);
       else if (parts[0] === "proposer") await renderEditor(ctx);
+      else if (parts[0] === "reglages") await renderCoachSettings(ctx);
       else await renderGroup(ctx);
     } else if (parts[0] === "seance" && parts[1]) await renderSession(ctx, null, parts.slice(1).join("/"));
     else if (parts[0] === "messages") await renderMessages(ctx);

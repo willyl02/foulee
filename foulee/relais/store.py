@@ -108,6 +108,25 @@ CREATE TABLE IF NOT EXISTS modeles (
     cree_le   TEXT NOT NULL
 );
 
+-- Groupes de niveau du coach (0.8.2) : chacun avec ses bornes de VMA ; un élève y va selon sa VMA (celle du test
+-- du club si le coach l'a notée, sinon celle qu'il partage), ou parce que le coach l'y a placé à la main
+CREATE TABLE IF NOT EXISTS niveaux (
+    id        INTEGER PRIMARY KEY,
+    coach_id  INTEGER NOT NULL REFERENCES comptes(id) ON DELETE CASCADE,
+    nom       TEXT NOT NULL,
+    vma_min   REAL,
+    vma_max   REAL,
+    couleur   TEXT NOT NULL DEFAULT 'bleu',
+    position  INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS eleves_suivi (
+    eleve_id      INTEGER PRIMARY KEY REFERENCES comptes(id) ON DELETE CASCADE,
+    vma_test      REAL,
+    vma_test_le   TEXT,
+    niveau_force  INTEGER REFERENCES niveaux(id) ON DELETE SET NULL,
+    modifie_le    TEXT NOT NULL
+);
+
 -- Envoi des séances sur la montre (Training API de Garmin, voir garmin.py) : le lien de chaque élève (jetons
 -- chiffrés), les autorisations en cours (15 minutes) et les séances envoyées
 CREATE TABLE IF NOT EXISTS garmin_liens (
