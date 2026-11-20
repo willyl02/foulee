@@ -181,6 +181,15 @@ CREATE TABLE IF NOT EXISTS calendar_events (
     fetched_at  TEXT
 );
 CREATE INDEX IF NOT EXISTS calendar_events_date ON calendar_events(date);
+
+-- Ressenti après une séance (« Ma séance du jour ») : note de 1 à 10, un mot, et quand il est parti au coach
+CREATE TABLE IF NOT EXISTS ressentis (
+    activity_id TEXT PRIMARY KEY,
+    rpe         INTEGER,
+    note        TEXT,
+    modifie_le  TEXT NOT NULL,
+    envoye_le   TEXT
+);
 """
 
 # Réglages par défaut. Tous modifiables depuis la page « Réglages » ou par Claude.

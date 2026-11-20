@@ -24,6 +24,7 @@ import * as D from "./tiles-data.js";
 import * as O from "./goals.js";
 import * as H from "./tiles-home.js";
 import * as W from "./tiles-withings.js";
+import * as J from "./tiles-jour.js";
 
 const RENDERERS = {
   kpi: D.kpi, serie: D.serie, charge: D.charge, zones: D.zones, calendrier: D.calendrier, nuage: D.nuage,
@@ -34,7 +35,7 @@ const RENDERERS = {
   renfo: R.renfo, renfo_exercices: R.renfo_exercices, seance_renfo: R.seance_renfo, renfo_equilibre: R.renfo_equilibre, renfo_conseils: R.renfo_conseils,
   seance_effet: T.seance_effet,
   profil: H.profil, forme: H.forme, allures: H.allures, semaine: H.semaine, records: H.records, journee: H.journee,
-  club: H.club, withings: W.withings, agenda: G.agenda, a_venir: G.a_venir,
+  club: H.club, withings: W.withings, agenda: G.agenda, a_venir: G.a_venir, jour: J.jour,
 };
 const PERIODS = [[7, "7 j"], [30, "30 j"], [90, "90 j"], [180, "6 mois"], [365, "1 an"], [730, "2 ans"]];
 // Tuiles qui ne dépendent pas de la période : une vue faite seulement de celles-ci se passe du sélecteur

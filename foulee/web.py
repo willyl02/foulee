@@ -53,6 +53,7 @@ from . import (
     config,
     datadir,
     db,
+    jour,
     keyinput,
     metrics,
     objectifs,
@@ -489,6 +490,41 @@ def create_app() -> FastAPI:
             if planned or data["lie"]:
                 data["sources"].append(calendrier.source(conn))
             return data
+
+    # ------------------------------------------------------- ma séance du jour
+    @app.get("/api/jour")
+    def get_today(day: str | None = None) -> dict:
+        with db.session(readonly=True, strava=True) as conn:
+            return jour.day_page(conn, db.get_settings(conn), _day(day) or date.today())
+
+    @app.get("/api/jour/meteo")
+    def get_today_weather(day: str | None = None) -> dict:
+        with db.session(strava=True) as conn:  # écriture : la prévision est gardée une heure
+            return jour.weather_page(conn, db.get_settings(conn), _day(day) or date.today())
+
+    @app.put("/api/jour/ressenti/{activity_id}")
+    def put_feel(activity_id: str, payload: dict = Body(...)) -> dict:
+        try:
+            with db.session() as conn:
+                return {"ressenti": jour.save_feel(conn, activity_id, payload)}
+        except jour.DayError as exc:
+            raise HTTPException(400, str(exc)) from None
+
+    @app.post("/api/jour/ressenti/{activity_id}/coach")
+    def feel_to_coach(activity_id: str) -> dict:
+        """Le ressenti de la séance, en message au coach (fil privé de l'élève)."""
+        def action(conn):
+            link = coach.status(conn)
+            me = link.get("compte") or {}
+            if not link.get("relie") or me.get("role") != "eleve" or not me.get("id"):
+                raise coach.CoachError("Relie d'abord ton profil à ton coach (Réglages → Coach et élèves).", 409)
+            coach.proxy(conn, "POST", f"fils/eleve-{int(me['id'])}", {"texte": jour.coach_text(conn, activity_id)})
+            jour.mark_sent(conn, activity_id)
+            return {"envoye": True}
+        try:
+            return coach_call(action)
+        except jour.DayError as exc:
+            raise HTTPException(400, str(exc)) from None
 
     @app.get("/api/allures")
     def get_paces(comparer: float | None = None, test: str | None = None) -> dict:

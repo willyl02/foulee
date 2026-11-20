@@ -4,6 +4,18 @@ Les versions « bêta » (par exemple 0.4.0b1) sont des avant-premières : elles
 sur le canal bêta (Réglages → Mises à jour → « Recevoir les versions bêta »), puis sortent en
 version stable une fois éprouvées.
 
+## 0.8.2b9 — 20 novembre 2026
+
+- **« Aujourd'hui » devient « Ma séance du jour »** (au lieu de répéter la forme du jour de l'Accueil) :
+  - le **verdict de la nuit en une phrase** (feu vert, vas-y sans forcer, journée facile), selon ta récupération
+    et l'intensité prévue ;
+  - la **séance du jour** (ton plan, celle du coach) avec son esquisse et tes allures, et l'envoi sur la montre ;
+  - **quand courir** : la météo heure par heure (Open-Meteo, position arrondie à une dizaine de kilomètres) et
+    **ton créneau**, hors de ton poste, le moins de pluie, de vent et de nuit possible ;
+  - **après la séance** : prévu face au fait, l'analyse fraction par fraction, et ton **ressenti** de 1 à 10 avec
+    un mot, à envoyer à ton coach en un clic.
+- Une vue « Aujourd'hui » arrangée à ta façon n'est pas remplacée : ajoute-lui la tuile « Ma séance du jour ».
+
 ## 0.8.2b8 — 20 novembre 2026
 
 - **Notifications sur le téléphone, avec ntfy** (appli gratuite, Android et iPhone, sans compte) : Réglages →
