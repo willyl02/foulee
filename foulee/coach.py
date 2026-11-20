@@ -423,7 +423,9 @@ def snapshot(conn: sqlite3.Connection, accord: dict, today: date | None = None) 
         out["seances"] = [_shared_session(conn, row, accord, floors) for row in rows]
         planned = calendrier.plan(conn, today - timedelta(days=SHARE_DAYS), today + timedelta(days=28), today)
         out["plan"] = [{"date": p["date"], "heure": p["heure"], "titre": p["titre"], "type": p["type"],
-                        "sport": p["sport"], "statut": p["statut"]} for p in planned if not p.get("coach")]
+                        "sport": p["sport"], "statut": p["statut"],
+                        **({"blocs": p["blocs"], "esquisse_approchee": p.get("esquisse_approchee", False)}
+                           if p.get("blocs") else {})} for p in planned if not p.get("coach")]
     if accord.get("objectif"):
         settings = db.get_settings(conn)
         goal = settings.get("objectif") if isinstance(settings.get("objectif"), dict) else None

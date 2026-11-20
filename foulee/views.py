@@ -76,8 +76,9 @@ TILE_TYPES: list[dict[str, Any]] = [
     {
         "type": "agenda", "label": "Calendrier d'entraînement", "icone": "calendar", "categorie": "Entraînement",
         "description": "Le mois en un coup d'œil : séances prévues et courses de ton calendrier (Garmin Connect ou "
-                       "agenda iCal) face à ce que tu as fait, jour par jour. Un clic sur un jour donne le détail.",
-        "taille": {"w": 12, "h": 3}, "params": [],
+                       "agenda iCal) face à ce que tu as fait, jour par jour, avec l'esquisse de chaque séance prévue. Un "
+                       "clic sur un jour donne le détail.",
+        "taille": {"w": 12, "h": 5}, "params": [],
     },
     {
         "type": "kpi", "label": "Chiffre clé", "icone": "gauge", "categorie": "Chiffres et courbes",
@@ -541,6 +542,7 @@ def ensure_default_views(conn: sqlite3.Connection) -> None:
         db.set_meta(conn, "vue_renfo_conseils", "1")
         db.set_meta(conn, "vue_periodes", "1")
         db.set_meta(conn, "vue_seance_analyse", "1")
+        db.set_meta(conn, "vue_agenda_grand", "1")
         conn.commit()
         return
     if db.get_meta(conn, "vue_seance_renfo") is None:
@@ -608,6 +610,18 @@ def ensure_default_views(conn: sqlite3.Connection) -> None:
         # 0.8.1 : les exercices pour rééquilibrer, juste sous l'équilibre avant / arrière de la vue « Renfo »
         _insert_tile(conn, RENFO_VIEW, "renfo_conseils", 12, 3, after=("renfo_equilibre", "renfo"))
         db.set_meta(conn, "vue_renfo_conseils", "1")
+        conn.commit()
+    if db.get_meta(conn, "vue_agenda_grand") is None:
+        # 0.8.2 : le calendrier du mois grandit (de 3 à 5 rangées), s'il a encore sa taille d'origine
+        for row in conn.execute("SELECT id, spec FROM views").fetchall():
+            spec = json.loads(row["spec"])
+            tiles = [t for t in spec.get("tuiles", []) if t.get("type") == "agenda" and t.get("w") == 12 and t.get("h") == 3]
+            for tile in tiles:
+                tile["h"] = 5
+            if tiles:
+                conn.execute("UPDATE views SET spec = ?, updated_at = ? WHERE id = ?",
+                             (json.dumps(spec, ensure_ascii=False), db.now_iso(), row["id"]))
+        db.set_meta(conn, "vue_agenda_grand", "1")
         conn.commit()
     if db.get_meta(conn, "vue_seance_analyse") is None:
         # 0.8.2 : l'analyse fraction par fraction, en pleine largeur, avant la carte et les courbes
@@ -815,7 +829,7 @@ def calendar_view(view_id: str = CALENDAR_VIEW) -> dict:
     """La vue « Calendrier » : la prochaine course et les prochaines séances, puis le mois en entier."""
     return {"id": view_id, "name": "Calendrier", "icon": "calendar", "spec": {"tuiles": [
         _tile("a_venir", 12, 1),
-        _tile("agenda", 12, 3),
+        _tile("agenda", 12, 5),  # 0.8.2 : plus haut, pour l'esquisse des séances dans chaque case
     ]}}
 
 

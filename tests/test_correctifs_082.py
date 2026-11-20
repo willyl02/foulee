@@ -3,6 +3,7 @@
 import json
 
 from foulee import __version__, analysis, db, views
+from test_relais_club import relay  # noqa: F401  (le relais du club, en mémoire)
 
 
 def test_a_new_install_has_no_objective():
@@ -95,3 +96,31 @@ def test_free_reps_end_at_the_lap_key():
     repeat = garmin_training.build(item, 16.0)["segments"][0]["steps"][0]
     assert [s["durationType"] for s in repeat["steps"]] == ["OPEN", "OPEN"] and repeat["repeatValue"] == 6
     assert "touche Lap" in coach.block_text(blocks[0], 16.0) and "récup libre (Lap)" in coach.block_text(blocks[0], 16.0)
+
+
+def test_coach_and_student_get_a_nine_week_calendar_with_sketches(relay):
+    from datetime import date, timedelta
+
+    from foulee import coach, demo
+    from test_relais_club import PASSWORD, token
+
+    sophie = token(relay, "sophie")
+    code = relay.post("/api/v1/invitations", headers=sophie).json()["invitation"]["code"]
+    demo.build(days=45, second_profile=False)
+    with db.session() as conn:
+        coach.join(conn, "https://relais.test", code=code, ident="demo.eleve", name="Élève démo", password=PASSWORD)
+        coach.set_accord(conn, {"seances": True, "objectif": True})
+    sid = relay.get("/api/v1/groupe", headers=sophie).json()["eleves"][0]["id"]
+    day = (date.today() + timedelta(days=3)).isoformat()
+    relay.post("/api/v1/propositions", headers=sophie, json={"eleves": [sid], "date": day, "titre": "Piste", "sport": "course",
+                                                            "blocs": [{"genre": "corps", "repetitions": 6, "libre": True,
+                                                                       "pct_vma": 100, "recup_libre": True}]})
+    page = relay.get(f"/api/v1/eleves/{sid}/fiche", headers=sophie).json()
+    days = page["mois"]["jours"]
+    assert len(days) == 63 and date.fromisoformat(days[0]["date"]).weekday() == 0
+    mine = next(p for d in days if d["date"] == day for p in d["prevu"] if p["source"] == "coach")
+    assert mine["blocs"][0]["libre"] is True
+    assert any(p.get("blocs") for d in days for p in d["prevu"] if p["source"] == "plan")  # le plan, esquissé
+    with db.session() as conn:  # côté élève (« Mon coach ») : le même calendrier, et ses objectifs
+        mine = coach.my_page(conn)
+    assert len(mine["mois"]["jours"]) == 63 and mine["objectifs"][0]["nom"] == "Semi-marathon (exemple)"

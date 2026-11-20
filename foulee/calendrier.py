@@ -691,6 +691,109 @@ def _fits(planned: str | None, done: str | None) -> bool:
     return done in COMPATIBLE.get(planned, (planned,))
 
 
+# ------------------------------------------------------------- esquisse
+# De quoi dessiner une séance prévue en petit (des barres : largeur = durée, hauteur = intensité) : les blocs du
+# coach tels quels, ou ceux qu'on lit dans le texte d'une séance du calendrier Garmin (« 5 × 200 m à 100 % VMA »).
+_NUM = r"(\d+(?:[.,]\d+)?)"
+_REPS = re.compile(r"(?<![\d.,])(\d{1,2})\s*[x×]\s*(?=\d)", re.I)
+_DIST = re.compile(_NUM + r"\s*(km|m)\b(?!\s*(?:in|n)\b)", re.I)
+_TIME = re.compile(r"(?:(\d+)\s*h\s*(\d{1,2})?\b|" + _NUM + r"\s*(?:min|mn|'|’)|" + _NUM + r"\s*(?:s|sec|\")\b)", re.I)
+_PCT = re.compile(r"(\d{2,3})\s*%\s*(?:de\s+(?:la\s+)?)?vma", re.I)
+_ZONE = re.compile(r"\bz(?:one)?\s*(?:fc\s*)?([1-5])\b", re.I)
+_REST = re.compile(r"r[ée]cup\w*\s*:?\s*" + _NUM + r"\s*(min|mn|'|s|sec)?", re.I)
+# L'intensité devinée du nom de la séance : complète les blocs sans % de VMA, ou, sans aucun chiffre, donne une
+# séance type (dessinée en pointillé : approchée)
+_E = {"genre": "echauffement", "duree_min": 20, "pct_vma": 65}
+_C = {"genre": "calme", "duree_min": 10, "pct_vma": 60}
+_KEYWORDS = [
+    (r"\bvma\b|fractionn|\bpiste\b|interval|c[ôo]tes", 100,
+     [_E, {"genre": "corps", "repetitions": 8, "duree_min": 1.5, "pct_vma": 100, "recup_min": 1.5}, _C]),
+    (r"seuil|tempo|allure semi|\bas\s?21", 85,
+     [_E, {"genre": "corps", "repetitions": 2, "duree_min": 10, "pct_vma": 85, "recup_min": 3}, _C]),
+    (r"allure marathon|\bam\b|\bas\s?42", 80, [_E, {"genre": "corps", "duree_min": 30, "pct_vma": 80}, _C]),
+    (r"endurance active|\bea\b|\bactive\b", 75, [{"genre": "corps", "duree_min": 50, "pct_vma": 75}]),
+    (r"endurance|footing|\bef\b|sortie longue|\bsl\b|r[ée]cup", 65, [{"genre": "corps", "duree_min": 50, "pct_vma": 65}]),
+]
+
+
+def _minutes(match: re.Match) -> float:
+    hours, mins, num, secs = match.group(1), match.group(2), match.group(3), match.group(4)
+    if hours:
+        return int(hours) * 60 + int(mins or 0)
+    if num:
+        return float(num.replace(",", "."))
+    return float(secs.replace(",", ".")) / 60
+
+
+def _block_of(text: str) -> dict | None:
+    genre = "echauffement" if re.search(r"[ée]chauff", text, re.I) else \
+        "calme" if re.search(r"retour au calme|\brac\b|calme", text, re.I) else "corps"
+    rest = _REST.search(text)
+    head = text[:rest.start()] if rest else text
+    block: dict[str, Any] = {"genre": genre}
+    reps = _REPS.search(head)
+    if reps:
+        block["repetitions"] = max(1, min(50, int(reps.group(1))))
+    dist = _DIST.search(head)
+    time = _TIME.search(head)
+    if dist and (not time or dist.start() < time.start()):
+        value = float(dist.group(1).replace(",", "."))
+        block["distance_m"] = value * 1000 if dist.group(2).lower() == "km" else value
+    elif time:
+        block["duree_min"] = round(_minutes(time), 2)
+    pct = _PCT.search(text)
+    zone = _ZONE.search(text)
+    if pct:
+        block["pct_vma"] = int(pct.group(1))
+    elif zone:
+        block["zone_fc"] = int(zone.group(1))
+    if rest:
+        value = float(rest.group(1).replace(",", "."))
+        block["recup_min"] = value / 60 if (rest.group(2) or "").lower() in ("s", "sec") else value
+    if "duree_min" not in block and "distance_m" not in block and reps:
+        bare = re.search(r"[x×]\s*(\d{3,5})\b", head, re.I)  # « 3 x 3000 » : des mètres
+        if bare:
+            block["distance_m"] = float(bare.group(1))
+    if "duree_min" not in block and "distance_m" not in block:
+        return None
+    return block
+
+
+PLAN_CODE = re.compile(r"^\s*\d+\s*km-s\d+-\d+-", re.I)  # « 21KM-S3-4-… » : le code du plan, pas une distance
+
+
+def sketch_blocks(title: str, description: str | None) -> tuple[list[dict], bool]:
+    """(blocs, approché) d'une séance prévue : lus ligne à ligne dans son texte ; à défaut, un seul bloc dont
+    l'intensité vient du nom (« Endurance fondamentale », « VMA courte »…), approché=True. ([], False) sinon."""
+    blocks = []
+    for line in re.split(r"[\n;]|\s\+\s|\s/\s|,\s+(?!r[ée]cup)|\.\s+(?=[A-ZÉÈÀ«])", f"{description or ''}"):
+        line = line.strip(" -•·*.")
+        if line and (block := _block_of(line)):
+            blocks.append(block)
+    title = PLAN_CODE.sub("", title or "")
+    named = [b for part in re.split(r"\s\+\s|,\s+(?!r[ée]cup)", title) if (b := _block_of(part))]
+    if not blocks:
+        blocks = named
+    elif named and not any(b["genre"] == "corps" for b in blocks):
+        # « Côtes 8 × 1 min » : le corps de séance est dans le nom, l'échauffement et le retour au calme dans le texte
+        at = next((i for i, b in enumerate(blocks) if b["genre"] == "calme"), len(blocks))
+        blocks[at:at] = [b for b in named if b["genre"] == "corps"]
+    if description and (pct := _PCT.search(description)):
+        for block in blocks:
+            if block["genre"] == "corps" and not block.get("pct_vma") and not block.get("zone_fc"):
+                block["pct_vma"] = int(pct.group(1))
+    keyword = next(((pct, model) for pattern, pct, model in _KEYWORDS if re.search(pattern, title, re.I)), None)
+    if blocks:
+        if keyword:
+            for block in blocks:
+                if block["genre"] == "corps" and not block.get("pct_vma") and not block.get("zone_fc"):
+                    block["pct_vma"] = keyword[0]
+        return blocks, False
+    if keyword:
+        return [dict(b) for b in keyword[1]], True
+    return [], False
+
+
 def plan(conn: sqlite3.Connection, start: date, end: date, today: date | None = None,
          activities: list | None = None) -> list[dict]:
     """Événements de la période, chacun avec son état : « fait » (une séance du même sport ce jour-là),
@@ -716,6 +819,11 @@ def plan(conn: sqlite3.Connection, start: date, end: date, today: date | None = 
         if found is not None:
             used.add(found["id"])
             matched[row["id"]] = found
+    try:  # les blocs des séances du coach, tels qu'il les a écrits (meta du relais)
+        proposals = {int(p["id"]): p for p in json.loads(db.get_meta(conn, "relais_propositions") or "[]")
+                     if isinstance(p, dict) and str(p.get("id", "")).isdigit()}
+    except (TypeError, ValueError):
+        proposals = {}
     out = []
     for row in events:
         day = date.fromisoformat(row["date"])
@@ -735,6 +843,14 @@ def plan(conn: sqlite3.Connection, start: date, end: date, today: date | None = 
             "coach_id": int(row["uid"][6:]) if (row["uid"] or "").startswith("coach:") and row["uid"][6:].isdigit() else None,
             "seance_nom": done["name"] if done is not None else None, "journee": bool(row["all_day"]),
         })
+        item = out[-1]
+        if row["kind"] == "seance" and item["sport"] not in ("renfo", "souplesse"):
+            coach_item = proposals.get(item["coach_id"]) if item["coach_id"] else None
+            blocks, approx = (coach_item.get("blocs") or [], False) if coach_item else \
+                sketch_blocks(row["title"], row["description"])
+            if blocks:
+                item["blocs"] = blocks
+                item["esquisse_approchee"] = approx
     return out
 
 

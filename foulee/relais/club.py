@@ -226,11 +226,19 @@ def clean_share(payload: Any) -> dict:
     plan = []
     for raw in (payload.get("plan") or [])[:120]:
         if isinstance(raw, dict) and (day := _day(raw.get("date"))) and raw.get("titre"):
-            plan.append({"date": day, "heure": _txt(raw.get("heure"), 5), "titre": _txt(raw.get("titre"), 120),
-                         "type": raw.get("type") if raw.get("type") in ("seance", "course", "autre") else "seance",
-                         "sport": _txt(raw.get("sport"), 20),
-                         "statut": raw.get("statut") if raw.get("statut") in
-                         ("fait", "manque", "aujourdhui", "a_venir", "passe") else None})
+            item = {"date": day, "heure": _txt(raw.get("heure"), 5), "titre": _txt(raw.get("titre"), 120),
+                    "type": raw.get("type") if raw.get("type") in ("seance", "course", "autre") else "seance",
+                    "sport": _txt(raw.get("sport"), 20),
+                    "statut": raw.get("statut") if raw.get("statut") in
+                    ("fait", "manque", "aujourdhui", "a_venir", "passe") else None}
+            try:  # l'esquisse de la séance (blocs lus dans son texte), pour le calendrier du coach
+                blocks = clean_blocks(raw.get("blocs")) if raw.get("blocs") else []
+            except RelayError:
+                blocks = []
+            if blocks:
+                item["blocs"] = blocks
+                item["esquisse_approchee"] = bool(raw.get("esquisse_approchee"))
+            plan.append(item)
     return {"seances": sessions, "jours": sorted(days, key=lambda d: d["date"]), "profil": profile, "plan": plan}
 
 
@@ -658,9 +666,21 @@ def week(content: dict, props: list[dict], monday: date) -> list[dict]:
         done = [_session_brief(s) for s in content["seances"] if s["date"] == day]
         planned = [{"source": "plan", **p} for p in content["plan"] if p["date"] == day and p["type"] != "autre"]
         planned += [{"source": "coach", "id": p["id"], "titre": p["titre"], "sport": p["sport"],
-                     "statut": p["statut"]} for p in props if p["date"] == day]
+                     "statut": p["statut"], "blocs": p.get("blocs") or []} for p in props if p["date"] == day]
         days.append({"date": day, "prevu": planned, "fait": sorted(done, key=lambda s: s.get("debut") or "")})
     return days
+
+
+def month(conn: sqlite3.Connection, student_id: int, content: dict, today: date) -> dict:
+    """Neuf semaines autour d'aujourd'hui (4 passées, la semaine en cours, 4 à venir), jour par jour, comme
+    week() : le grand calendrier des pages coach et élève."""
+    start = _monday(today) - timedelta(days=28)
+    end = start + timedelta(days=63) - timedelta(days=1)
+    props = proposals(conn, student_id, start, end, content["seances"])
+    days = []
+    for offset in range(9):
+        days += week(content, props, start + timedelta(days=7 * offset))
+    return {"debut": start.isoformat(), "fin": end.isoformat(), "jours": days}
 
 
 def tally(days: list[dict]) -> dict:
@@ -742,6 +762,7 @@ def student_page(conn: sqlite3.Connection, coach: sqlite3.Row, student_id: int, 
             "objectif": goal, "objectifs": _upcoming_goals(content["profil"], today),
             "semaine": {"lundi": monday.isoformat(), "jours": days, "bilan": tally(days)},
             "seances": briefs, "jours": content["jours"], "total_28j": total, "propositions": upcoming,
+            "mois": month(conn, student_id, content, today),
             "renfo": renfo_balance(sessions, today),
             "montre": {**garmin.student_flags(conn, student_id), "disponible": garmin.configured()}}
 
@@ -787,6 +808,9 @@ def my_page(conn: sqlite3.Connection, student: sqlite3.Row) -> dict:
                         "traces": sum("trace" in s for s in content["seances"])},
             "propositions": proposals(conn, student["id"], today - timedelta(days=14), today + timedelta(days=90),
                                       content["seances"]),
+            "mois": month(conn, student["id"], content, today),
+            "objectifs": [g for g in [_clean_goal(content["profil"]["objectif"]) if content["profil"].get("objectif")
+                                      else None, *(content["profil"].get("objectifs") or [])] if g and g.get("date")],
             "montre": garmin.status(conn, student)}
 
 

@@ -2,6 +2,7 @@
 // séances prévues de « Ta semaine ». Elles viennent du calendrier relié dans les Réglages (lien iCal : il ne
 // s'affiche jamais, il reste dans le coffre du serveur).
 import * as F from "./format.js";
+import { sketchSVG, totalMinutes as sketchMinutes } from "./sketch.js";
 import { icon } from "./icons.js";
 
 export const SPORT_ICON = {
@@ -170,6 +171,8 @@ function dayPanel(iso, d, today) {
         <div class="aplan-title">${planIcon(p)}<b>${F.escape(p.titre)}</b>
           ${p.type !== "autre" ? `<span class="aplan-state">${icon(STATUS[p.statut]?.icon || "calendar")}${F.escape(STATUS[p.statut]?.label || "")}</span>` : ""}</div>
         <p class="aplan-meta">${F.escape(planMeta(p))}</p>
+        ${p.blocs?.length ? `<div class="aplan-sk">${sketchSVG(p.blocs, { vma: d.vma, height: 34, approx: p.esquisse_approchee })}
+          <small>${p.esquisse_approchee ? "Profil deviné du nom de la séance" : `Environ ${F.escape(F.duration(sketchMinutes(p.blocs, d.vma) * 60))}`}</small></div>` : ""}
         ${p.description ? `<p class="aplan-desc">${F.escape(p.description)}</p>` : ""}
         ${p.coach ? `<a class="aplan-coach" href="#/coach">${icon("user")}Le détail et tes allures dans « Mon coach »</a>` : ""}
         ${p.coach && p.coach_id ? `<a class="aplan-coach" href="/api/coach/seances/${p.coach_id}.fit" download>${icon("download")}Le fichier pour ta montre (.fit)</a>` : ""}
@@ -190,9 +193,11 @@ export const agenda = {
     let data = null;
     body.classList.add("agenda-body");
 
+    const vma = Number(ctx.settings?.vma_kmh) || null;
     const load = async () => {
       const { start, end } = gridBounds(month);
       data = await ctx.get("/api/calendrier", { start: F.isoDate(start), end: F.isoDate(end) });
+      data.vma = vma;
     };
 
     const remember = () => {  // le jour choisi survit au rechargement de la page, sans redessiner la vue
@@ -209,7 +214,7 @@ export const agenda = {
       const acts = data.seances.filter((a) => a.date === iso);
       const extra = acts.filter((a) => !linked.has(a.id));
       const items = [
-        ...plans.map((e) => `<span class="aitem is-${F.escape(e.statut)} is-${F.escape(e.type)}${e.coach ? " is-coach" : ""}">${e.type === "course" ? icon("flag") : e.statut === "fait" ? icon("check") : e.statut === "manque" ? icon("close") : planIcon(e)}<span>${F.escape(e.titre)}</span></span>`),
+        ...plans.map((e) => `<span class="aitem is-${F.escape(e.statut)} is-${F.escape(e.type)}${e.coach ? " is-coach" : ""}">${e.type === "course" ? icon("flag") : e.statut === "fait" ? icon("check") : e.statut === "manque" ? icon("close") : planIcon(e)}<span>${F.escape(e.titre)}</span></span>${e.blocs?.length && e.statut !== "manque" ? `<span class="aday-sk">${sketchSVG(e.blocs, { vma, height: 16, approx: e.esquisse_approchee })}</span>` : ""}`),
         ...extra.map((a) => `<span class="aitem is-extra">${activityLine(a)}</span>`),
       ];
       const dots = [...plans.map((e) => `<i class="adot is-${F.escape(e.statut)} is-${F.escape(e.type)}${e.coach ? " is-coach" : ""}"></i>`), ...extra.map(() => `<i class="adot is-extra"></i>`)].slice(0, 4).join("");

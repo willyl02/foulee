@@ -2,6 +2,7 @@
 import * as api from "./api.js";
 import * as F from "./format.js";
 import { analysisHTML, wireAnalysis } from "./analyse.js";
+import { monthCalendar } from "./coach-cal.js";
 import { icon } from "./icons.js";
 import {
   avatar, blocksHtml, dayLabel, dur, km, loading, mountThread, rdel, rget, sessionFigures, sportIcon, statusChip, traceSvg,
@@ -119,6 +120,9 @@ export async function renderStudent(ctx, sid) {
     `<span>Partage : ${F.escape(shareSummary(data.accord))}${data.partage_recu_le ? ` · données reçues ${F.escape(F.relative(data.partage_recu_le))}` : ""}</span>`,
     `<a class="btn" href="#/coach/messages?fil=eleve-${sid}">${icon("chat")}Message</a><a class="btn btn-primary" href="#/coach/proposer?eleves=${sid}">${icon("plus")}Proposer une séance</a>`)}
     ${ctx.tabs("eleves")}
+    ${data.mois ? `<section class="coach-card co-cal"><h2>${icon("calendar")}Son calendrier <span class="co-sub">4 semaines passées, celle-ci, 4 à venir</span></h2>
+      ${monthCalendar(data.mois, { vma, goals: [goal, ...(data.objectifs || [])].filter(Boolean), coachSide: true,
+        sessionHref: (s) => `#/coach/eleve/${sid}/seance/${encodeURIComponent(s.cle)}` })}</section>` : ""}
     <div class="co-grid2">
       <div class="co-page">
         <section class="coach-card"><div class="co-card-head"><h2>${icon("calendar")}${semaine && week.lundi !== thisMonday ? `Semaine du ${F.escape(F.dateLong(week.lundi, { weekday: false }))}` : "Sa semaine"}${b.prevues ? ` : ${b.faites} faite${b.faites > 1 ? "s" : ""} sur ${b.prevues} prévue${b.prevues > 1 ? "s" : ""}` : b.seances ? ` : ${b.seances} séance${b.seances > 1 ? "s" : ""}` : ""}</h2>
