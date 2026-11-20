@@ -2464,8 +2464,8 @@ details.co-cal > summary:focus-visible { outline: 2px solid var(--focus); outlin
 .cc-pl.done svg { color: var(--good); }
 .cc-pl.miss svg { color: var(--bad); }
 .cc-pl .sketch { height: 14px; }
-/* les esquisses, plus franches que dans le tableau des allures : elles doivent se lire en petit */
-.cc { --vb-recup: #9fc5e8; --vb-ef: #8fc27a; --vb-es: #4f9a37; --vb-seuil: #e9b824; --vb-pa: #e58a2e; --vb-vma: #d23b3b; --vb-lactique: #6f55b5; }
+/* les esquisses (calendriers, bibliothèque), plus franches que dans le tableau des allures : elles se lisent en petit */
+.sketch { --vb-recup: #9fc5e8; --vb-ef: #8fc27a; --vb-es: #4f9a37; --vb-seuil: #e9b824; --vb-pa: #e58a2e; --vb-vma: #d23b3b; --vb-lactique: #6f55b5; }
 .cc .sketch.is-approx { opacity: 0.45; }
 .cc-done { display: block; padding: 2px 6px; border-radius: 6px; font-size: 12px; line-height: 16px; color: var(--ink);
   background: color-mix(in srgb, var(--s1) 16%, var(--surface)); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; text-decoration: none; }
