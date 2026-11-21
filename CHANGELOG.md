@@ -4,6 +4,15 @@ Les versions « bêta » (par exemple 0.4.0b1) sont des avant-premières : elles
 sur le canal bêta (Réglages → Application → Mises à jour → « Recevoir les versions bêta »), puis sortent en
 version stable une fois éprouvées.
 
+## 0.8.3b1 — 21 novembre 2026 (bêta)
+
+- **Sites externes** (Réglages → Club et coach → Sites externes), sur le modèle de Club en ligne, qui garde sa place
+  à part : d'autres sites (la FFA, ta ligue, un site de course…), jusqu'à huit, chacun avec son entrée dans la colonne
+  de gauche sous l'application partenaire, et la même page (précédent, suivant, recharger, ouvrir dans le
+  navigateur). Chaque site peut avoir **son logo** à gauche de son nom : un PNG carré (ou presque) de 64 à 512 pixels,
+  200 Ko au plus, gardé sur ta machine ; sans logo, le petit globe. Renommer, changer l'adresse, monter, retirer du
+  menu ou supprimer, tout s'enregistre tout seul.
+
 ## 0.8.2 — 21 novembre 2026
 
 La version stable qui réunit les bêtas 0.8.2 ; le détail de chacune est dans l'historique des versions (CHANGELOG.md sur GitHub).

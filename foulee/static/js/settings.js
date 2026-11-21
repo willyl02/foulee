@@ -1,11 +1,11 @@
-// Page « Réglages » : profil et logo, utilisateurs, mon club, application partenaire, coureur, objectifs, horaires, zones FC et d'allure,
+// Page « Réglages » : profil et logo, utilisateurs, mon club, application partenaire, sites externes, coureur, objectifs, horaires, zones FC et d'allure,
 // synchro, vues, sauvegarde ; puis l'installation (clé Garmin, dossier, Claude Desktop, mises à jour :
 // voir system.js).
 import * as api from "./api.js";
 import * as F from "./format.js";
 import { icon } from "./icons.js";
 import { goalManager } from "./goals.js";
-import { partnerPanel } from "./appli-externe.js";
+import { partnerPanel, sitesPanel } from "./appli-externe.js";
 import { clubPanel } from "./settings-club.js";
 import { profilePanel, transferPanel } from "./settings-profile.js";
 import { scheduleEditor } from "./settings-schedule.js";
@@ -51,6 +51,11 @@ export function renderSettings(page, boot, { onSaved, onProfile, refreshBoot, to
         <h2>Application partenaire</h2>
         <p class="intro">Le site de ton club (par défaut Club en ligne : entraînements, compétitions, annuaire…) directement dans Foulée, avec son entrée dans la colonne de gauche.</p>
         <div data-partner></div>
+      </section>
+      <section data-section="sites">
+        <h2>Sites externes</h2>
+        <p class="intro">D'autres sites dans Foulée (la FFA, ta ligue, un site de course…), chacun avec son entrée dans la colonne de gauche, sous l'application partenaire, et son logo si tu veux.</p>
+        <div data-sites></div>
       </section>
     </div>
     <form class="settings" id="settings-form" novalidate>
@@ -148,6 +153,8 @@ export function renderSettings(page, boot, { onSaved, onProfile, refreshBoot, to
   if (principal) usersPanel(page.querySelector("[data-users]"), boot, { toast, onChange: () => refreshBoot() });
   clubPanel(page.querySelector("[data-club]"), boot, { toast, onChange: () => refreshBoot() });
   partnerPanel(page.querySelector("[data-partner]"), boot, { toast, onChange: () => refreshBoot() });
+  sitesPanel(page.querySelector("[data-sites]"), boot, { toast, onChange: () => refreshBoot(),
+    rules: "PNG carré (ou presque), entre 64 × 64 et 512 × 512 pixels, 200 Ko au plus, fond transparent conseillé ; sans logo, le petit globe." });
   const schedule = scheduleEditor(page.querySelector("[data-schedule]"), s.horaires);
   const hrZones = hrZonesEditor(page.querySelector("[data-hr-zones]"), boot, profile);
   const paceZones = paceZonesEditor(page.querySelector("[data-pace-zones]"), boot, vma);

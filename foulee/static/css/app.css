@@ -681,6 +681,18 @@ details.token .key-row { margin-top: 6px; }
 .xa-form { align-items: start; margin: 12px 0; }
 .xa-url { grid-column: span 2; }
 @media (max-width: 640px) { .xa-label { display: none; } .xa-url { grid-column: auto; } }
+.site-logo { width: 18px; height: 18px; object-fit: contain; flex: none; border-radius: 3px; }
+.site-title-logo { display: inline-grid; place-items: center; width: 26px; height: 26px; margin-right: 8px; vertical-align: -3px; }
+.site-title-logo .site-logo, .site-title-logo svg { width: 24px; height: 24px; }
+.site-list { list-style: none; margin: 10px 0 14px; padding: 0; display: grid; gap: 10px; }
+.site-row { display: flex; gap: 12px; align-items: flex-start; padding: 12px; border: 1px solid var(--hair); border-radius: 12px; background: var(--surface); }
+.site-logo-box { width: 44px; height: 44px; flex: none; display: grid; place-items: center; border-radius: 10px; background: var(--surface-2); }
+.site-logo-box .site-logo, .site-logo-box svg { width: 28px; height: 28px; }
+.site-fields { flex: 1; min-width: 0; display: grid; grid-template-columns: minmax(120px, 1fr) minmax(180px, 2fr); gap: 8px; }
+.site-actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.site-actions .check { margin-right: auto; }
+.site-move { display: inline-flex; gap: 4px; margin-left: auto; }
+@media (max-width: 640px) { .site-fields { grid-template-columns: 1fr; } }
 .to-top { position: fixed; right: 22px; bottom: 22px; z-index: 40; display: grid; place-items: center; width: 44px; height: 44px;
   border-radius: 50%; border: 0; background: var(--btn-ink); color: var(--btn-text); box-shadow: var(--shadow); cursor: pointer; }
 .to-top svg { width: 20px; height: 20px; }

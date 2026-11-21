@@ -1,6 +1,6 @@
 // Foulée : chef d'orchestre de l'interface (navigation, vues, tuiles, édition, synchro, thème).
 import * as api from "./api.js";
-import { renderPartnerPage } from "./appli-externe.js";
+import { renderPartnerPage, siteIcon } from "./appli-externe.js";
 import * as C from "./charts.js";
 import * as E from "./editor.js";
 import * as F from "./format.js";
@@ -306,13 +306,16 @@ function cycleTheme() {
 function renderNav() {
   const nav = $("#nav");
   const partner = state.boot?.partenaire?.actif ? state.boot.partenaire : null;
+  const sites = (state.boot?.sites_externes || []).filter((x) => x.actif);
   const coach = state.boot?.coach;
   // Trois parties, séparées d'un trait : les vues (à réordonner en les glissant), l'application partenaire, le coach
   nav.innerHTML = state.views.map((v, i) => `<button class="nav-item" type="button" data-id="${F.escape(v.id)}" data-index="${i}"
       ${v.id === state.viewId && !isOtherPage() ? 'aria-current="page"' : ""} draggable="true" title="Glisse pour changer l'ordre (ou Alt + ↑ ↓)">
       ${icon(v.icon)}<span>${F.escape(v.name)}</span></button>`).join("")
     + `<button class="nav-item nav-add" type="button" data-new>${icon("plus")}<span>Nouvelle vue</span></button>`
-    + (partner ? `<div class="nav-sep" role="separator"></div><a class="nav-item nav-partner" href="#/partenaire" ${location.hash.startsWith("#/partenaire") ? 'aria-current="page"' : ""}>${icon("globe")}<span>${F.escape(partner.nom)}</span></a>` : "")
+    + (partner || sites.length ? `<div class="nav-sep" role="separator"></div>` : "")
+    + (partner ? `<a class="nav-item nav-partner" href="#/partenaire" ${location.hash.startsWith("#/partenaire") ? 'aria-current="page"' : ""}>${icon("globe")}<span>${F.escape(partner.nom)}</span></a>` : "")
+    + sites.map((x) => `<a class="nav-item nav-site" href="#/site/${encodeURIComponent(x.id)}" ${location.hash === `#/site/${x.id}` ? 'aria-current="page"' : ""}>${siteIcon(x)}<span>${F.escape(x.nom)}</span></a>`).join("")
     + (coach ? `<div class="nav-sep" role="separator"></div><a class="nav-item nav-coach" href="#/coach" ${location.hash.startsWith("#/coach") ? 'aria-current="page"' : ""}>${icon(coach.role === "coach" ? "club" : "user")}<span>${coachPageLabel(coach)}</span><span class="co-badge nav-badge" data-coach-unread ${coachUnread() ? "" : "hidden"}>${coachUnread()}</span></a>` : "");
   nav.querySelectorAll("[data-id]").forEach((b) => {
     b.addEventListener("click", () => { location.hash = `#/vue/${encodeURIComponent(b.dataset.id)}`; closeMenu(); });
@@ -377,7 +380,7 @@ function wireNavDrag(item) {
 
 function isSettings() { return location.hash.startsWith("#/reglages"); }
 /** Une page qui n'est pas une vue : réglages, bienvenue, aide, retours. */
-function isOtherPage() { return /^#\/(reglages|bienvenue|aide|retours|coach|partenaire)/.test(location.hash); }
+function isOtherPage() { return /^#\/(reglages|bienvenue|aide|retours|coach|partenaire|site\/)/.test(location.hash); }
 
 function markRailLinks(path) {
   [["#help-link", "/aide"], ["#feedback-link", "/retours"]].forEach(([selector, page]) => {
@@ -398,6 +401,8 @@ function route() {
   if (path === "/retours") { showFeedback(params); return; }
   if (path === "/coach" || path.startsWith("/coach/")) { showCoach(path, params); return; }
   if (path === "/partenaire") { showPartner(); return; }
+  const siteMatch = path.match(/^\/site\/([^/]+)/);
+  if (siteMatch) { showPartner(decodeURIComponent(siteMatch[1])); return; }
   const match = path.match(/^\/vue\/([^/]+)/);
   const wanted = match ? decodeURIComponent(match[1]) : null;
   const view = state.views.find((v) => v.id === wanted) || state.views[0];
@@ -412,7 +417,7 @@ function currentView() { return state.views.find((v) => v.id === state.viewId); 
 
 function rerender() {
   // Formulaires en cours (bienvenue, retours) ou texte sans graphique (aide) : on ne redessine pas
-  if (/^#\/(bienvenue|aide|retours|coach|partenaire)/.test(location.hash)) return;
+  if (/^#\/(bienvenue|aide|retours|coach|partenaire|site\/)/.test(location.hash)) return;
   if (isSettings()) showSettings(); else renderView();
 }
 
@@ -847,13 +852,13 @@ function showCoach(path = "/coach", params = new URLSearchParams()) {
   renderCoachPage($("#page"), state.boot, { toast, path, params, onUnlinked: async () => { await refreshBoot(); renderNav(); } });
 }
 
-function showPartner() {
+function showPartner(siteId = null) {
   disposePass();
   state.editing = false;
   closeMenu();
   renderNav();
   window.scrollTo(0, 0);
-  renderPartnerPage($("#page"), state.boot, { keep: (disposable) => state.pass.disposers.push(disposable) });
+  renderPartnerPage($("#page"), state.boot, { siteId, keep: (disposable) => state.pass.disposers.push(disposable) });
 }
 
 function showFeedback(params) {

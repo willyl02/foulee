@@ -292,6 +292,7 @@ def create_app() -> FastAPI:
                 "club": club.summary(settings.get("club")), "club_licences": club.LICENCE_TYPES,
                 "club_logo": club.logo_version(),  # date du logo (pour l'adresse de l'image), ou None
                 "partenaire": partenaire.resolve(settings.get("partenaire")),
+                "sites_externes": partenaire.resolve_sites(settings.get("sites_externes")),
                 "garmin_profil": analysis.garmin_profile(conn),
                 "planning": schedule.describe(settings["horaires"]),
                 "modeles_horaires": schedule.MODELES,
@@ -693,6 +694,34 @@ def create_app() -> FastAPI:
     @app.delete("/api/club/logo")
     def delete_club_logo() -> dict:
         return club.delete_logo()
+
+    # Sites externes : le logo de chaque site (un PNG, rangé avec les données du profil)
+    @app.get("/api/sites/{site_id}/logo")
+    def get_site_logo(site_id: str):
+        try:
+            path = partenaire.logo_path(site_id)
+        except partenaire.LogoError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        if not path.exists():
+            raise HTTPException(404, "Pas de logo")
+        return FileResponse(path, media_type="image/png",
+                            headers={"Cache-Control": "no-cache", "X-Content-Type-Options": "nosniff"})
+
+    @app.put("/api/sites/{site_id}/logo")
+    async def put_site_logo(site_id: str, request: Request) -> dict:
+        if int(request.headers.get("content-length") or 0) > partenaire.LOGO_BYTES:
+            raise HTTPException(413, "Logo trop lourd : 200 Ko au plus.")
+        try:
+            return partenaire.save_logo(site_id, await request.body())
+        except partenaire.LogoError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+    @app.delete("/api/sites/{site_id}/logo")
+    def delete_site_logo(site_id: str) -> dict:
+        try:
+            return partenaire.delete_logo(site_id)
+        except partenaire.LogoError as exc:
+            raise HTTPException(404, str(exc)) from exc
 
     @app.post("/api/club/fiche")
     def club_sheet(payload: dict = Body(...)) -> dict:

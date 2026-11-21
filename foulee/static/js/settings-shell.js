@@ -11,8 +11,8 @@ export const THEMES = [
     sections: ["zones-fc", "zones", "synchro", "vues"] },
   { id: "connexions", label: "Connexions", icon: "sync", hint: "Garmin, Withings, Strava, calendrier",
     sections: ["cle", "withings", "strava", "calendrier"] },
-  { id: "club", label: "Club et coach", icon: "club", hint: "Mon club, application partenaire, coach, notifications",
-    sections: ["club", "partenaire", "coach", "notifications"] },
+  { id: "club", label: "Club et coach", icon: "club", hint: "Mon club, application partenaire, sites externes, coach, notifications",
+    sections: ["club", "partenaire", "sites", "coach", "notifications"] },
   { id: "application", label: "Application", icon: "settings", hint: "Utilisateurs, sauvegarde, données, mises à jour",
     sections: ["utilisateurs", "sauvegarde", "dossier", "claude", "app", "telephone", "lan", "maj", "installation", "distant", "apropos"] },
 ];

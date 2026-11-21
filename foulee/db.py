@@ -223,6 +223,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "vameval": None,           # dernier test VAMEVAL saisi (« 12:40 »), pour la page d'accueil
     "club": None,              # club FFA du profil : numéro, coordonnées, licence (voir club.py)
     "partenaire": None,        # application partenaire dans la colonne de gauche (voir partenaire.py)
+    "sites_externes": None,    # autres sites web, sous l'application partenaire (voir partenaire.py)
     # synchro automatique : délai par source, en minutes (de 30 min à 12 h, voir sync.py)
     "synchro_auto": {"garmin": 180, "withings": 180, "strava": 180, "calendrier": 180},
 }

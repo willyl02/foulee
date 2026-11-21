@@ -66,6 +66,11 @@ def clean(key: str, value: Any) -> Any:
             return partenaire.clean(value)
         except partenaire.PartnerError as exc:
             raise SettingsError(str(exc)) from None
+    if key == "sites_externes":
+        try:
+            return partenaire.clean_sites(value)
+        except partenaire.PartnerError as exc:
+            raise SettingsError(str(exc)) from None
     if key == "vma_kmh":
         return _number(value, 6, 30, "VMA")
     if key == "fc_max":
