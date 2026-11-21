@@ -4,6 +4,17 @@ Les versions « bêta » (par exemple 0.4.0b1) sont des avant-premières : elles
 sur le canal bêta (Réglages → Application → Mises à jour → « Recevoir les versions bêta »), puis sortent en
 version stable une fois éprouvées.
 
+## 0.8.3b7 — 22 novembre 2026 (bêta)
+
+- **Les séances prévues du calendrier Garmin dessinées telles qu'elles sont.** Le calendrier de Garmin ne donne que
+  leur nom ; Foulée demande maintenant leur contenu à Garmin pendant la synchro (échauffement, répétitions et
+  récupérations, retour au calme, allures ou zones visées) et les dessine fidèlement, dans la vue Calendrier, sur
+  « Aujourd'hui », dans les pages coach et élève (ton coach voit donc la vraie séance), au lieu d'un profil deviné du
+  nom. Exemple : « Endurance de Force : Avis de tempête », 20 min d'échauffement, 7 × 30 s rapides et 3 min de
+  récup. Leur vrai sport aussi : une séance de renfo n'est plus prise pour une course. Si la clé API de Garmin ne
+  donne pas accès aux séances, Foulée le note dans son journal et garde le profil deviné (nouvel essai une semaine
+  plus tard).
+
 ## 0.8.3b6 — 21 novembre 2026 (bêta)
 
 - **La vue « Calendrier »** (colonne de gauche) prend le même sélecteur que le calendrier des pages coach et élève :
