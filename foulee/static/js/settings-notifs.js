@@ -41,7 +41,7 @@ export async function notificationsPanel(box, { toast }) {
     return `<div class="nf-card">${head(verified ? `<button class="btn btn-ghost btn-small" type="button" data-mail-cancel>Annuler</button>` : "")}
       <ol class="nf-steps">
         <li><b>Ton adresse</b>
-          <div class="nf-row"><input type="text" inputmode="email" autocomplete="email" spellcheck="false" data-mail-address placeholder="prenom.nom@exemple.fr" value="${F.escape(waiting || "")}">
+          <div class="nf-row"><input type="text" inputmode="email" autocomplete="email" spellcheck="false" data-mail-address placeholder="ton adresse e-mail" value="${F.escape(waiting || "")}">
             <button class="btn btn-small" type="button" data-mail-send>${icon("chat")}${waiting ? "Renvoyer un code" : "Recevoir un code"}</button></div></li>
         <li class="${waiting ? "" : "nf-off"}"><b>Le code reçu</b>${waiting ? ` à ${F.escape(waiting)} (valable 30 minutes ; regarde aussi dans les indésirables)` : " : six chiffres, par e-mail"}
           <div class="nf-row"><input type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="7" data-mail-code placeholder="123456" ${waiting ? "" : "disabled"}>
