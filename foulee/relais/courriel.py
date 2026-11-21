@@ -157,6 +157,16 @@ def send(to: str, subject: str, text: str, *, footer: str = FOOTER) -> None:
                         "authentifié chez lui ?") from None
     except smtplib.SMTPRecipientsRefused:
         raise MailError("Le service d'envoi refuse cette adresse de destination.") from None
+    except smtplib.SMTPResponseException as exc:
+        reply = exc.smtp_error.decode("utf-8", "replace") if isinstance(exc.smtp_error, bytes) else str(exc.smtp_error)
+        reply = " ".join(reply.split())[:160]
+        if exc.smtp_code == 450 and "activated" in reply.lower():
+            raise MailError("Le service d'envoi n'a pas encore activé l'envoi d'e-mails transactionnels pour ce "
+                            "compte : chez Brevo, demande l'activation au support (ticket depuis ton compte).") from None
+        if exc.smtp_code == 525:
+            raise MailError("Le service d'envoi refuse l'adresse IP du relais : ajoute-la à ses IP autorisées "
+                            "(chez Brevo : Sécurité → IP autorisées), ou désactive ce blocage.") from None
+        raise MailError(f"Le service d'envoi a refusé l'e-mail (code {exc.smtp_code} : {reply}).") from None
     except smtplib.SMTPException as exc:
         raise MailError(f"Le service d'envoi a refusé l'e-mail ({type(exc).__name__}).") from None
     except (socket.timeout, TimeoutError):

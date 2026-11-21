@@ -267,3 +267,16 @@ def test_cli_sets_and_tests_the_email_service(monkeypatch, capsys):
     assert cli.main(["relais", "email", "tester", "william@exemple.fr"]) == 0
     assert box[0]["To"] == "william@exemple.fr" and "✓" in capsys.readouterr().out
     assert cli.main(["relais", "email", "retirer"]) == 0 and courriel.settings() is None
+
+
+def test_brevo_refusals_say_what_to_do(monkeypatch):
+    courriel.save("smtp-relay.brevo.com", 587, "9a1b2c@smtp-brevo.com", SMTP_KEY, "notifications@foulee-coach.com")
+    for code, reply, expected in [(450, b"Your SMTP account is not yet activated", "activation"),
+                                  (525, b"IP not authorized", "IP"), (554, b"Sender blocked", "code 554")]:
+        def refuse(data, message, code=code, reply=reply):
+            raise smtplib.SMTPDataError(code, reply)
+
+        monkeypatch.setattr(courriel, "SENDER", refuse)
+        with pytest.raises(courriel.MailError) as err:
+            courriel.send("lucas@exemple.fr", "Essai", "Bonjour")
+        assert expected in str(err.value) and SMTP_KEY not in str(err.value)
