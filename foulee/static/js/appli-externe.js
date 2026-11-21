@@ -10,9 +10,19 @@ function host(url) {
   try { return new URL(url).host; } catch (e) { return url; }
 }
 
-/** Le logo d'un site externe (ou le globe). */
-export function siteIcon(site) {
-  return site?.logo ? `<img class="site-logo" src="/api/sites/${encodeURIComponent(site.id)}/logo?v=${site.logo}" alt="" width="18" height="18">` : icon("globe");
+/** Le logo d'un site externe ou de l'application partenaire (id « partenaire »), ou le globe. */
+export function siteIcon(site, id = site?.id) {
+  return site?.logo ? `<img class="site-logo" src="/api/sites/${encodeURIComponent(id)}/logo?v=${site.logo}" alt="" width="18" height="18">` : icon("globe");
+}
+
+const LOGO_RULES = "PNG carré (ou presque), entre 64 × 64 et 512 × 512 pixels, 200 Ko au plus, fond transparent conseillé ; sans logo, le petit globe.";
+
+/** Importer ou retirer un logo (application partenaire ou site externe) ; renvoie la nouvelle date du logo. */
+async function sendLogo(id, file, toast) {
+  if (file.size > 200 * 1024) throw new Error(`Logo trop lourd (${Math.round(file.size / 1024)} Ko) : 200 Ko au plus.`);
+  const body = await api.putBlob(`/api/sites/${encodeURIComponent(id)}/logo`, file);
+  toast("Logo enregistré.");
+  return body.logo;
 }
 
 /** La page : barre d'outils et cadre, qui prend toute la hauteur restante de la fenêtre. siteId : un site externe. */
@@ -30,7 +40,7 @@ export function renderPartnerPage(page, boot, { keep, siteId = null }) {
   }
   page.innerHTML = `
     <header class="head xa-head">
-      <div><h1>${siteId ? `<span class="site-title-logo">${siteIcon(site)}</span>` : ""}${F.escape(app.nom)}</h1><div class="head-sub"><span>${F.escape(host(app.adresse))}</span></div></div>
+      <div><h1><span class="site-title-logo">${siteId ? siteIcon(site) : siteIcon(app, "partenaire")}</span>${F.escape(app.nom)}</h1><div class="head-sub"><span>${F.escape(host(app.adresse))}</span></div></div>
       <div class="xa-bar" role="toolbar" aria-label="Navigation dans ${F.escape(app.nom)}">
         <button class="btn icon-btn" type="button" data-back title="Précédent" aria-label="Précédent">${icon("left")}</button>
         <button class="btn icon-btn" type="button" data-forward title="Suivant" aria-label="Suivant">${icon("right")}</button>
@@ -68,6 +78,12 @@ export function partnerPanel(box, boot, { toast, onChange }) {
       <label class="field xa-url"><span>Adresse</span><input type="text" inputmode="url" data-k="adresse" maxlength="500" value="${F.escape(app.adresse || "")}" placeholder="https://app.clubenligne.fr/"
         spellcheck="false" autocomplete="off"><span class="hint">Tu peux viser une page précise en ajoutant la fin de son adresse, par exemple <code>https://app.clubenligne.fr/entrainements</code> (copie-la depuis ton navigateur).</span></label>
     </div>
+    <div class="site-logo-line">
+      <div class="site-logo-box" data-logo-preview title="Logo (${F.escape(LOGO_RULES)})">${siteIcon(app, "partenaire")}</div>
+      <div><b>Logo dans le menu</b><span class="hint">${F.escape(LOGO_RULES)}</span>
+        <div class="inline-actions"><label class="btn btn-small btn-ghost">${icon("upload")}<span data-logo-label>${app.logo ? "Changer le logo" : "Importer un logo"}</span><input type="file" accept="image/png" data-logo hidden></label>
+          <button class="btn btn-small btn-ghost" type="button" data-nologo ${app.logo ? "" : "hidden"}>${icon("globe")}Remettre le globe</button></div></div>
+    </div>
     <div class="inline-actions">
       <button class="btn btn-primary" type="button" data-save>${icon("check")}Enregistrer</button>
       <a class="btn" data-try href="${F.escape(app.adresse || "")}" target="_blank" rel="noopener">${icon("external")}Essayer l'adresse</a>
@@ -96,10 +112,27 @@ export function partnerPanel(box, boot, { toast, onChange }) {
     save("Club en ligne remis par défaut.");
   });
   input("adresse").addEventListener("input", () => { box.querySelector("[data-try]").href = input("adresse").value.trim() || "#"; });
+  const showLogo = (version) => {
+    app.logo = version;
+    box.querySelector("[data-logo-preview]").innerHTML = siteIcon(app, "partenaire");
+    box.querySelector("[data-logo-label]").textContent = version ? "Changer le logo" : "Importer un logo";
+    box.querySelector("[data-nologo]").hidden = !version;
+  };
+  box.querySelector("[data-logo]").addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
+    try { showLogo(await sendLogo("partenaire", file, toast)); await onChange?.(); }
+    catch (err) { toast(err.message, { error: true }); }
+  });
+  box.querySelector("[data-nologo]").addEventListener("click", async () => {
+    try { await api.del("/api/sites/partenaire/logo"); showLogo(null); toast("Le globe est remis."); await onChange?.(); }
+    catch (err) { toast(err.message, { error: true }); }
+  });
 }
 
 /** Réglages → Sites externes : d'autres sites, chacun avec son entrée dans la colonne de gauche et son logo. */
-export function sitesPanel(box, boot, { toast, onChange, rules }) {
+export function sitesPanel(box, boot, { toast, onChange, rules = LOGO_RULES }) {
   let sites = (boot.sites_externes || []).map((x) => ({ ...x }));
   const send = async (list, message) => {
     const res = await api.put("/api/settings", { sites_externes: list.map(({ id, nom, adresse, actif }) => ({ id, nom, adresse, actif })) });
@@ -166,11 +199,9 @@ export function sitesPanel(box, boot, { toast, onChange, rules }) {
       li.querySelector("[data-logo]").addEventListener("change", async (e) => {
         const file = e.target.files[0];
         if (!file) return;
-        if (file.size > 200 * 1024) { toast(`Logo trop lourd (${Math.round(file.size / 1024)} Ko) : 200 Ko au plus.`, { error: true }); return; }
         try {
-          const body = await api.putBlob(`/api/sites/${encodeURIComponent(id)}/logo`, file);
-          sites = sites.map((x) => x.id === id ? { ...x, logo: body.logo } : x);
-          toast("Logo enregistré.");
+          const version = await sendLogo(id, file, toast);
+          sites = sites.map((x) => x.id === id ? { ...x, logo: version } : x);
           await onChange?.();
           draw();
         } catch (err) { toast(err.message, { error: true }); }

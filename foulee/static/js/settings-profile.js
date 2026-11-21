@@ -90,7 +90,8 @@ export function profilePanel(box, boot, { toast, onProfile }) {
     holder.querySelector("[data-zoom]").addEventListener("input", (e) => { crop.zoom = Number(e.target.value); drawCrop(); });
     holder.querySelector("[data-cancel-photo]").addEventListener("click", () => { holder.hidden = true; crop = null; });
     holder.querySelector("[data-save-photo]").addEventListener("click", async (e) => {
-      e.currentTarget.disabled = true;
+      const btn = e.currentTarget; // après un await, e.currentTarget ne vaut plus rien
+      btn.disabled = true;
       const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.9));
       try {
         state = await api.putBlob("/api/profil/photo", blob);
@@ -99,7 +100,7 @@ export function profilePanel(box, boot, { toast, onProfile }) {
         crop = null;
         render();
         toast("Photo enregistrée : elle sert aussi de logo (change-le ci-dessous si tu préfères).");
-      } catch (err) { toast(err.message, { error: true }); e.currentTarget.disabled = false; }
+      } catch (err) { toast(err.message, { error: true }); btn.disabled = false; }
     });
   }
 

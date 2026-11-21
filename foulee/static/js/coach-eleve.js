@@ -217,9 +217,10 @@ function bindWatch(ctx, page, data, first) {
   });
   page.querySelector("[data-watch-unlink]")?.addEventListener("click", async (e) => {
     if (!window.confirm("Délier ton compte Garmin ? Foulée perd le droit d'y déposer des séances (l'autorisation est aussi retirée chez Garmin). Les séances déjà envoyées restent dans ton calendrier Garmin.")) return;
-    e.currentTarget.disabled = true;
+    const btn = e.currentTarget; // après un await, e.currentTarget ne vaut plus rien
+    btn.disabled = true;
     try { await api.del("/api/coach/garmin"); toast("Compte Garmin délié."); renderMyCoach(ctx); }
-    catch (err) { toast(err.message); e.currentTarget.disabled = false; }
+    catch (err) { toast(err.message); btn.disabled = false; }
   });
 }
 

@@ -153,8 +153,7 @@ export function renderSettings(page, boot, { onSaved, onProfile, refreshBoot, to
   if (principal) usersPanel(page.querySelector("[data-users]"), boot, { toast, onChange: () => refreshBoot() });
   clubPanel(page.querySelector("[data-club]"), boot, { toast, onChange: () => refreshBoot() });
   partnerPanel(page.querySelector("[data-partner]"), boot, { toast, onChange: () => refreshBoot() });
-  sitesPanel(page.querySelector("[data-sites]"), boot, { toast, onChange: () => refreshBoot(),
-    rules: "PNG carré (ou presque), entre 64 × 64 et 512 × 512 pixels, 200 Ko au plus, fond transparent conseillé ; sans logo, le petit globe." });
+  sitesPanel(page.querySelector("[data-sites]"), boot, { toast, onChange: () => refreshBoot() });
   const schedule = scheduleEditor(page.querySelector("[data-schedule]"), s.horaires);
   const hrZones = hrZonesEditor(page.querySelector("[data-hr-zones]"), boot, profile);
   const paceZones = paceZonesEditor(page.querySelector("[data-pace-zones]"), boot, vma);

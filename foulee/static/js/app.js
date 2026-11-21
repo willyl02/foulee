@@ -314,7 +314,7 @@ function renderNav() {
       ${icon(v.icon)}<span>${F.escape(v.name)}</span></button>`).join("")
     + `<button class="nav-item nav-add" type="button" data-new>${icon("plus")}<span>Nouvelle vue</span></button>`
     + (partner || sites.length ? `<div class="nav-sep" role="separator"></div>` : "")
-    + (partner ? `<a class="nav-item nav-partner" href="#/partenaire" ${location.hash.startsWith("#/partenaire") ? 'aria-current="page"' : ""}>${icon("globe")}<span>${F.escape(partner.nom)}</span></a>` : "")
+    + (partner ? `<a class="nav-item nav-partner" href="#/partenaire" ${location.hash.startsWith("#/partenaire") ? 'aria-current="page"' : ""}>${siteIcon(partner, "partenaire")}<span>${F.escape(partner.nom)}</span></a>` : "")
     + sites.map((x) => `<a class="nav-item nav-site" href="#/site/${encodeURIComponent(x.id)}" ${location.hash === `#/site/${x.id}` ? 'aria-current="page"' : ""}>${siteIcon(x)}<span>${F.escape(x.nom)}</span></a>`).join("")
     + (coach ? `<div class="nav-sep" role="separator"></div><a class="nav-item nav-coach" href="#/coach" ${location.hash.startsWith("#/coach") ? 'aria-current="page"' : ""}>${icon(coach.role === "coach" ? "club" : "user")}<span>${coachPageLabel(coach)}</span><span class="co-badge nav-badge" data-coach-unread ${coachUnread() ? "" : "hidden"}>${coachUnread()}</span></a>` : "");
   nav.querySelectorAll("[data-id]").forEach((b) => {

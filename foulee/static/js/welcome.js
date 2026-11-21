@@ -164,7 +164,8 @@ export function renderWelcome(page, boot, { toast, onImport, onDone }) {
             <span class="hint" data-take-status>Copie : l'ancien dossier n'est pas modifié.</span></div>
         </div>`;
       box.querySelector("[data-take]").addEventListener("click", async (event) => {
-        event.currentTarget.disabled = true;
+        const btn = event.currentTarget; // après un await, event.currentTarget ne vaut plus rien
+        btn.disabled = true;
         const status = box.querySelector("[data-take-status]");
         status.textContent = "Copie en cours…";
         try {
@@ -173,7 +174,7 @@ export function renderWelcome(page, boot, { toast, onImport, onDone }) {
           setTimeout(() => location.reload(), 800);
         } catch (err) {
           status.textContent = err.message;
-          event.currentTarget.disabled = false;
+          btn.disabled = false;
         }
       });
     }).catch(() => { /* rien à proposer */ });

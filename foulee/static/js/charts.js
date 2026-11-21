@@ -1,6 +1,7 @@
 // Habillage commun des graphiques ECharts : couleurs lues dans le CSS (clair / sombre),
 // traits fins, grille discrète, info-bulles au survol.
 import * as F from "./format.js";
+import { icon } from "./icons.js";
 
 const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -23,10 +24,133 @@ export function palette() {
 export function mount(el, option, onReady) {
   const chart = echarts.init(el, null, { renderer: "canvas" });
   chart.setOption(option);
-  const observer = new ResizeObserver(() => chart.resize());
+  let zoom = zoomable(el, chart, option);
+  const observer = new ResizeObserver(() => {
+    chart.resize();
+    // un graphique monté avant d'avoir sa taille (onglet caché, tuile qui s'ouvre) gagne son zoom ensuite
+    if (!zoom && el.clientHeight >= ZOOM_MIN_HEIGHT) zoom = zoomable(el, chart, option);
+  });
   observer.observe(el);
   if (onReady) onReady(chart);
-  return { chart, dispose() { observer.disconnect(); chart.dispose(); } };
+  return { chart, dispose() { observer.disconnect(); zoom?.dispose(); chart.dispose(); } };
+}
+
+// ------------------------------------------------------------------ zoom des graphiques
+// Une boîte à outils en haut à droite de chaque graphique à axes (assez grand pour ça) : zoomer en largeur ou en
+// hauteur, zoomer sur une zone tracée à la souris, revenir au zoom initial (aussi au double-clic). Ctrl + molette
+// zoome en largeur, Maj + molette déplace. Même allure que celle de l'analyse fraction par fraction.
+const ZOOM_MIN_HEIGHT = 150;
+const ZOOM_MIN_POINTS = 15;
+
+function axesOf(option, key) {
+  const list = option[key];
+  if (!list) return [];
+  return (Array.isArray(list) ? list : [list]).map((_, i) => i);
+}
+
+export function zoomBarHTML({ area = true } = {}) {
+  const tool = (key, name, title) => `<button class="zb-btn" type="button" data-zoom="${key}" title="${title}" aria-label="${title}">${icon(name)}</button>`;
+  return `<div class="zoombar" role="toolbar" aria-label="Zoom du graphique">
+    <span class="zb-group" title="En largeur">${icon("arrowsh")}${tool("x+", "plus", "Zoomer en largeur")}${tool("x-", "minus", "Dézoomer en largeur")}</span>
+    <span class="zb-group" title="En hauteur">${icon("arrowsv")}${tool("y+", "plus", "Zoomer en hauteur")}${tool("y-", "minus", "Dézoomer en hauteur")}</span>
+    ${area ? tool("area", "search", "Zoomer sur une zone (trace-la sur le graphique)") : ""}
+    ${tool("reset", "reset", "Zoom initial (double-clic)")}
+  </div>`;
+}
+
+/** Ajoute le zoom à un graphique ECharts à axes ; à rappeler après chaque setOption qui remplace tout. */
+export function zoomable(el, chart, option) {
+  const xs = axesOf(option, "xAxis");
+  const ys = axesOf(option, "yAxis");
+  if (!xs.length || !ys.length || option.zoom === false || el.clientHeight < ZOOM_MIN_HEIGHT) return null;
+  // quelques barres (zones, mois) : rien à zoomer, pas de boîte à outils
+  const points = Math.max(0, ...[].concat(option.series || []).map((s) => (Array.isArray(s?.data) ? s.data.length : 0)));
+  if (points < ZOOM_MIN_POINTS) return null;
+  const own = (Array.isArray(option.dataZoom) ? option.dataZoom : option.dataZoom ? [option.dataZoom] : []);
+  const hasX = own.some((d) => d.type === "inside" && d.xAxisIndex !== undefined);
+  chart.setOption({
+    dataZoom: [...own,
+      // en largeur, les points hors fenêtre sont écartés (rien ne déborde dans la marge des étiquettes, et la hauteur
+      // s'ajuste à ce qu'on voit) ; en hauteur, rien n'est écarté : les courbes sont seulement coupées au bord
+      ...(hasX ? [] : [{ id: "zx", type: "inside", xAxisIndex: xs, filterMode: "filter", zoomOnMouseWheel: "ctrl", moveOnMouseWheel: "shift", moveOnMouseMove: false, preventDefaultMouseMove: false }]),
+      // un zoom vertical par axe : graphiques empilés, chaque grille garde son échelle
+      ...ys.map((i) => ({ id: `zy${i}`, type: "inside", yAxisIndex: i, filterMode: "none", zoomOnMouseWheel: false, moveOnMouseWheel: false, moveOnMouseMove: false, preventDefaultMouseMove: false }))],
+    // la sélection de zone passe par l'outil « dataZoom » d'ECharts, dont les icônes restent cachées (hors champ)
+    toolbox: { show: true, left: -1000, top: -1000, itemSize: 1, feature: { dataZoom: { filterMode: "none", xAxisIndex: xs, yAxisIndex: ys } } },
+  });
+  let bar = el.querySelector(":scope > .zoombar");
+  if (!bar) {
+    el.classList.add("zoom-host");
+    if (getComputedStyle(el).position === "static") el.style.position = "relative";
+    el.insertAdjacentHTML("beforeend", zoomBarHTML());
+    bar = el.querySelector(":scope > .zoombar");
+  }
+  const zooms = () => (chart.getOption().dataZoom || []).map((d, i) => ({ ...d, index: i }));
+  // zoomé en hauteur, les bornes de l'axe tombent sur des valeurs quelconques (« 29 », « -65,48 ») : on cache ces
+  // deux étiquettes-là, les graduations rondes entre les deux restent ; le zoom initial rend les réglages d'origine
+  const labels = (chart.getOption().yAxis || []).map((a) => ({
+    showMinLabel: a.axisLabel?.showMinLabel ?? null, showMaxLabel: a.axisLabel?.showMaxLabel ?? null }));
+  let yShown = false;
+  const yLabels = (zoomed) => {
+    if (zoomed === yShown) return;
+    yShown = zoomed;
+    chart.setOption({ yAxis: labels.map((l) => ({ axisLabel: zoomed ? { showMinLabel: false, showMaxLabel: false } : l })) });
+  };
+  const has = (v) => (Array.isArray(v) ? v.length > 0 : v !== undefined && v !== null);
+  const isX = (d) => has(d.xAxisIndex) && !String(d.id).startsWith("zy");
+  const isY = (d) => has(d.yAxisIndex) && !has(d.xAxisIndex);
+  const scale = (pick, factor) => zooms().filter(pick).forEach((d) => {
+    const start = d.start ?? 0; const end = d.end ?? 100;
+    const mid = (start + end) / 2; const half = Math.min(50, Math.max(1, ((end - start) / 2) / factor));
+    let s = mid - half; let e = mid + half;
+    if (s < 0) { e -= s; s = 0; }
+    if (e > 100) { s -= e - 100; e = 100; }
+    chart.dispatchAction({ type: "dataZoom", dataZoomIndex: d.index, start: Math.max(0, s), end: Math.min(100, e) });
+  });
+  let area = false;
+  const setArea = (on) => {
+    area = on;
+    chart.dispatchAction({ type: "takeGlobalCursor", key: "dataZoomSelect", dataZoomSelectActive: on });
+    bar.querySelector('[data-zoom="area"]')?.classList.toggle("is-on", on);
+  };
+  const reset = () => {
+    zooms().forEach((d) => chart.dispatchAction({ type: "dataZoom", dataZoomIndex: d.index, start: 0, end: 100 }));
+    if (area) setArea(false);
+  };
+  const onClick = (ev) => {
+    const btn = ev.target.closest("[data-zoom]");
+    if (!btn) return;
+    const k = btn.dataset.zoom;
+    if (k === "x+") scale(isX, 2);
+    else if (k === "x-") scale(isX, 0.5);
+    else if (k === "y+") scale(isY, 1.5);
+    else if (k === "y-") scale(isY, 1 / 1.5);
+    else if (k === "area") setArea(!area);
+    else reset();
+  };
+  // zoomé, un glisser déplace la vue ; au zoom initial, le glisser rend la main à la page (défilement au doigt)
+  let panning = false;
+  const pan = (on) => {
+    if (on === panning) return;
+    panning = on;
+    const mine = zooms().filter((d) => d.id === "zx" || String(d.id).startsWith("zy"));
+    chart.setOption({ dataZoom: mine.map((d) => ({ id: d.id, moveOnMouseMove: on })) });
+  };
+  const onZoom = () => {
+    const narrowed = (d) => (d.start ?? 0) > 0.01 || (d.end ?? 100) < 99.99;
+    const list = zooms();
+    const zoomed = list.some(narrowed);
+    el.classList.toggle("is-zoomed", zoomed);
+    yLabels(list.some((d) => isY(d) && narrowed(d)));
+    pan(zoomed);
+    if (area) setArea(false); // une zone à la fois : l'outil se range après usage
+  };
+  bar.onclick = onClick;
+  if (el._zoomOff) el._zoomOff(); // rappelé après un setOption qui remplace tout : on ne double pas les écouteurs
+  chart.on("datazoom", onZoom);
+  chart.getZr().on("dblclick", reset);
+  el._zoomOff = () => { chart.off("datazoom", onZoom); chart.getZr()?.off("dblclick", reset); };
+  return { dispose() { el._zoomOff?.(); el._zoomOff = null; bar?.remove(); el.classList.remove("zoom-host", "is-zoomed"); } };
 }
 
 export function baseOption(p) {
@@ -159,11 +283,15 @@ export function bars(p, color, data, { name, stack, top = true, xAxisIndex = 0, 
 export function mountSized(el, build, onReady) {
   const chart = echarts.init(el, null, { renderer: "canvas" });
   let lastH = 0;
+  let zoom = null;
   const apply = () => {
     const h = el.clientHeight;
     if (Math.abs(h - lastH) > 4) {
       lastH = h;
-      chart.setOption(build(el.clientWidth, h), { notMerge: true });
+      const option = build(el.clientWidth, h);
+      chart.setOption(option, { notMerge: true });
+      zoom?.dispose();
+      zoom = zoomable(el, chart, option);
     }
     chart.resize();
   };
@@ -171,7 +299,7 @@ export function mountSized(el, build, onReady) {
   const observer = new ResizeObserver(apply);
   observer.observe(el);
   if (onReady) onReady(chart);
-  return { chart, dispose() { observer.disconnect(); chart.dispose(); } };
+  return { chart, dispose() { observer.disconnect(); zoom?.dispose(); chart.dispose(); } };
 }
 
 /**

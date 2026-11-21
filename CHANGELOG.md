@@ -4,6 +4,21 @@ Les versions « bêta » (par exemple 0.4.0b1) sont des avant-premières : elles
 sur le canal bêta (Réglages → Application → Mises à jour → « Recevoir les versions bêta »), puis sortent en
 version stable une fois éprouvées.
 
+## 0.8.3b3 — 21 novembre 2026 (bêta)
+
+- **Zoom des graphiques** : en haut à droite de l'analyse fraction par fraction (vue détaillée d'une séance) et des
+  graphiques des tuiles (courbes d'une séance, forme et fatigue, kilomètres par semaine, zones…), une petite boîte à
+  outils qui apparaît au survol : zoomer ou dézoomer **en largeur** (↔) et **en hauteur** (↕), **zoomer sur une zone**
+  (loupe, puis trace-la sur le graphique ; sur l'analyse, glisser suffit), et **revenir au zoom initial** (aussi au
+  double-clic). Ctrl + molette zoome en largeur, Maj + molette déplace ; une fois zoomé, glisser déplace la vue. En
+  largeur, la hauteur s'ajuste à ce qu'on voit. Sur téléphone, touche le graphique pour faire apparaître la boîte.
+- **Club en ligne a son logo**, comme les sites externes : un PNG carré à gauche de son nom dans la colonne de gauche
+  et en tête de sa page (Réglages → Club et coach → Club en ligne).
+- **Ressenti envoyé au coach** : le message « Cannot set properties of null (setting 'innerHTML') » ne s'affiche plus
+  après « Envoyer à mon coach » (le ressenti partait bien, c'est le bouton qui se perdait en route). Même correction
+  pour le bouton d'essai des notifications (même message après un essai réussi) et trois autres boutons (premier
+  lancement, fiche d'un élève, profil) qui, en cas d'échec, montraient ce message au lieu du vrai motif.
+
 ## 0.8.3b2 — 21 novembre 2026 (bêta)
 
 - **Withings : la page de retour passe sur le relais Foulée** (`https://relais.foulee-coach.com/withings/`) au lieu

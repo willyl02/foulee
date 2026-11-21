@@ -174,15 +174,16 @@ export const jour = {
       let timer = null;
       note.addEventListener("input", () => { saved.textContent = ""; clearTimeout(timer); timer = setTimeout(save, 800); });
       card.querySelector("[data-coach]")?.addEventListener("click", async (e) => {
-        e.currentTarget.disabled = true;
+        const btn = e.currentTarget; // après un await, e.currentTarget ne vaut plus rien
+        btn.disabled = true;
         try {
           clearTimeout(timer);
           await save();
           await api.post(`/api/jour/ressenti/${encodeURIComponent(id)}/coach`, {});
           ctx.toast("Envoyé à ton coach, dans votre conversation.");
-          e.currentTarget.innerHTML = `${icon("chat")}Renvoyer à mon coach`;
+          btn.innerHTML = `${icon("chat")}Renvoyer à mon coach`;
         } catch (err) { ctx.toast(err.message, { error: true }); }
-        e.currentTarget.disabled = false;
+        btn.disabled = false;
       });
     });
   },

@@ -4,9 +4,15 @@
 // dans les pages coach / élève (tours et courbe allégée partagés par le relais).
 //
 //   analysisHTML(segments, curve, { running })  → le HTML (ou "" si rien à montrer)
-//   wireAnalysis(root)                          → le curseur au survol (heure, allure, FC)
+//   wireAnalysis(root)                          → le curseur au survol (heure, allure, FC) et le zoom
+//
+// Zoom (boîte à outils en haut à droite, comme sur les autres graphiques) : glisser sur les courbes pour zoomer sur
+// une plage de temps, Ctrl + molette pour zoomer, Maj + molette (ou glisser à deux doigts) pour se déplacer, boutons
+// ↔ et ↕ pour zoomer en largeur ou en hauteur, double-clic ou ⟲ pour revenir à la séance entière. En largeur, l'axe
+// vertical s'ajuste à la plage affichée.
 
 import * as F from "./format.js";
+import { icon } from "./icons.js";
 
 const SPEED_MIN = 1.4;  // en dessous (≈ 12 min/km), à pied : arrêt ou marche, pas d'allure
 
@@ -60,22 +66,21 @@ function quantile(values, q) {
   return sorted[Math.min(sorted.length - 1, Math.max(0, Math.round(q * (sorted.length - 1))))];
 }
 
-/**
- * segments : tours (voir normalizeSegments) ; curve : {t, v (m/s), fc} ; running : allure plutôt que vitesse.
- * Sans courbe, les colonnes seules (et les allures des tours en marches d'escalier).
- */
-export function analysisHTML(rawSegments, curve, { running = true } = {}) {
-  const segs = normalizeSegments(rawSegments);
-  if (segs.length < 2) return "";
-  const t0 = segs[0].start;
-  const t1 = segs[segs.length - 1].end;
-  if (!(t1 > t0)) return "";
-  const pos = (t) => ((t - t0) / (t1 - t0)) * 100;
+/** Tours coupés à la fenêtre [a, b] et positions en % de la fenêtre. */
+function windowed(segs, a, b) {
+  const pos = (t) => ((t - a) / (b - a)) * 100;
+  return segs.map((s, i) => ({ s, i, left: pos(Math.max(a, s.start)), right: pos(Math.min(b, s.end)) }))
+    .filter((x) => x.right > x.left);
+}
 
-  // ---- colonnes
-  const cols = segs.map((s, i) => {
-    const left = pos(s.start);
-    const width = Math.max(0.2, pos(s.end) - left);
+/** Les morceaux qui changent avec le zoom : colonnes, courbes, graduations. view = {a, b, ky}. */
+function parts(model, view) {
+  const { segs, ts, vs, hs, running, t0 } = model;
+  const { a, b, ky } = view;
+  const H = 120;
+  const shown = windowed(segs, a, b);
+  const cols = shown.map(({ s, i, left, right }) => {
+    const width = Math.max(0.2, right - left);
     const tip = [`Tour ${i + 1}`, F.chrono(s.duration), speedText(s.speed, running), F.isNum(s.hr) ? `${F.int(s.hr)} bpm` : "",
       s.zone ? `Z${s.zone}${F.isNum(s.pct) ? ` (${s.pct} % du tour)` : ""}` : ""].filter(Boolean).join(" · ");
     return `<div class="an-col${s.rest ? " is-rest" : ""}${s.zone ? ` an-z${s.zone}` : ""}" style="left:${left.toFixed(3)}%;width:${width.toFixed(3)}%" title="${F.escape(tip)}">
@@ -86,7 +91,50 @@ export function analysisHTML(rawSegments, curve, { running = true } = {}) {
       <span class="an-pct">${F.isNum(s.pct) ? `${s.pct}%` : ""}</span>
     </div>`;
   }).join("");
+  // l'échelle verticale suit la plage affichée, puis le zoom vertical (autour du milieu)
+  const inside = (arr) => arr.filter((v, k) => ts[k] >= a && ts[k] <= b);
+  const range = (arr, unit) => {
+    let lo = quantile(inside(arr), 0.02); let hi = quantile(inside(arr), 0.995);
+    if (!F.isNum(lo) || !F.isNum(hi)) return null;
+    if (hi - lo < unit) { lo -= unit / 2; hi += unit / 2; }
+    const mid = (lo + hi) / 2; const half = (hi - lo) / 2 / ky;
+    return [mid - half, mid + half];
+  };
+  const bounds = shown.slice(1).map(({ left }) => `<line x1="${(left * 10).toFixed(1)}" x2="${(left * 10).toFixed(1)}" y1="0" y2="${H}" class="an-sep"/>`).join("");
+  const shade = shown.map(({ s, left, right }) => (!s.rest && s.zone >= 3 ? `<rect x="${(left * 10).toFixed(1)}" y="0" width="${((right - left) * 10).toFixed(1)}" height="${H}" class="an-shade an-z${s.zone}"/>` : "")).join("");
+  const lines = [];
+  const v = range(vs, 0.05);
+  if (v) {
+    // Allure : plus rapide = plus haut (comme intervals.icu)
+    const d = path(ts, vs, a, b, v[0], v[1], H);
+    lines.push(`<div class="an-plot"><span class="an-axis"><span>${F.escape(speedText(v[1], running))}</span><span>${F.escape(speedText(v[0], running))}</span></span>
+      <svg viewBox="0 0 1000 ${H}" preserveAspectRatio="none">${shade}${bounds}<path d="${d}" class="an-line an-line-v"/></svg></div>`);
+  }
+  const h = range(hs, 4);
+  if (h) {
+    const d = path(ts, hs, a, b, h[0], h[1], H);
+    lines.push(`<div class="an-plot"><span class="an-axis"><span>${F.int(h[1])} bpm</span><span>${F.int(h[0])} bpm</span></span>
+      <svg viewBox="0 0 1000 ${H}" preserveAspectRatio="none">${shade}${bounds}<path d="${d}" class="an-line an-line-fc"/></svg></div>`);
+  }
+  const span = b - a;
+  const step = [10, 15, 30, 60, 120, 300, 600, 900, 1200, 1800, 3600].find((st) => span / st <= 8) || 3600;
+  const ticks = [];
+  for (let t = Math.ceil((a - t0) / step) * step + t0; t < b; t += step) {
+    if (t > a) ticks.push(`<span style="left:${(((t - a) / span) * 100).toFixed(2)}%">${F.chrono(t - t0)}</span>`);
+  }
+  return { cols, plots: lines.join(""), ticks: ticks.join("") };
+}
 
+/**
+ * segments : tours (voir normalizeSegments) ; curve : {t, v (m/s), fc} ; running : allure plutôt que vitesse.
+ * Sans courbe, les colonnes seules (et les allures des tours en marches d'escalier).
+ */
+export function analysisHTML(rawSegments, curve, { running = true } = {}) {
+  const segs = normalizeSegments(rawSegments);
+  if (segs.length < 2) return "";
+  const t0 = segs[0].start;
+  const t1 = segs[segs.length - 1].end;
+  if (!(t1 > t0)) return "";
   // ---- courbes (ou, sans courbe, l'allure et la FC des tours en escalier)
   let ts; let vs; let hs;
   if (curve?.t?.length > 1) {
@@ -96,54 +144,122 @@ export function analysisHTML(rawSegments, curve, { running = true } = {}) {
     segs.forEach((s) => { ts.push(s.start, s.end); vs.push(s.speed, s.speed); hs.push(s.hr, s.hr); });
   }
   const speeds = vs.map((v) => (F.isNum(v) && (!running || v >= SPEED_MIN) ? v : null));
-  const H = 120;
-  const vLo = quantile(speeds, 0.02); const vHi = quantile(speeds, 0.995);
-  const hLo = quantile(hs, 0.02); const hHi = quantile(hs, 0.995);
-  const lines = [];
-  const bounds = segs.slice(1).map((s) => `<line x1="${(pos(s.start) * 10).toFixed(1)}" x2="${(pos(s.start) * 10).toFixed(1)}" y1="0" y2="${H}" class="an-sep"/>`).join("");
-  const shade = segs.map((s) => (!s.rest && s.zone >= 3 ? `<rect x="${(pos(s.start) * 10).toFixed(1)}" y="0" width="${((pos(s.end) - pos(s.start)) * 10).toFixed(1)}" height="${H}" class="an-shade an-z${s.zone}"/>` : "")).join("");
-  if (F.isNum(vLo) && F.isNum(vHi) && vHi > vLo) {
-    // Allure : plus rapide = plus haut (comme intervals.icu)
-    const d = path(ts, speeds, t0, t1, vLo, vHi, H);
-    lines.push(`<div class="an-plot"><span class="an-axis"><span>${F.escape(speedText(vHi, running))}</span><span>${F.escape(speedText(vLo, running))}</span></span>
-      <svg viewBox="0 0 1000 ${H}" preserveAspectRatio="none">${shade}${bounds}<path d="${d}" class="an-line an-line-v"/></svg></div>`);
-  }
-  if (F.isNum(hLo) && F.isNum(hHi) && hHi > hLo) {
-    const d = path(ts, hs, t0, t1, hLo, hHi, H);
-    lines.push(`<div class="an-plot"><span class="an-axis"><span>${F.int(hHi)} bpm</span><span>${F.int(hLo)} bpm</span></span>
-      <svg viewBox="0 0 1000 ${H}" preserveAspectRatio="none">${shade}${bounds}<path d="${d}" class="an-line an-line-fc"/></svg></div>`);
-  }
-  const span = t1 - t0;
-  const step = [300, 600, 900, 1200, 1800, 3600].find((s) => span / s <= 8) || 3600;
-  const ticks = [];
-  for (let t = step; t < span; t += step) ticks.push(`<span style="left:${((t / span) * 100).toFixed(2)}%">${F.chrono(t)}</span>`);
-  const data = encodeURIComponent(JSON.stringify({ t0, t1, ts, vs: speeds, hs, running }));
+  const model = { segs, ts, vs: speeds, hs, running, t0, t1 };
+  const p = parts(model, { a: t0, b: t1, ky: 1 });
+  const data = encodeURIComponent(JSON.stringify(model));
+  const tool = (key, name, title, extra = "") => `<button class="zb-btn" type="button" data-zoom="${key}" title="${title}" aria-label="${title}">${icon(name)}${extra}</button>`;
   return `<div class="analyse" data-analyse="${data}">
-    <div class="an-band">${cols}</div>
-    ${lines.join("")}
-    <div class="an-ticks">${ticks.join("")}</div>
-    <div class="an-cursor" hidden></div><div class="an-tip" hidden></div>
+    <div class="zoombar" role="toolbar" aria-label="Zoom du graphique">
+      <span class="zb-group" title="En largeur (le temps)">${icon("arrowsh")}${tool("x+", "plus", "Zoomer en largeur")}${tool("x-", "minus", "Dézoomer en largeur")}</span>
+      <span class="zb-group" title="En hauteur (allure et FC)">${icon("arrowsv")}${tool("y+", "plus", "Zoomer en hauteur")}${tool("y-", "minus", "Dézoomer en hauteur")}</span>
+      ${tool("reset", "reset", "Zoom initial (double-clic)")}
+      <span class="zb-help" title="Glisse sur les courbes pour zoomer sur une plage. Ctrl + molette : zoomer ; Maj + molette : se déplacer. Double-clic : zoom initial.">?</span>
+    </div>
+    <div class="an-band">${p.cols}</div>
+    <div class="an-plots">${p.plots}</div>
+    <div class="an-ticks">${p.ticks}</div>
+    <div class="an-cursor" hidden></div><div class="an-tip" hidden></div><div class="an-brush" hidden></div>
   </div>`;
 }
 
-/** Curseur vertical au survol : le temps, l'allure et la FC à cet instant. */
+/** Curseur vertical au survol (temps, allure, FC) et zoom. */
 export function wireAnalysis(root) {
   root.querySelectorAll(".analyse[data-analyse]").forEach((box) => {
+    if (box.dataset.wired) return;
+    box.dataset.wired = "1";
     let data;
     try { data = JSON.parse(decodeURIComponent(box.dataset.analyse)); } catch (e) { return; }
+    const full = { a: data.t0, b: data.t1, ky: 1 };
+    let view = { ...full };
     const cursor = box.querySelector(".an-cursor");
     const tip = box.querySelector(".an-tip");
-    const plots = box.querySelectorAll(".an-plot svg");
-    if (!plots.length) return;
+    const brush = box.querySelector(".an-brush");
+    const minSpan = Math.min(30, (data.t1 - data.t0) / 2);
+    const plotRect = () => (box.querySelector(".an-plot svg") || box.querySelector(".an-band")).getBoundingClientRect();
+    const zoomed = () => view.a > full.a || view.b < full.b || view.ky !== 1;
+    const draw = () => {
+      const p = parts(data, view);
+      box.querySelector(".an-band").innerHTML = p.cols;
+      box.querySelector(".an-plots").innerHTML = p.plots;
+      box.querySelector(".an-ticks").innerHTML = p.ticks;
+      box.classList.toggle("is-zoomed", zoomed());
+      fit();
+    };
+    const setX = (a, b) => {
+      let span = Math.max(minSpan, Math.min(full.b - full.a, b - a));
+      let lo = Math.max(full.a, Math.min(a, full.b - span));
+      if (b - a < minSpan) lo = Math.max(full.a, Math.min((a + b) / 2 - span / 2, full.b - span));
+      span = Math.min(span, full.b - lo);
+      view = { ...view, a: lo, b: lo + span };
+      draw();
+    };
+    const zoomX = (factor, at = (view.a + view.b) / 2) => {
+      const span = (view.b - view.a) / factor;
+      const r = (at - view.a) / (view.b - view.a);
+      setX(at - r * span, at - r * span + span);
+    };
+    const timeAt = (clientX) => {
+      const rect = plotRect();
+      const r = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+      return view.a + r * (view.b - view.a);
+    };
+    box.querySelectorAll("[data-zoom]").forEach((btn) => btn.addEventListener("click", () => {
+      const k = btn.dataset.zoom;
+      if (k === "x+") zoomX(2);
+      else if (k === "x-") zoomX(0.5);
+      else if (k === "y+") { view = { ...view, ky: Math.min(8, view.ky * 1.5) }; draw(); }
+      else if (k === "y-") { view = { ...view, ky: Math.max(0.5, view.ky / 1.5) }; draw(); }
+      else { view = { ...full }; draw(); }
+    }));
+    box.addEventListener("dblclick", (ev) => {
+      if (ev.target.closest(".zoombar")) return;
+      view = { ...full };
+      draw();
+    });
+    box.addEventListener("wheel", (ev) => {
+      if (ev.ctrlKey || ev.metaKey) {
+        ev.preventDefault();
+        zoomX(ev.deltaY < 0 ? 1.25 : 0.8, timeAt(ev.clientX));
+      } else if ((ev.shiftKey || Math.abs(ev.deltaX) > Math.abs(ev.deltaY)) && zoomed()) {
+        ev.preventDefault();
+        const shift = ((ev.shiftKey ? ev.deltaY : ev.deltaX) / plotRect().width) * (view.b - view.a);
+        setX(view.a + shift, view.b + shift);
+      }
+    }, { passive: false });
+    // glisser sur les courbes : choisir la plage à agrandir
+    let drag = null;
+    box.addEventListener("pointerdown", (ev) => {
+      if (ev.button !== 0 || !ev.target.closest(".an-plots") || ev.pointerType === "touch") return;
+      drag = { x: ev.clientX, t: timeAt(ev.clientX) };
+      box.setPointerCapture(ev.pointerId);
+    });
+    box.addEventListener("pointerup", (ev) => {
+      if (!drag) return;
+      const moved = Math.abs(ev.clientX - drag.x);
+      const t = timeAt(ev.clientX);
+      const start = drag.t;
+      drag = null;
+      brush.hidden = true;
+      if (moved > 6) setX(Math.min(start, t), Math.max(start, t));
+    });
+    box.addEventListener("pointercancel", () => { drag = null; brush.hidden = true; });
     const move = (ev) => {
-      const rect = plots[0].getBoundingClientRect();
-      const r = (ev.clientX - rect.left) / rect.width;
-      if (r < 0 || r > 1) { cursor.hidden = true; tip.hidden = true; return; }
-      const t = data.t0 + r * (data.t1 - data.t0);
-      let best = 0;
-      let gap = Infinity;
-      data.ts.forEach((x, i) => { const g = Math.abs(x - t); if (g < gap) { gap = g; best = i; } });
+      const rect = plotRect();
       const host = box.getBoundingClientRect();
+      if (drag) {
+        const x1 = Math.min(Math.max(drag.x, rect.left), rect.right) - host.left;
+        const x2 = Math.min(Math.max(ev.clientX, rect.left), rect.right) - host.left;
+        brush.hidden = false;
+        brush.style.left = `${Math.min(x1, x2)}px`;
+        brush.style.width = `${Math.abs(x2 - x1)}px`;
+      }
+      const r = (ev.clientX - rect.left) / rect.width;
+      if (r < 0 || r > 1 || ev.target.closest(".zoombar")) { cursor.hidden = true; tip.hidden = true; return; }
+      const t = view.a + r * (view.b - view.a);
+      // le point le plus proche (les temps sont croissants : recherche par dichotomie)
+      let lo = 0; let hi = data.ts.length - 1;
+      while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (data.ts[mid] < t) lo = mid; else hi = mid; }
+      const best = Math.abs(data.ts[hi] - t) < Math.abs(data.ts[lo] - t) ? hi : lo;
       const x = rect.left - host.left + r * rect.width;
       cursor.hidden = false;
       cursor.style.left = `${x}px`;
@@ -151,14 +267,16 @@ export function wireAnalysis(root) {
       tip.innerHTML = `<b>${F.chrono(t - data.t0)}</b> · <span class="an-v">${F.escape(speedText(data.vs[best], data.running))}</span> · <span class="an-fc">${F.isNum(data.hs[best]) ? `${F.int(data.hs[best])} bpm` : "–"}</span>`;
       tip.style.left = `${Math.min(Math.max(x, 70), host.width - 70)}px`;
     };
-    box.addEventListener("mousemove", move);
-    box.addEventListener("mouseleave", () => { cursor.hidden = true; tip.hidden = true; });
+    box.addEventListener("pointermove", move);
+    box.addEventListener("pointerleave", () => { cursor.hidden = true; tip.hidden = true; });
     // Colonnes trop étroites pour leur texte : la zone seule (le reste au survol)
-    const fit = () => box.querySelectorAll(".an-col").forEach((col) => {
-      const w = col.getBoundingClientRect().width;
-      col.classList.toggle("is-narrow", w < 54);
-      col.classList.toggle("is-thin", w < 18);
-    });
+    function fit() {
+      box.querySelectorAll(".an-col").forEach((col) => {
+        const w = col.getBoundingClientRect().width;
+        col.classList.toggle("is-narrow", w < 54);
+        col.classList.toggle("is-thin", w < 18);
+      });
+    }
     fit();
     if (window.ResizeObserver) new ResizeObserver(fit).observe(box);
   });

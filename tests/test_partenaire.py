@@ -8,7 +8,8 @@ from foulee.web import create_app
 
 
 def test_defaults_and_cleaning():
-    assert partenaire.resolve(None) == {"actif": False, "nom": "Club en ligne", "adresse": "https://app.clubenligne.fr/"}
+    assert partenaire.resolve(None) == {"actif": False, "nom": "Club en ligne", "adresse": "https://app.clubenligne.fr/",
+                                        "logo": None}
     custom = partenaire.clean({"actif": 1, "nom": "  ACCT   club ", "adresse": "app.clubenligne.fr/entrainements"})
     assert custom == {"actif": True, "nom": "ACCT club", "adresse": "https://app.clubenligne.fr/entrainements"}
     assert partenaire.clean({"actif": True, "nom": "", "adresse": ""})["adresse"] == "https://app.clubenligne.fr/"
@@ -26,7 +27,7 @@ def test_setting_reaches_the_menu():
         "actif": True, "nom": "ACCT", "adresse": "https://app.clubenligne.fr/competitions"}})
     assert saved.status_code == 200 and saved.json()["reglages"]["partenaire"]["nom"] == "ACCT"
     boot = client.get("/api/bootstrap").json()["partenaire"]
-    assert boot == {"actif": True, "nom": "ACCT", "adresse": "https://app.clubenligne.fr/competitions"}
+    assert boot == {"actif": True, "nom": "ACCT", "adresse": "https://app.clubenligne.fr/competitions", "logo": None}
     bad = client.put("/api/settings", headers=headers, json={"partenaire": {"actif": True, "adresse": "javascript:x"}})
     assert bad.status_code == 400 and "https://" in bad.json()["detail"]
 
@@ -82,3 +83,15 @@ def test_external_sites_reach_the_menu_with_their_logo():
     assert client.put("/api/sites/../logo", headers=headers, content=_png(64, 64)).status_code in (400, 404, 405)
     assert client.delete("/api/sites/s1/logo", headers=headers).json() == {"id": "s1", "logo": None}
     assert client.get("/api/sites/s1/logo").status_code == 404
+
+
+def test_partner_app_can_have_its_own_logo():
+    client = TestClient(create_app())
+    headers = {"X-Foulee": "1"}
+    assert client.get("/api/bootstrap").json()["partenaire"]["logo"] is None
+    assert client.put("/api/sites/partenaire/logo", headers=headers, content=_png(128, 128)).status_code == 200
+    app = client.get("/api/bootstrap").json()["partenaire"]
+    assert app["logo"] and app["nom"] == "Club en ligne"
+    assert client.get("/api/sites/partenaire/logo").status_code == 200
+    client.delete("/api/sites/partenaire/logo", headers=headers)
+    assert client.get("/api/bootstrap").json()["partenaire"]["logo"] is None

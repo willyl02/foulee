@@ -5,8 +5,9 @@ une entrée s'ajoute dans la colonne de gauche, sous « Nouvelle vue » ; la pag
 précédent, suivant, recharger et « ouvrir dans le navigateur ». L'adresse peut aller jusqu'à une page précise.
 
 Les sites externes (réglage « sites_externes ») : d'autres sites, tiers, sur le même modèle, chacun avec son entrée
-sous l'application partenaire et, au choix, son logo (un PNG importé, sinon le petit globe). Les logos sont rangés
-avec les données du profil, réduits à 96 pixels.
+sous l'application partenaire et, au choix, son logo (un PNG importé, sinon le petit globe) ; l'application
+partenaire peut avoir le sien aussi (identifiant « partenaire »). Les logos sont rangés avec les données du profil,
+réduits à 96 pixels.
 """
 
 from __future__ import annotations
@@ -55,16 +56,19 @@ def clean(value: Any) -> dict | None:
 
 
 def resolve(value: Any) -> dict:
-    """Le réglage tel que l'interface l'utilise (les valeurs par défaut si rien n'est enregistré)."""
+    """Le réglage tel que l'interface l'utilise (les valeurs par défaut si rien n'est enregistré), avec la date de
+    son logo (None : le petit globe)."""
     try:
-        return clean(value) or dict(DEFAULT)
+        app = clean(value) or dict(DEFAULT)
     except PartnerError:
-        return dict(DEFAULT)
+        app = dict(DEFAULT)
+    return {**app, "logo": logo_version(PARTNER_LOGO)}
 
 
 # ------------------------------------------------------------------ sites externes
 MAX_SITES = 8
 SITE_ID = re.compile(r"s\d{1,3}")
+PARTNER_LOGO = "partenaire"             # le logo de l'application partenaire, rangé avec ceux des sites
 LOGO_MIN, LOGO_MAX = 64, 512            # côtés acceptés, en pixels
 LOGO_BYTES = 200 * 1024                 # 200 Ko au plus
 LOGO_KEPT = 96                          # côté gardé (net sur un écran haute définition)
@@ -117,7 +121,7 @@ def _logo_dir() -> Path:
 
 
 def logo_path(site_id: str) -> Path:
-    if not SITE_ID.fullmatch(site_id or ""):
+    if site_id != PARTNER_LOGO and not SITE_ID.fullmatch(site_id or ""):
         raise LogoError("Site inconnu.")
     return _logo_dir() / f"{site_id}.png"
 
