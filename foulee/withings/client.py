@@ -36,7 +36,8 @@ from .. import __version__, vault
 LOG = logging.getLogger("foulee.withings")
 
 DASHBOARD = "https://developer.withings.com/dashboard/"
-RELAY = "https://willyl02.github.io/foulee/withings/"
+RELAY = "https://relais.foulee-coach.com/withings/"  # page relais servie par le relais du club
+OLD_RELAY = "https://willyl02.github.io/foulee/withings/"  # avant la 0.8.3 (GitHub Pages)
 SCOPES = "user.info,user.metrics,user.activity,user.sleepevents"
 SECRET = "withings"
 CODE_LIFETIME = 30           # secondes : délai pour échanger le code reçu

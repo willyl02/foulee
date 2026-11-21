@@ -4,6 +4,13 @@ Les versions « bêta » (par exemple 0.4.0b1) sont des avant-premières : elles
 sur le canal bêta (Réglages → Application → Mises à jour → « Recevoir les versions bêta »), puis sortent en
 version stable une fois éprouvées.
 
+## 0.8.3b2 — 21 novembre 2026 (bêta)
+
+- **Withings : la page de retour passe sur le relais Foulée** (`https://relais.foulee-coach.com/withings/`) au lieu
+  de GitHub Pages. Foulée n'a plus besoin du site GitHub pour se connecter à Withings. Une appli Withings créée avant
+  garde son ancienne adresse et sa connexion continue de marcher ; pour pouvoir la refaire, ajoute la nouvelle
+  adresse dans « Registered URLs » (Réglages → Connexions → Withings l'explique, avec le bouton « Copier »).
+
 ## 0.8.3b1 — 21 novembre 2026 (bêta)
 
 - **Sites externes** (Réglages → Club et coach → Sites externes), sur le modèle de Club en ligne, qui garde sa place

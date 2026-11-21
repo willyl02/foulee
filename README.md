@@ -157,7 +157,8 @@ pas à pas ; compte une dizaine de minutes, une seule fois, de préférence depu
    application** → **Public API integration**. Dans le formulaire : *Target
    environment* **Development**, un nom (« Foulée »), une description, et dans
    **Registered URLs** exactement cette adresse (bouton « Copier » dans Foulée) :
-   `https://willyl02.github.io/foulee/withings/`
+   `https://relais.foulee-coach.com/withings/` (avant la 0.8.3 :
+   `https://willyl02.github.io/foulee/withings/`, à garder ou à compléter par la nouvelle)
 2. **Colle le ClientID et le Secret** affichés par Withings dans Foulée, puis
    **Enregistrer**. Comme la clé Garmin, ils vont dans le Gestionnaire d'identification
    Windows (sur un serveur : dans un fichier que seul Foulée lit) et ne se règlent que
@@ -168,8 +169,9 @@ pas à pas ; compte une dizaine de minutes, une seule fois, de préférence depu
 
 **Pourquoi une page relais ?** Après « Allow », Withings renvoie ton navigateur vers
 une adresse publique en https, enregistrée dans ton appli : il refuse l'adresse de ton
-PC. Cette adresse est une petite page de ce dépôt (dossier `docs/withings`, publiée par
-GitHub Pages), la même pour tout le monde : elle renvoie aussitôt ton navigateur vers
+PC. Cette adresse est une petite page de Foulée servie par le relais Foulée
+(`foulee/relais/withings.html` ; avant la 0.8.3, la copie `docs/withings` publiée par GitHub Pages), la même
+pour tout le monde : elle renvoie aussitôt ton navigateur vers
 ton Foulée, et seulement vers une adresse de la maison (le PC, le réseau local,
 Tailscale). Elle ne garde rien. Elle voit seulement passer un code à usage unique,
 valable 30 secondes et inutilisable sans ton Secret, qui ne quitte jamais Foulée.

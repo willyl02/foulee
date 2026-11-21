@@ -10,9 +10,10 @@ from __future__ import annotations
 import ipaddress
 import logging
 import time
+from pathlib import Path
 
 from fastapi import Body, FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from .. import __version__
 from . import API_VERSION, club, garmin, notifs, store
@@ -23,6 +24,8 @@ MAX_FAILURES = 5
 LOCK_SECONDS = 15 * 60
 MAX_BODY = 64 * 1024
 MAX_SHARE = 4 * 1024 * 1024  # l'extrait de 4 semaines d'un élève, tracés GPS compris
+
+WITHINGS_PAGE = (Path(__file__).with_name("withings.html")).read_text(encoding="utf-8")
 
 HOME = """<!doctype html><html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width">
 <title>Relais Foulée</title><body style="font-family:system-ui;max-width:36em;margin:4em auto;padding:0 1em;color:#222">
@@ -103,6 +106,23 @@ def create_relay_app() -> FastAPI:
     @app.get("/", response_class=HTMLResponse)
     def home() -> str:
         return HOME
+
+    # Page relais de Withings : après « Autoriser », Withings envoie le navigateur ici (adresse publique en https,
+    # enregistrée dans l'appli Withings de chacun) ; la page le renvoie aussitôt vers son Foulée de la maison, avec le
+    # code à usage unique. Elle ne garde rien, n'appelle rien, et le relais ne voit que la requête de la page.
+    @app.get("/withings", include_in_schema=False)
+    def withings_relay_slash(request: Request) -> RedirectResponse:
+        query = request.url.query
+        return RedirectResponse("/withings/" + (f"?{query}" if query else ""), status_code=307)
+
+    @app.get("/withings/", response_class=HTMLResponse, include_in_schema=False)
+    def withings_relay() -> HTMLResponse:
+        response = HTMLResponse(WITHINGS_PAGE)
+        response.headers["Content-Security-Policy"] = ("default-src 'none'; script-src 'unsafe-inline'; "
+                                                       "style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; "
+                                                       "frame-ancestors 'none'")
+        response.headers["Referrer-Policy"] = "no-referrer"
+        return response
 
     @app.get("/api/v1/sante")
     def health() -> dict:
