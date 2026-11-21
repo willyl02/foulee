@@ -13,7 +13,7 @@ import copy
 import sqlite3
 from typing import Any
 
-from . import __version__, analysis, club, db, objectifs, profile, schedule, views, zones
+from . import __version__, analysis, club, db, objectifs, partenaire, profile, schedule, views, zones
 
 # Réglages dont dépendent TRIMP, zones et charge : les changer relance le recalcul des séances
 DERIVED = {"vma_kmh", "fc_max", "fc_repos", "sexe", "zones_allure_pct_vma", "charge_source", "zones_fc",
@@ -60,6 +60,11 @@ def clean(key: str, value: Any) -> Any:
         try:
             return club.clean(value)
         except club.ClubError as exc:
+            raise SettingsError(str(exc)) from None
+    if key == "partenaire":
+        try:
+            return partenaire.clean(value)
+        except partenaire.PartnerError as exc:
             raise SettingsError(str(exc)) from None
     if key == "vma_kmh":
         return _number(value, 6, 30, "VMA")

@@ -26,7 +26,7 @@ from urllib.parse import urlsplit
 
 import requests
 
-from . import __version__, config, db, metrics, vault
+from . import __version__, appariement, config, db, metrics, vault
 
 LOG = logging.getLogger("foulee.calendrier")
 
@@ -496,10 +496,15 @@ WORKOUT_WORDS = re.compile(
     r"(footing|fractionn|endurance|seuil|vma|sortie|\bsl\b|\bef\b|renfo|renforcement|muscu|gainage|\bppg\b|"
     r"côtes|\bcotes\b|tempo|récup|recup|séance|seance|entraînement|entrainement|workout|interval|fartlek|"
     r"pyramide|allure|\bas\d+|\bvélo\b|\bvelo\b|natation|piscine|yoga|étirement|etirement|mobilit|\bhiit\b|"
-    r"cardio|home ?trainer|\brun\b|jogging|échauffement|echauffement)", re.I)
+    r"cardio|home ?trainer|\brun\b|jogging|échauffement|echauffement|squat|hip ?thrust|fentes?\b|pompes|"
+    r"\d+\s?x\s?\d+)", re.I)
 SPORT_WORDS = [
     (None, r"triathlon|duathlon|aquathlon|swimrun|\braid\b|multisport"),  # plusieurs sports : toute séance compte
-    ("renfo", r"renfo|renforcement|muscu|musculation|gainage|\bppg\b|strength|abdos|\bcore\b|circuit|crossfit"),
+    ("renfo", r"renfo|renforcement|muscu|musculation|gainage|\bppg\b|strength|abdos|\bcore\b|circuit|crossfit|"
+              # le nom des exercices suffit (« 5x10 Squat arrière avec poids(65kg) + 5x10 Hip thrust(47kg) »)
+              r"squat|hip ?thrust|fentes?\b|lunges?|soulev[ée] de terre|deadlift|d[ée]velopp[ée]|bench|pompes|"
+              r"push[- ]?ups?|tractions|pull[- ]?ups?|kettlebell|halt[èe]res?|dumbbell|burpees?|planche|plank|"
+              r"pont fessier|glute|mollets|chaise|step[- ]?ups?|presse|leg press|\d+\s?kg\b"),
     ("velo", r"\bv[ée]lo\b|\bbike\b|cyclisme|\bcycling\b|spinning|\bvtt\b|home ?trainer|zwift|\bride\b|gravel|"
              r"granfondo|gran fondo|cyclosportive"),
     ("natation", r"natation|\bnage\b|\bswim|piscine"),
@@ -530,10 +535,7 @@ def classify(event: dict) -> tuple[str, str | None]:
         kind = "seance"
     else:
         return "autre", None
-    for sport, pattern in SPORT_WORDS:
-        if re.search(pattern, title, re.I):
-            return kind, sport
-    return kind, "course"
+    return kind, sport_of(title)
 
 
 # ------------------------------------------------------------------ base
@@ -580,9 +582,21 @@ def store(conn: sqlite3.Connection, events: list[dict], today: date | None = Non
         # (faite, ou son heure passée) reste là, pour dire ce soir « fait » ou « manqué ».
         fresh = {(event["title"][:200], None if event["all_day"] else _iso(event["start"]))
                  for event, day in rows if day == today}
+        # … sauf si elle a seulement changé de jour (déplacée dans Garmin Connect) : même identifiant ailleurs dans
+        # le calendrier, ou même titre dans les six jours qui viennent, sans séance faite aujourd'hui pour elle
+        moved_uids = {(event["uid"] or "")[:200] for event, day in rows if day != today and event["uid"]}
+        later_titles = {event["title"][:200] for event, day in rows if today < day <= today + timedelta(days=6)}
+        done_today = conn.execute("SELECT id, date, sport, name, duration_s, moving_s FROM activities WHERE date = ?",
+                                  (today.isoformat(),)).fetchall()
+
+        def moved(r: sqlite3.Row) -> bool:
+            if r["uid"] and r["uid"] in moved_uids:
+                return True
+            return r["title"] in later_titles and not any(_fits(r["sport"], a["sport"]) for a in done_today)
+
         kept = [r for r in conn.execute("SELECT * FROM calendar_events WHERE date = ? AND " + NOT_COACH,
                                         (today.isoformat(),))
-                if (r["title"], r["start_local"]) not in fresh]
+                if (r["title"], r["start_local"]) not in fresh and not moved(r)]
     now = db.now_iso()
     # Les séances proposées par le coach (uid « coach:… ») ont leur propre mise à jour (coach.py)
     conn.execute("DELETE FROM calendar_events WHERE (date >= ? OR date < ?) AND " + NOT_COACH,
@@ -601,7 +615,29 @@ def store(conn: sqlite3.Connection, events: list[dict], today: date | None = Non
         conn.execute(INSERT, (row["date"], row["start_local"], row["end_local"], row["all_day"], row["title"],
                               row["description"], row["location"], row["kind"], row["sport"], row["uid"],
                               row["fetched_at"]))
+    resort(conn)
     return {"evenements": len(rows), "a_venir": upcoming, "courses": races}
+
+
+def sport_of(title: str) -> str | None:
+    for sport, pattern in SPORT_WORDS:
+        if re.search(pattern, title, re.I):
+            return sport
+    return "course"
+
+
+def resort(conn: sqlite3.Connection) -> int:
+    """Les séances déjà passées gardent le sport lu à l'époque : on le relit avec les règles d'aujourd'hui (0.8.2 :
+    « 5x10 Squat… + 5x10 Hip thrust » était rangée en course à pied, et la séance de renfo faite ne s'y
+    rattachait pas)."""
+    changed = 0
+    for row in conn.execute("SELECT id, title, sport FROM calendar_events WHERE kind = 'seance' AND "
+                            + NOT_COACH).fetchall():
+        sport = sport_of(row["title"])
+        if sport != row["sport"]:
+            conn.execute("UPDATE calendar_events SET sport = ? WHERE id = ?", (sport, row["id"]))
+            changed += 1
+    return changed
 
 
 def apply(conn: sqlite3.Connection, events: list[dict], info: dict) -> dict[str, Any]:
@@ -667,6 +703,109 @@ def _fits(planned: str | None, done: str | None) -> bool:
     return done in COMPATIBLE.get(planned, (planned,))
 
 
+# ------------------------------------------------------------- esquisse
+# De quoi dessiner une séance prévue en petit (des barres : largeur = durée, hauteur = intensité) : les blocs du
+# coach tels quels, ou ceux qu'on lit dans le texte d'une séance du calendrier Garmin (« 5 × 200 m à 100 % VMA »).
+_NUM = r"(\d+(?:[.,]\d+)?)"
+_REPS = re.compile(r"(?<![\d.,])(\d{1,2})\s*[x×]\s*(?=\d)", re.I)
+_DIST = re.compile(_NUM + r"\s*(km|m)\b(?!\s*(?:in|n)\b)", re.I)
+_TIME = re.compile(r"(?:(\d+)\s*h\s*(\d{1,2})?\b|" + _NUM + r"\s*(?:min|mn|'|’)|" + _NUM + r"\s*(?:s|sec|\")\b)", re.I)
+_PCT = re.compile(r"(\d{2,3})\s*%\s*(?:de\s+(?:la\s+)?)?vma", re.I)
+_ZONE = re.compile(r"\bz(?:one)?\s*(?:fc\s*)?([1-5])\b", re.I)
+_REST = re.compile(r"r[ée]cup\w*\s*:?\s*" + _NUM + r"\s*(min|mn|'|s|sec)?", re.I)
+# L'intensité devinée du nom de la séance : complète les blocs sans % de VMA, ou, sans aucun chiffre, donne une
+# séance type (dessinée en pointillé : approchée)
+_E = {"genre": "echauffement", "duree_min": 20, "pct_vma": 65}
+_C = {"genre": "calme", "duree_min": 10, "pct_vma": 60}
+_KEYWORDS = [
+    (r"\bvma\b|fractionn|\bpiste\b|interval|c[ôo]tes", 100,
+     [_E, {"genre": "corps", "repetitions": 8, "duree_min": 1.5, "pct_vma": 100, "recup_min": 1.5}, _C]),
+    (r"seuil|tempo|allure semi|\bas\s?21", 85,
+     [_E, {"genre": "corps", "repetitions": 2, "duree_min": 10, "pct_vma": 85, "recup_min": 3}, _C]),
+    (r"allure marathon|\bam\b|\bas\s?42", 80, [_E, {"genre": "corps", "duree_min": 30, "pct_vma": 80}, _C]),
+    (r"endurance active|\bea\b|\bactive\b", 75, [{"genre": "corps", "duree_min": 50, "pct_vma": 75}]),
+    (r"endurance|footing|\bef\b|sortie longue|\bsl\b|r[ée]cup", 65, [{"genre": "corps", "duree_min": 50, "pct_vma": 65}]),
+]
+
+
+def _minutes(match: re.Match) -> float:
+    hours, mins, num, secs = match.group(1), match.group(2), match.group(3), match.group(4)
+    if hours:
+        return int(hours) * 60 + int(mins or 0)
+    if num:
+        return float(num.replace(",", "."))
+    return float(secs.replace(",", ".")) / 60
+
+
+def _block_of(text: str) -> dict | None:
+    genre = "echauffement" if re.search(r"[ée]chauff", text, re.I) else \
+        "calme" if re.search(r"retour au calme|\brac\b|calme", text, re.I) else "corps"
+    rest = _REST.search(text)
+    head = text[:rest.start()] if rest else text
+    block: dict[str, Any] = {"genre": genre}
+    reps = _REPS.search(head)
+    if reps:
+        block["repetitions"] = max(1, min(50, int(reps.group(1))))
+    dist = _DIST.search(head)
+    time = _TIME.search(head)
+    if dist and (not time or dist.start() < time.start()):
+        value = float(dist.group(1).replace(",", "."))
+        block["distance_m"] = value * 1000 if dist.group(2).lower() == "km" else value
+    elif time:
+        block["duree_min"] = round(_minutes(time), 2)
+    pct = _PCT.search(text)
+    zone = _ZONE.search(text)
+    if pct:
+        block["pct_vma"] = int(pct.group(1))
+    elif zone:
+        block["zone_fc"] = int(zone.group(1))
+    if rest:
+        value = float(rest.group(1).replace(",", "."))
+        block["recup_min"] = value / 60 if (rest.group(2) or "").lower() in ("s", "sec") else value
+    if "duree_min" not in block and "distance_m" not in block and reps:
+        bare = re.search(r"[x×]\s*(\d{3,5})\b", head, re.I)  # « 3 x 3000 » : des mètres
+        if bare:
+            block["distance_m"] = float(bare.group(1))
+    if "duree_min" not in block and "distance_m" not in block:
+        return None
+    return block
+
+
+PLAN_CODE = re.compile(r"^\s*\d+\s*km-s\d+-\d+-", re.I)  # « 21KM-S3-4-… » : le code du plan, pas une distance
+
+
+def sketch_blocks(title: str, description: str | None) -> tuple[list[dict], bool]:
+    """(blocs, approché) d'une séance prévue : lus ligne à ligne dans son texte ; à défaut, un seul bloc dont
+    l'intensité vient du nom (« Endurance fondamentale », « VMA courte »…), approché=True. ([], False) sinon."""
+    blocks = []
+    for line in re.split(r"[\n;]|\s\+\s|\s/\s|,\s+(?!r[ée]cup)|\.\s+(?=[A-ZÉÈÀ«])", f"{description or ''}"):
+        line = line.strip(" -•·*.")
+        if line and (block := _block_of(line)):
+            blocks.append(block)
+    title = PLAN_CODE.sub("", title or "")
+    named = [b for part in re.split(r"\s\+\s|,\s+(?!r[ée]cup)", title) if (b := _block_of(part))]
+    if not blocks:
+        blocks = named
+    elif named and not any(b["genre"] == "corps" for b in blocks):
+        # « Côtes 8 × 1 min » : le corps de séance est dans le nom, l'échauffement et le retour au calme dans le texte
+        at = next((i for i, b in enumerate(blocks) if b["genre"] == "calme"), len(blocks))
+        blocks[at:at] = [b for b in named if b["genre"] == "corps"]
+    if description and (pct := _PCT.search(description)):
+        for block in blocks:
+            if block["genre"] == "corps" and not block.get("pct_vma") and not block.get("zone_fc"):
+                block["pct_vma"] = int(pct.group(1))
+    keyword = next(((pct, model) for pattern, pct, model in _KEYWORDS if re.search(pattern, title, re.I)), None)
+    if blocks:
+        if keyword:
+            for block in blocks:
+                if block["genre"] == "corps" and not block.get("pct_vma") and not block.get("zone_fc"):
+                    block["pct_vma"] = keyword[0]
+        return blocks, False
+    if keyword:
+        return [dict(b) for b in keyword[1]], True
+    return [], False
+
+
 def plan(conn: sqlite3.Connection, start: date, end: date, today: date | None = None,
          activities: list | None = None) -> list[dict]:
     """Événements de la période, chacun avec son état : « fait » (une séance du même sport ce jour-là),
@@ -679,19 +818,39 @@ def plan(conn: sqlite3.Connection, start: date, end: date, today: date | None = 
     if not events:
         return []
     if activities is None:
-        activities = conn.execute("SELECT id, date, sport, name FROM activities WHERE date BETWEEN ? AND ? "
-                                  "ORDER BY start_local", (start.isoformat(), end.isoformat())).fetchall()
-    used: set[str] = set()
-    matched: dict[int, Any] = {}
-    # Les courses d'abord : la séance d'un jour de course, c'est la course
-    for row in sorted(events, key=lambda r: (r["date"], r["kind"] != "course", r["start_local"] or "", r["id"])):
-        if row["kind"] == "autre":
+        activities = conn.execute("SELECT id, date, sport, name, duration_s, moving_s FROM activities WHERE date "
+                                  "BETWEEN ? AND ? ORDER BY start_local", (start.isoformat(), end.isoformat())).fetchall()
+    try:  # les blocs des séances du coach, tels qu'il les a écrits (meta du relais)
+        proposals = {int(p["id"]): p for p in json.loads(db.get_meta(conn, "relais_propositions") or "[]")
+                     if isinstance(p, dict) and str(p.get("id", "")).isdigit()}
+    except (TypeError, ValueError):
+        proposals = {}
+    # La séance du coach envoyée sur la montre revient aussi par le calendrier Garmin (« VMA courte ») : c'est la
+    # même que « VMA courte (coach) », on ne la montre qu'une fois
+    coach_rows = [r for r in events if (r["uid"] or "").startswith("coach:")]
+    events = [r for r in events if (r["uid"] or "").startswith("coach:") or not any(
+        appariement.same_session(c["title"], c["date"], r["title"], r["date"]) for c in coach_rows)]
+    sketches = {}
+    for row in events:
+        if row["kind"] != "seance" or row["sport"] in ("renfo", "souplesse"):
             continue
-        found = next((a for a in activities if a["date"] == row["date"] and a["id"] not in used
-                      and _fits(row["sport"], a["sport"])), None)
-        if found is not None:
-            used.add(found["id"])
-            matched[row["id"]] = found
+        uid = row["uid"] or ""
+        coach_item = proposals.get(int(uid[6:])) if uid.startswith("coach:") and uid[6:].isdigit() else None
+        sketches[row["id"]] = (coach_item.get("blocs") or [], False) if coach_item else \
+            sketch_blocks(row["title"], row["description"])
+
+    def seconds(a: Any) -> float | None:
+        keys = a.keys() if hasattr(a, "keys") else ()
+        value = (a["moving_s"] if "moving_s" in keys else None) or (a["duration_s"] if "duration_s" in keys else None)
+        return float(value) if value else None
+
+    candidates = [{"cle": row["id"], "date": row["date"], "titre": row["title"], "sport": row["sport"],
+                   "type": row["kind"], "blocs": sketches.get(row["id"], ([], False))[0]}
+                  for row in events if row["kind"] != "autre"]
+    done = [{"cle": a["id"], "date": a["date"], "sport": a["sport"], "nom": a["name"], "duree_s": seconds(a), "row": a}
+            for a in activities]
+    vma = (db.get_settings(conn).get("vma_kmh") or None)
+    matched = {key: d["row"] for key, d in appariement.assign(candidates, done, _fits, vma).items()}
     out = []
     for row in events:
         day = date.fromisoformat(row["date"])
@@ -711,6 +870,11 @@ def plan(conn: sqlite3.Connection, start: date, end: date, today: date | None = 
             "coach_id": int(row["uid"][6:]) if (row["uid"] or "").startswith("coach:") and row["uid"][6:].isdigit() else None,
             "seance_nom": done["name"] if done is not None else None, "journee": bool(row["all_day"]),
         })
+        item = out[-1]
+        blocks, approx = sketches.get(row["id"], ([], False))
+        if blocks:
+            item["blocs"] = blocks
+            item["esquisse_approchee"] = approx
     return out
 
 

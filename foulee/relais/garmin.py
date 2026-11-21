@@ -43,6 +43,7 @@ log = logging.getLogger("foulee.relais.garmin")
 
 AUTHORIZE_URL = "https://connect.garmin.com/oauth2Confirm"
 TOKEN_URL = "https://connectapi.garmin.com/di-oauth2-service/oauth/token"   # selon la note PKCE de Garmin
+TOKEN_URL_ALT = "https://diauth.garmin.com/di-oauth2-service/oauth/token"  # l'autre adresse publiée par Garmin
 API_URL = "https://apis.garmin.com"
 CALLBACK_PATH = "/garmin/retour"
 PENDING_MINUTES = 15          # le temps de s'identifier chez Garmin et d'accepter
@@ -106,6 +107,10 @@ def save_app(client_id: str, client_secret: str, address: str) -> dict:
     client_id, client_secret = (client_id or "").strip(), (client_secret or "").strip()
     if not client_id or len(client_id) > 200 or not client_secret or len(client_secret) > 500:
         raise GarminError("Client ID ou Client Secret manquant.")
+    import re
+    if not re.fullmatch(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}", client_id):
+        raise GarminError(f"Ce Client ID ne ressemble pas à ceux de Garmin (36 caractères, comme "
+                          f"10761fb6-…-8eaddee706dd) : il en compte {len(client_id)}. Collé deux fois ? Recommence.")
     data = {"client_id": client_id, "client_secret": client_secret, "adresse": clean_address(address)}
     vault.set_secret("relais-garmin-appli", json.dumps(data))
     return {"client_id": client_id, "adresse": data["adresse"], "retour": redirect_uri(data)}
@@ -173,18 +178,93 @@ def _call(method: str, url: str, **kwargs) -> tuple[int, Any]:
         raise GarminError("Garmin ne répond pas pour l'instant : réessaie dans quelques minutes.", 502) from None
 
 
+def _token_urls() -> list[str]:
+    forced = os.environ.get("FOULEE_GARMIN_TOKEN_URL")
+    return [forced.rstrip("/")] if forced else [TOKEN_URL, TOKEN_URL_ALT]
+
+
+def _token_variants(params: dict, settings: dict):
+    """Les façons d'appeler le service des jetons : chaque adresse publiée, identifiants de l'appli dans le
+    formulaire (la note PKCE de Garmin) ou en en-tête « Basic » (l'usage OAuth 2.0 courant)."""
+    basic = base64.b64encode(f"{settings['client_id']}:{settings['client_secret']}".encode()).decode()
+    for url in _token_urls():
+        yield url, "formulaire", {"Accept": "application/json"}, \
+            {**params, "client_id": settings["client_id"], "client_secret": settings["client_secret"]}
+        yield url, "en-tête", {"Accept": "application/json", "Authorization": f"Basic {basic}"}, \
+            {**params, "client_id": settings["client_id"]}
+
+
+def _answered(status: int, data: Any) -> bool:
+    """Garmin a-t-il vraiment répondu (un jeton, ou un refus OAuth en JSON), et pas une page d'erreur web ?"""
+    return status < 400 or isinstance(data, dict)
+
+
+def _token_post(params: dict, settings: dict) -> tuple[int, Any]:
+    """POST au service des jetons ; tant qu'une variante répond par une page web d'erreur, la suivante. La bonne
+    est retenue (meta « garmin-jetons-variante ») pour les appels suivants."""
+    variants = list(_token_variants(params, settings))
+    remembered = vault.get_secret("relais-garmin-variante")
+    variants.sort(key=lambda v: f"{v[0]} {v[1]}" != remembered)
+    status, data = 0, None
+    for url, kind, headers, form in variants:
+        status, data = _call("POST", url, headers=headers, form=form)
+        if _answered(status, data):
+            if f"{url} {kind}" != remembered:
+                vault.set_secret("relais-garmin-variante", f"{url} {kind}")
+            break
+    return status, data
+
+
 def _token_request(params: dict) -> dict:
     settings = _settings()
-    status, data = _call("POST", _url("FOULEE_GARMIN_TOKEN_URL", TOKEN_URL),
-                         headers={"Accept": "application/json"},
-                         form={**params, "client_id": settings["client_id"], "client_secret": settings["client_secret"]})
+    status, data = _token_post(params, settings)
     if status >= 400 or not isinstance(data, dict) or not data.get("access_token"):
-        log.warning("Jetons Garmin refusés (HTTP %s)", status)
-        raise GarminError(f"Garmin a refusé l'autorisation (HTTP {status}).", 401 if status in (400, 401) else 502)
+        reason = _reason(data)
+        log.warning("Jetons Garmin refusés (HTTP %s) %s", status, reason)
+        hint = (" L'appli Garmin enregistrée sur le relais (Client ID ou Client Secret) ne correspond pas à celle du "
+                "portail : son administrateur peut le vérifier avec « foulee relais garmin tester »."
+                if status == 401 or "client" in reason.lower() else "")
+        raise GarminError(f"Garmin a refusé l'autorisation (HTTP {status}{' : ' + reason if reason else ''}).{hint}",
+                          401 if status in (400, 401) else 502)
     stamp = datetime.now().timestamp()
     return {"access": data["access_token"], "refresh": data.get("refresh_token"),
             "expire": stamp + int(data.get("expires_in") or 86400),
             "refresh_expire": stamp + int(data.get("refresh_token_expires_in") or 90 * 86400)}
+
+
+def _reason(data: Any) -> str:
+    """Le motif d'un refus de Garmin (« invalid_client »…), jamais rien d'autre de sa réponse."""
+    if isinstance(data, dict):
+        text = " ".join(str(data.get(k) or "") for k in ("error", "error_description", "message")).strip()
+    else:
+        text = str(data or "").strip()
+        if "<" in text:  # une page web d'erreur : son titre seulement
+            import re
+            title = re.search(r"<title>(.*?)</title>", text, re.S | re.I)
+            text = html.unescape(title.group(1)) if title else "page d'erreur"
+    return " ".join(text.split())[:160]
+
+
+def check_app() -> dict:
+    """« foulee relais garmin tester » : Garmin reconnaît-il le Client ID et le Client Secret enregistrés ?
+
+    On demande un jeton avec un jeton de renouvellement bidon, de chaque façon possible : des identifiants faux
+    sont refusés comme tels (401, invalid_client) ; des identifiants justes, pour le jeton seulement (400,
+    invalid_grant). Rien n'est jamais affiché du secret, que sa longueur."""
+    settings = _settings()
+    tries = []
+    for url, kind, headers, form in _token_variants({"grant_type": "refresh_token", "refresh_token": "essai-foulee"},
+                                                    settings):
+        status, data = _call("POST", url, headers=headers, form=form)
+        reason = _reason(data)
+        good = _answered(status, data) and status != 401 and "client" not in reason.lower()
+        tries.append({"adresse": urlsplit(url).hostname, "identifiants": kind, "http": status, "motif": reason,
+                      "ok": good})
+        if good:
+            vault.set_secret("relais-garmin-variante", f"{url} {kind}")
+            break
+    return {"ok": any(t["ok"] for t in tries), "essais": tries, "client_id": settings["client_id"],
+            "secret": len(settings["client_secret"]), "retour": redirect_uri(settings)}
 
 
 def _api(method: str, path: str, access: str, body: Any = None) -> tuple[int, Any]:
@@ -347,7 +427,12 @@ def _shared_vma(conn: sqlite3.Connection, student_id: int) -> float | None:
     from . import club
 
     content, _ = club.shared(conn, student_id)
-    return content.get("profil", {}).get("vma_kmh")
+    shared_vma = content.get("profil", {}).get("vma_kmh")
+    if shared_vma:
+        return shared_vma
+    # sans VMA partagée : celle que le coach a mesurée au club, si elle est notée
+    row = conn.execute("SELECT vma_test FROM eleves_suivi WHERE eleve_id = ?", (student_id,)).fetchone()
+    return row["vma_test"] if row and row["vma_test"] else None
 
 
 def _with_retry(conn: sqlite3.Connection, account_id: int, method: str, path: str, body: Any = None):
@@ -491,6 +576,46 @@ def student_send(conn: sqlite3.Connection, student: sqlite3.Row, proposal_id: in
         return {"a_relier": True, "adresse": url, "raison": need.reason or None}
     except WorkoutError as exc:
         raise GarminError(str(exc)) from None
+
+
+def personal_send(conn: sqlite3.Connection, account: sqlite3.Row, payload: dict) -> dict:
+    """Une séance que l'élève s'est composée lui-même (son renfo, par exemple) : dans son calendrier Garmin, à sa
+    date. Elle n'est pas gardée sur le relais ; chaque envoi en ajoute une."""
+    from . import club
+
+    if not isinstance(payload, dict):
+        raise GarminError("Séance illisible.")
+    try:
+        title = club._txt(payload.get("titre"), 80)
+        if not title:
+            raise GarminError("Donne un nom à ta séance.")
+        item = {"titre": title, "sport": payload.get("sport") if payload.get("sport") in garmin_training.SPORTS else "renfo",
+                "blocs": club.clean_blocks(payload.get("blocs")), "consigne": club._txt(payload.get("consigne"), 1500)}
+    except store.RelayError as exc:
+        raise GarminError(str(exc)) from None
+    today = store.local_now().date().isoformat()
+    day = club._day(payload.get("date")) or today
+    day = max(day, today)
+    if link_row(conn, account["id"]) is None:
+        return {"a_relier": True, "adresse": authorize_url(conn, account["id"])}
+    try:
+        workout = garmin_training.build(item, None)
+    except WorkoutError as exc:
+        raise GarminError(str(exc)) from None
+    try:
+        status, data = _with_retry(conn, account["id"], "POST", "/workoutportal/workout/v2", workout)
+    except NeedLink as need:
+        return {"a_relier": True, "adresse": need.url, "raison": need.reason or None}
+    workout_id = data.get("workoutId") if isinstance(data, dict) else None
+    if status >= 400 or not workout_id:
+        log.warning("Séance perso refusée par Garmin (HTTP %s) : %s", status, str(data)[:300])
+        raise GarminError(f"Garmin a refusé la séance (HTTP {status}).", 502)
+    status, data = _with_retry(conn, account["id"], "POST", "/training-api/schedule/", {"workoutId": workout_id, "date": day})
+    if status >= 400:
+        _with_retry(conn, account["id"], "DELETE", f"/training-api/workout/v2/{workout_id}")
+        raise GarminError(f"Garmin n'a pas pu planifier la séance au {_day_label(day)} (HTTP {status}).", 502)
+    log.info("Séance perso envoyée sur le compte Garmin de %s", account["id"])
+    return {"envoi": {"date": day, "envoye_le": store.now(), "par": "eleve"}}
 
 
 def coach_send(conn: sqlite3.Connection, coach: sqlite3.Row, proposal_ids: list[Any]) -> dict:

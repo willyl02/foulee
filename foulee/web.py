@@ -26,6 +26,7 @@ import ipaddress
 import json
 import mimetypes
 import os
+import re
 import secrets
 import sqlite3
 import sys
@@ -52,12 +53,15 @@ from . import (
     config,
     datadir,
     db,
+    jour,
     keyinput,
     metrics,
     objectifs,
+    partenaire,
     profile,
     reglages,
     renfo,
+    renfo_seances,
     retours,
     schedule,
     telephone,
@@ -287,6 +291,7 @@ def create_app() -> FastAPI:
                 "objectif": analysis.objective(settings), "profil_fc": analysis.hr_profile(conn, settings),
                 "club": club.summary(settings.get("club")), "club_licences": club.LICENCE_TYPES,
                 "club_logo": club.logo_version(),  # date du logo (pour l'adresse de l'image), ou None
+                "partenaire": partenaire.resolve(settings.get("partenaire")),
                 "garmin_profil": analysis.garmin_profile(conn),
                 "planning": schedule.describe(settings["horaires"]),
                 "modeles_horaires": schedule.MODELES,
@@ -485,6 +490,41 @@ def create_app() -> FastAPI:
             if planned or data["lie"]:
                 data["sources"].append(calendrier.source(conn))
             return data
+
+    # ------------------------------------------------------- ma séance du jour
+    @app.get("/api/jour")
+    def get_today(day: str | None = None) -> dict:
+        with db.session(readonly=True, strava=True) as conn:
+            return jour.day_page(conn, db.get_settings(conn), _day(day) or date.today())
+
+    @app.get("/api/jour/meteo")
+    def get_today_weather(day: str | None = None) -> dict:
+        with db.session(strava=True) as conn:  # écriture : la prévision est gardée une heure
+            return jour.weather_page(conn, db.get_settings(conn), _day(day) or date.today())
+
+    @app.put("/api/jour/ressenti/{activity_id}")
+    def put_feel(activity_id: str, payload: dict = Body(...)) -> dict:
+        try:
+            with db.session() as conn:
+                return {"ressenti": jour.save_feel(conn, activity_id, payload)}
+        except jour.DayError as exc:
+            raise HTTPException(400, str(exc)) from None
+
+    @app.post("/api/jour/ressenti/{activity_id}/coach")
+    def feel_to_coach(activity_id: str) -> dict:
+        """Le ressenti de la séance, en message au coach (fil privé de l'élève)."""
+        def action(conn):
+            link = coach.status(conn)
+            me = link.get("compte") or {}
+            if not link.get("relie") or me.get("role") != "eleve" or not me.get("id"):
+                raise coach.CoachError("Relie d'abord ton profil à ton coach (Réglages → Coach et élèves).", 409)
+            coach.proxy(conn, "POST", f"fils/eleve-{int(me['id'])}", {"texte": jour.coach_text(conn, activity_id)})
+            jour.mark_sent(conn, activity_id)
+            return {"envoye": True}
+        try:
+            return coach_call(action)
+        except jour.DayError as exc:
+            raise HTTPException(400, str(exc)) from None
 
     @app.get("/api/allures")
     def get_paces(comparer: float | None = None, test: str | None = None) -> dict:
@@ -994,6 +1034,16 @@ def create_app() -> FastAPI:
         out = io.BytesIO()  # un vrai fichier SVG (avec xmlns), affichable seul dans une balise <img>
         segno.make(f"https://{name}/", error="m").save(out, kind="svg", dark="#15201b", light="#ffffff", border=2, scale=4,
                                                          xmldecl=False)
+        return Response(out.getvalue(), media_type="image/svg+xml", headers={"Cache-Control": "no-store"})
+
+    @app.get("/api/notifications/qr.svg")
+    def notifications_qr(adresse: str = "") -> Response:
+        """Le QR code de l'abonnement ntfy (serveur + sujet), à scanner avec le téléphone."""
+        if not re.fullmatch(r"https?://[A-Za-z0-9.-]+(:\d{1,5})?(/[A-Za-z0-9._~-]+)*/foulee-[A-Za-z0-9_-]{8,60}", adresse):
+            raise HTTPException(400, "Adresse d'abonnement illisible.")
+        out = io.BytesIO()
+        segno.make(adresse, error="m").save(out, kind="svg", dark="#15201b", light="#ffffff", border=2, scale=4,
+                                            xmldecl=False)
         return Response(out.getvalue(), media_type="image/svg+xml", headers={"Cache-Control": "no-store"})
 
     @app.put("/api/acces-reseau")
@@ -1615,6 +1665,41 @@ def create_app() -> FastAPI:
     def fit_response(name: str, data: bytes) -> Response:
         return Response(data, media_type="application/vnd.ant.fit",
                         headers={"Content-Disposition": f'attachment; filename="{name}"', "Cache-Control": "no-store"})
+
+    # Mes séances de renfo : composées ici, gardées dans la base du profil, sur la montre ou en .fit
+    @app.get("/api/renfo/seances")
+    def renfo_sessions() -> dict:
+        with db.session(readonly=True) as conn:
+            link = coach.status(conn)
+            role = (link.get("compte") or {}).get("role") if link.get("relie") else None
+            return {"seances": renfo_seances.saved(conn), "bibliotheque": renfo_seances.library(),
+                    "montre": role == "eleve"}
+
+    @app.put("/api/renfo/seances")
+    def renfo_sessions_save(payload: dict = Body(...)) -> dict:
+        try:
+            with db.session() as conn:
+                return {"seances": renfo_seances.save(conn, payload.get("seances"))}
+        except renfo_seances.SessionError as exc:
+            raise HTTPException(400, str(exc)) from None
+
+    @app.post("/api/renfo/seance.fit")
+    def renfo_session_fit(payload: dict = Body(...)) -> Response:
+        from . import workout_fit
+
+        try:
+            item = renfo_seances.to_item(payload.get("seance"))
+            return fit_response(workout_fit.file_name(item), workout_fit.build(item, None))
+        except (renfo_seances.SessionError, workout_fit.WorkoutError) as exc:
+            raise HTTPException(400, str(exc)) from None
+
+    @app.post("/api/renfo/seance/montre")
+    def renfo_session_watch(payload: dict = Body(...)) -> dict:
+        try:
+            item = renfo_seances.to_item(payload.get("seance"), payload.get("date"))
+        except renfo_seances.SessionError as exc:
+            raise HTTPException(400, str(exc)) from None
+        return coach_call(lambda conn: coach.garmin_personal(conn, item))
 
     @app.get("/api/coach/seances/{proposal_id}.fit")
     def coach_workout_fit(proposal_id: int) -> Response:

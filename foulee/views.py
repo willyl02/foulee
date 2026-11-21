@@ -24,6 +24,14 @@ TILE_CATEGORIES = ["Accueil", "Chiffres et courbes", "Entraînement", "Séances"
 
 TILE_TYPES: list[dict[str, Any]] = [
     {
+        "type": "jour", "label": "Ma séance du jour", "icone": "sun", "categorie": "Accueil",
+        "description": "Avant la séance : ce qui est prévu (esquisse, allures), le verdict de la nuit en une phrase, "
+                       "la météo heure par heure et le meilleur créneau selon ton poste ; après : le débrief et ton "
+                       "ressenti, à envoyer à ton coach.",
+        "taille": {"w": 12, "h": 6},
+        "params": [{"key": "meteo", "label": "Météo et créneau (Open-Meteo)", "kind": "bool", "default": True}],
+    },
+    {
         "type": "profil", "label": "En-tête : bonjour", "icone": "user", "categorie": "Accueil",
         "description": "Ta photo, la date, ton poste du jour, ton objectif et la dernière synchro.",
         "taille": {"w": 12, "h": 1}, "params": [],
@@ -76,8 +84,9 @@ TILE_TYPES: list[dict[str, Any]] = [
     {
         "type": "agenda", "label": "Calendrier d'entraînement", "icone": "calendar", "categorie": "Entraînement",
         "description": "Le mois en un coup d'œil : séances prévues et courses de ton calendrier (Garmin Connect ou "
-                       "agenda iCal) face à ce que tu as fait, jour par jour. Un clic sur un jour donne le détail.",
-        "taille": {"w": 12, "h": 3}, "params": [],
+                       "agenda iCal) face à ce que tu as fait, jour par jour, avec l'esquisse de chaque séance prévue. Un "
+                       "clic sur un jour donne le détail.",
+        "taille": {"w": 12, "h": 5}, "params": [],
     },
     {
         "type": "kpi", "label": "Chiffre clé", "icone": "gauge", "categorie": "Chiffres et courbes",
@@ -261,6 +270,13 @@ TILE_TYPES: list[dict[str, Any]] = [
         ],
     },
     {
+        "type": "seance_analyse", "label": "Séance : analyse fraction par fraction", "icone": "wave",
+        "categorie": "Séances",
+        "description": "Façon intervals.icu : pour chaque tour, son temps, son allure, sa FC moyenne, sa zone et la "
+                       "part du tour passée dans cette zone, au-dessus des courbes d'allure et de FC.",
+        "taille": {"w": 12, "h": 3}, "params": [],
+    },
+    {
         "type": "seance_tours", "label": "Séance : tours", "icone": "table", "categorie": "Séances",
         "description": "Tours enregistrés par la montre, ou découpage au kilomètre.",
         "taille": {"w": 12, "h": 2},
@@ -355,29 +371,21 @@ def home_view() -> dict:
     }
 
 
+# Avant la 0.8.2, « Aujourd'hui » répétait la forme du jour de l'Accueil (huit chiffres, deux courbes) : elle
+# devient « Ma séance du jour ». Seule une vue encore faite de ces tuiles d'origine est remplacée.
+OLD_TODAY_TYPES = ["kpi"] * 8 + ["derniere_seance", "serie", "serie"]
+
+
+def today_view() -> dict:
+    return {"id": "aujourdhui", "name": "Aujourd'hui", "icon": "sun",
+            "spec": {"tuiles": [_tile("jour", 12, 6)]}}
+
+
 def default_views() -> list[dict]:
     pied = "pied"
     return [
         home_view(),
-        {
-            "id": "aujourdhui", "name": "Aujourd'hui", "icon": "sun",
-            "spec": {"tuiles": [
-                _tile("kpi", metrique="sleep_s"),
-                _tile("kpi", metrique="hrv_night"),
-                _tile("kpi", metrique="resting_hr"),
-                _tile("kpi", metrique="bb_wake"),
-                _tile("kpi", metrique="sleep_score"),
-                _tile("kpi", metrique="stress_avg"),
-                _tile("kpi", metrique="act.distance_km", fenetre="semaine", reference_jours=28,
-                      titre="Kilomètres sur 7 jours"),
-                _tile("kpi", metrique="tsb", titre="Fraîcheur"),
-                _tile("derniere_seance", 6, 2),
-                _tile("serie", 6, 2, titre="Récupération sur 30 jours", metriques=["hrv_night", "resting_hr"],
-                      disposition="empiler", periode="30"),
-                _tile("serie", 12, 2, titre="Sommeil sur 60 jours", metriques=["sleep_s"], style="barres",
-                      bandes_postes=True, periode="60"),
-            ]},
-        },
+        today_view(),
         {
             "id": "entrainement", "name": "Entraînement", "icon": "activity",
             "spec": {"periode": 180, "tuiles": [
@@ -400,6 +408,7 @@ def default_views() -> list[dict]:
                 _tile("seance_resume", 12, 1),
                 _tile("seance_renfo", 12, 3),
                 _tile("seance_effet", 12, 2),
+                _tile("seance_analyse", 12, 3),
                 _tile("seance_carte", 6, 3),
                 _tile("seance_courbes", 6, 3),
                 _tile("seance_mesures", 12, 2),
@@ -532,6 +541,9 @@ def ensure_default_views(conn: sqlite3.Connection) -> None:
         db.set_meta(conn, "vue_objectifs", "1")
         db.set_meta(conn, "vue_renfo_conseils", "1")
         db.set_meta(conn, "vue_periodes", "1")
+        db.set_meta(conn, "vue_seance_analyse", "1")
+        db.set_meta(conn, "vue_agenda_grand", "1")
+        db.set_meta(conn, "vue_seance_jour", "1")
         conn.commit()
         return
     if db.get_meta(conn, "vue_seance_renfo") is None:
@@ -599,6 +611,31 @@ def ensure_default_views(conn: sqlite3.Connection) -> None:
         # 0.8.1 : les exercices pour rééquilibrer, juste sous l'équilibre avant / arrière de la vue « Renfo »
         _insert_tile(conn, RENFO_VIEW, "renfo_conseils", 12, 3, after=("renfo_equilibre", "renfo"))
         db.set_meta(conn, "vue_renfo_conseils", "1")
+        conn.commit()
+    if db.get_meta(conn, "vue_agenda_grand") is None:
+        # 0.8.2 : le calendrier du mois grandit (de 3 à 5 rangées), s'il a encore sa taille d'origine
+        for row in conn.execute("SELECT id, spec FROM views").fetchall():
+            spec = json.loads(row["spec"])
+            tiles = [t for t in spec.get("tuiles", []) if t.get("type") == "agenda" and t.get("w") == 12 and t.get("h") == 3]
+            for tile in tiles:
+                tile["h"] = 5
+            if tiles:
+                conn.execute("UPDATE views SET spec = ?, updated_at = ? WHERE id = ?",
+                             (json.dumps(spec, ensure_ascii=False), db.now_iso(), row["id"]))
+        db.set_meta(conn, "vue_agenda_grand", "1")
+        conn.commit()
+    if db.get_meta(conn, "vue_seance_analyse") is None:
+        # 0.8.2 : l'analyse fraction par fraction, en pleine largeur, avant la carte et les courbes
+        _insert_tile(conn, "seance", "seance_analyse", 12, 3, after=("seance_effet", "seance_renfo", "seance_resume"))
+        db.set_meta(conn, "vue_seance_analyse", "1")
+        conn.commit()
+    if db.get_meta(conn, "vue_seance_jour") is None:
+        # 0.8.2 : « Aujourd'hui » devient « Ma séance du jour », si elle a encore ses tuiles d'origine
+        row = conn.execute("SELECT spec FROM views WHERE id = 'aujourdhui'").fetchone()
+        if row and [t.get("type") for t in json.loads(row["spec"]).get("tuiles", [])] == OLD_TODAY_TYPES:
+            conn.execute("UPDATE views SET spec = ?, updated_at = ? WHERE id = 'aujourdhui'",
+                         (json.dumps(today_view()["spec"], ensure_ascii=False), db.now_iso()))
+        db.set_meta(conn, "vue_seance_jour", "1")
         conn.commit()
     if db.get_meta(conn, "renfo_vue") is None and sync_renfo_view(conn):
         # 0.6 : exercices retrouvés par la mise à niveau de la base, la vue « Renfo » sans attendre une synchro
@@ -801,7 +838,7 @@ def calendar_view(view_id: str = CALENDAR_VIEW) -> dict:
     """La vue « Calendrier » : la prochaine course et les prochaines séances, puis le mois en entier."""
     return {"id": view_id, "name": "Calendrier", "icon": "calendar", "spec": {"tuiles": [
         _tile("a_venir", 12, 1),
-        _tile("agenda", 12, 3),
+        _tile("agenda", 12, 5),  # 0.8.2 : plus haut, pour l'esquisse des séances dans chaque case
     ]}}
 
 

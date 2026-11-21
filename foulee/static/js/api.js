@@ -67,3 +67,17 @@ export async function putBlob(path, blob) {
   }
   return response.json();
 }
+
+/** Un fichier fabriqué par le serveur à partir d'un envoi JSON (séance de renfo en .fit) : {blob, name}. */
+export async function postForFile(path, body) {
+  const headers = { "X-Foulee": "1", "Content-Type": "application/json" };
+  if (profileId) headers["X-Foulee-Profil"] = profileId;
+  const response = await fetch(path, { method: "POST", headers, body: JSON.stringify(body ?? {}) });
+  if (!response.ok) {
+    let data = null;
+    try { data = await response.json(); } catch (e) { /* réponse non JSON */ }
+    throw new Error(data?.detail || `${response.status}`);
+  }
+  const match = /filename="([^"]+)"/.exec(response.headers.get("Content-Disposition") || "");
+  return { blob: await response.blob(), name: match ? match[1] : "seance.fit" };
+}

@@ -98,12 +98,15 @@ fi
 
 chown -R foulee:foulee "$DATA"
 printf '\n\033[1;32m=== Le relais Foulée est en place ===\033[0m\n'
-say "Dans ton Foulée : Réglages → Coach et élèves → « J'ai déjà un compte », avec l'adresse publique du relais."
+say "Dans ton Foulée : Réglages → Club et coach → Coach et élèves → « J'ai déjà un compte », avec l'adresse publique du relais."
 say ""
 say "Commandes utiles :"
 say "  sudo foulee relais comptes                      la liste des comptes"
+say "  sudo foulee relais groupes                      chaque coach et ses élèves"
 say "  sudo foulee relais coach                        créer un compte coach"
 say "  sudo foulee relais mot-de-passe IDENTIFIANT     changer le mot de passe d'un compte"
 say "  sudo foulee relais desactiver IDENTIFIANT       bloquer un compte (reactiver pour le rouvrir)"
+say "  sudo foulee relais email                        brancher le service d'envoi d'e-mails (Brevo…)"
 say "  systemctl status foulee-relais                  état du relais (journalctl -u foulee-relais -n 50)"
 say "  sudo bash $ROOT/scripts/mettre-a-jour-serveur.sh   mettre à jour tout de suite"
+say "(Ces commandes te sont rappelées à chaque connexion SSH.)"

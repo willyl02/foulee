@@ -335,7 +335,33 @@ def trace_points(streams: dict | None, mask: bool) -> list[list[float]] | None:
     return [[round(la, 5), round(lo, 5)] for la, lo in points[::step]]
 
 
-def _shared_session(conn: sqlite3.Connection, row: sqlite3.Row, accord: dict) -> dict:
+CURVE_POINTS = 240
+
+
+def light_curve(streams: dict | None) -> dict | None:
+    """Allure (vitesse, m/s) et FC allégées à CURVE_POINTS points, sur l'axe du temps des tours : de quoi
+    dessiner l'analyse fraction par fraction chez le coach (jamais de position)."""
+    if not streams or not streams.get("t"):
+        return None
+    times, speeds, hrs = streams["t"], streams.get("spd") or [], streams.get("hr") or []
+    n = len(times)
+    step = max(1, -(-n // CURVE_POINTS))
+    t, v, fc = [], [], []
+    for i in range(0, n, step):
+        def mean(values: list) -> float | None:
+            nums = [x for x in values[i:i + step] if x is not None]
+            return sum(nums) / len(nums) if nums else None
+
+        t.append(round(times[i]))
+        speed, hr = mean(speeds), mean(hrs)
+        v.append(round(speed, 2) if speed is not None else None)
+        fc.append(round(hr) if hr is not None else None)
+    if not any(x is not None for x in v + fc):
+        return None
+    return {"t": t, "v": v, "fc": fc}
+
+
+def _shared_session(conn: sqlite3.Connection, row: sqlite3.Row, accord: dict, floors: list[float]) -> dict:
     from . import analysis, metrics, renfo
 
     extra = json.loads(row["extra"]) if row["extra"] else {}
@@ -353,13 +379,20 @@ def _shared_session(conn: sqlite3.Connection, row: sqlite3.Row, accord: dict) ->
         "avantage": benefit["libelle"] if benefit else None, "charge": row["load"],
     }
     laps = []
-    for lap in conn.execute("SELECT * FROM laps WHERE activity_id = ? ORDER BY idx", (row["id"],)):
+    rows = [dict(lap) for lap in conn.execute("SELECT * FROM laps WHERE activity_id = ? ORDER BY idx", (row["id"],))]
+    streams = analysis.load_streams(conn, row["id"]) if row["has_streams"] and len(rows) > 1 else None
+    analysed = analysis.lap_analysis(rows, streams, floors) if len(rows) > 1 else []
+    for lap, seg in zip(rows, analysed):
         laps.append({"duree_s": lap["duration_s"], "distance_m": lap["distance_m"], "fc_moy": lap["avg_hr"],
                      "vitesse_kmh": round(lap["avg_speed"] * 3.6, 1) if lap["avg_speed"] else None,
                      "allure": metrics.fmt_pace(lap["avg_speed"]) if running and lap["avg_speed"] else None,
-                     "denivele_m": lap["elev_gain_m"], "intensite": lap["intensity"]})
+                     "denivele_m": lap["elev_gain_m"], "intensite": lap["intensity"],
+                     "debut_s": seg["debut_s"], "fin_s": seg["fin_s"], "zone": seg["zone"], "zone_pct": seg["zone_pct"]})
     if len(laps) > 1:
         item["tours"] = laps
+        curve = light_curve(streams)
+        if curve:
+            item["courbe"] = curve  # allure et FC allégées : l'analyse fraction par fraction chez le coach
     sets = []
     for e in conn.execute("SELECT * FROM exercises WHERE activity_id = ? ORDER BY idx", (row["id"],)):
         info = renfo.describe(dict(e))
@@ -378,7 +411,7 @@ def _shared_session(conn: sqlite3.Connection, row: sqlite3.Row, accord: dict) ->
 def snapshot(conn: sqlite3.Connection, accord: dict, today: date | None = None) -> dict:
     """L'extrait des 4 dernières semaines, selon l'accord. Jamais les séances venues de Strava (ses règles
     l'interdisent), jamais de clé ni de jeton."""
-    from . import calendrier, objectifs
+    from . import analysis, calendrier, db, objectifs
 
     today = today or date.today()
     since = (today - timedelta(days=SHARE_DAYS)).isoformat()
@@ -386,10 +419,13 @@ def snapshot(conn: sqlite3.Connection, accord: dict, today: date | None = None) 
     if accord.get("seances"):
         rows = conn.execute("SELECT * FROM activities WHERE date >= ? AND source <> 'strava' AND id NOT LIKE "
                             "'strava:%' ORDER BY start_local DESC", (since,)).fetchall()
-        out["seances"] = [_shared_session(conn, row, accord) for row in rows]
+        floors = analysis.hr_profile(conn, db.get_settings(conn))["floors"]
+        out["seances"] = [_shared_session(conn, row, accord, floors) for row in rows]
         planned = calendrier.plan(conn, today - timedelta(days=SHARE_DAYS), today + timedelta(days=28), today)
         out["plan"] = [{"date": p["date"], "heure": p["heure"], "titre": p["titre"], "type": p["type"],
-                        "sport": p["sport"], "statut": p["statut"]} for p in planned if not p.get("coach")]
+                        "sport": p["sport"], "statut": p["statut"],
+                        **({"blocs": p["blocs"], "esquisse_approchee": p.get("esquisse_approchee", False)}
+                           if p.get("blocs") else {})} for p in planned if not p.get("coach")]
     if accord.get("objectif"):
         settings = db.get_settings(conn)
         goal = settings.get("objectif") if isinstance(settings.get("objectif"), dict) else None
@@ -474,6 +510,14 @@ def garmin_send(conn: sqlite3.Connection, proposal_id: int) -> dict:
     return _garmin(conn, "POST", "/envoyer", {"proposition": int(proposal_id), "vma_kmh": vma})
 
 
+def garmin_personal(conn: sqlite3.Connection, item: dict) -> dict:
+    """Une séance que je me suis composée (renfo…), dans mon calendrier Garmin par le relais du club."""
+    if (status(conn).get("compte") or {}).get("role") != "eleve":
+        raise CoachError("L'envoi sur la montre passe par le relais du club, avec un compte élève relié : "
+                         "télécharge plutôt le fichier .fit.", 409)
+    return _garmin(conn, "POST", "/perso", item)
+
+
 def garmin_link(conn: sqlite3.Connection) -> dict:
     return _garmin(conn, "POST", "/relier", {})
 
@@ -508,14 +552,16 @@ def block_text(block: dict, vma_kmh: float | None) -> str:
     if block.get("distance_m"):
         meters = block["distance_m"]
         size.append(f"{meters / 1000:g} km" if meters >= 1000 else f"{meters:g} m")
+    if block.get("libre") and not size:
+        size.append("libre (touche Lap)")
     text = f"{block.get('nom') or 'Bloc'} : " + (f"{reps} × " if reps > 1 else "") + " / ".join(size)
     if block.get("pct_vma"):
         pace = pace_for(vma_kmh, block["pct_vma"])
         text += f" à {block['pct_vma']:g} % VMA" + (f" ({pace})" if pace else "")
     elif block.get("zone_fc"):
         text += f" en zone FC {block['zone_fc']:g}"
-    if reps > 1 and (block.get("recup_min") or block.get("recup_texte")):
-        rest = f"{block['recup_min']:g} min" if block.get("recup_min") else ""
+    if reps > 1 and (block.get("recup_min") or block.get("recup_texte") or block.get("recup_libre")):
+        rest = f"{block['recup_min']:g} min" if block.get("recup_min") else "libre (Lap)" if block.get("recup_libre") else ""
         text += f", récup {rest} {block.get('recup_texte') or ''}".rstrip()
     if block.get("note"):
         text += f" — {block['note']}"
@@ -580,6 +626,7 @@ def my_page(conn: sqlite3.Connection) -> dict:
 
 # ------------------------------------------------------- passerelle vers le relais
 PROXY_PATHS = re.compile(r"^(groupe|eleves/\d+/fiche|eleves/\d+/seances/[A-Za-z0-9:_.-]+|propositions(/\d+)?|"
+                         r"niveaux|eleves/\d+/niveau|notifications(/essai|/email/code|/email/verifier)?|"
                          r"modeles(/\d+)?|fils(/[A-Za-z0-9:_.-]+)?|messages/\d+(/epingle)?|nouveautes|"
                          r"moi/seances/[A-Za-z0-9:_.-]+|partage/accord)$")
 

@@ -108,6 +108,35 @@ CREATE TABLE IF NOT EXISTS modeles (
     cree_le   TEXT NOT NULL
 );
 
+-- Groupes de niveau du coach (0.8.2) : chacun avec ses bornes de VMA ; un élève y va selon sa VMA (celle du test
+-- du club si le coach l'a notée, sinon celle qu'il partage), ou parce que le coach l'y a placé à la main
+CREATE TABLE IF NOT EXISTS niveaux (
+    id        INTEGER PRIMARY KEY,
+    coach_id  INTEGER NOT NULL REFERENCES comptes(id) ON DELETE CASCADE,
+    nom       TEXT NOT NULL,
+    vma_min   REAL,
+    vma_max   REAL,
+    couleur   TEXT NOT NULL DEFAULT 'bleu',
+    position  INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS eleves_suivi (
+    eleve_id      INTEGER PRIMARY KEY REFERENCES comptes(id) ON DELETE CASCADE,
+    vma_test      REAL,
+    vma_test_le   TEXT,
+    niveau_force  INTEGER REFERENCES niveaux(id) ON DELETE SET NULL,
+    modifie_le    TEXT NOT NULL
+);
+
+-- Notifications (voir notifs.py) : les réglages de chaque compte (ntfy, e-mail, événements, heures calmes) et le
+-- journal des derniers envois
+CREATE TABLE IF NOT EXISTS notifications (compte_id INTEGER PRIMARY KEY REFERENCES comptes(id) ON DELETE CASCADE,
+  reglages TEXT NOT NULL, modifie_le TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS notifications_envois (id INTEGER PRIMARY KEY, compte_id INTEGER NOT NULL REFERENCES comptes(id)
+  ON DELETE CASCADE, canal TEXT NOT NULL, evenement TEXT NOT NULL, statut TEXT NOT NULL, detail TEXT, cree_le TEXT NOT NULL);
+-- E-mails retenus par les heures calmes, envoyés à leur fin (notifs.flush_due)
+CREATE TABLE IF NOT EXISTS courriels_attente (id INTEGER PRIMARY KEY, compte_id INTEGER NOT NULL REFERENCES comptes(id)
+  ON DELETE CASCADE, evenement TEXT NOT NULL, sujet TEXT NOT NULL, texte TEXT NOT NULL, a_envoyer_le TEXT NOT NULL,
+  cree_le TEXT NOT NULL);
 -- Envoi des séances sur la montre (Training API de Garmin, voir garmin.py) : le lien de chaque élève (jetons
 -- chiffrés), les autorisations en cours (15 minutes) et les séances envoyées
 CREATE TABLE IF NOT EXISTS garmin_liens (
@@ -178,6 +207,15 @@ def db_path() -> Path:
     return base / "relais.db"
 
 
+_AFTER_COMMIT: dict[int, list] = {}
+
+
+def after_commit(conn: sqlite3.Connection, job) -> None:
+    """À lancer une fois la transaction enregistrée (une notification ne part pas pour une séance annulée par
+    une erreur) ; jamais si elle échoue."""
+    _AFTER_COMMIT.setdefault(id(conn), []).append(job)
+
+
 @contextmanager
 def session() -> Iterator[sqlite3.Connection]:
     conn = sqlite3.connect(db_path(), timeout=10)
@@ -189,8 +227,12 @@ def session() -> Iterator[sqlite3.Connection]:
         conn.execute("INSERT OR IGNORE INTO meta(key, value) VALUES ('schema', ?)", (str(SCHEMA_VERSION),))
         yield conn
         conn.commit()
+        jobs = _AFTER_COMMIT.pop(id(conn), [])
     finally:
+        _AFTER_COMMIT.pop(id(conn), None)
         conn.close()
+    for job in jobs:
+        job()
 
 
 # ------------------------------------------------------------ mots de passe

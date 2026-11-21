@@ -1,5 +1,6 @@
 // Foulée : chef d'orchestre de l'interface (navigation, vues, tuiles, édition, synchro, thème).
 import * as api from "./api.js";
+import { renderPartnerPage } from "./appli-externe.js";
 import * as C from "./charts.js";
 import * as E from "./editor.js";
 import * as F from "./format.js";
@@ -23,17 +24,18 @@ import * as D from "./tiles-data.js";
 import * as O from "./goals.js";
 import * as H from "./tiles-home.js";
 import * as W from "./tiles-withings.js";
+import * as J from "./tiles-jour.js";
 
 const RENDERERS = {
   kpi: D.kpi, serie: D.serie, charge: D.charge, zones: D.zones, calendrier: D.calendrier, nuage: D.nuage,
   postes: D.postes, objectif: O.objectif, objectifs: O.objectifs, fractions: D.fractions, note: D.note,
   activites: A.activites, derniere_seance: A.derniere_seance, seance_resume: A.seance_resume,
-  seance_carte: A.seance_carte, seance_courbes: A.seance_courbes, seance_tours: A.seance_tours,
+  seance_carte: A.seance_carte, seance_courbes: A.seance_courbes, seance_tours: A.seance_tours, seance_analyse: A.seance_analyse,
   seance_mesures: A.seance_mesures,
   renfo: R.renfo, renfo_exercices: R.renfo_exercices, seance_renfo: R.seance_renfo, renfo_equilibre: R.renfo_equilibre, renfo_conseils: R.renfo_conseils,
   seance_effet: T.seance_effet,
   profil: H.profil, forme: H.forme, allures: H.allures, semaine: H.semaine, records: H.records, journee: H.journee,
-  club: H.club, withings: W.withings, agenda: G.agenda, a_venir: G.a_venir,
+  club: H.club, withings: W.withings, agenda: G.agenda, a_venir: G.a_venir, jour: J.jour,
 };
 const PERIODS = [[7, "7 j"], [30, "30 j"], [90, "90 j"], [180, "6 mois"], [365, "1 an"], [730, "2 ans"]];
 // Tuiles qui ne dépendent pas de la période : une vue faite seulement de celles-ci se passe du sélecteur
@@ -107,7 +109,46 @@ async function start() {
   if (state.boot.synchro?.en_cours) pollSync();
   // Pastilles de connexion : revérifiées toutes les 2 minutes et au retour sur l'onglet (synchros automatiques)
   setInterval(refreshConn, 120000);
-  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") refreshConn(); });
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") { refreshConn(); watchClock(); } });
+  // L'heure passe pendant que la fenêtre reste ouverte : « il y a… » remis à jour chaque minute, et la page
+  // redessinée au changement de jour ou de moment (« Bonjour » / « Bonsoir »)
+  state.clockKey = clockKey();
+  setInterval(watchClock, 60000);
+}
+
+/** Le jour et le moment de la journée tels que la page les affiche (Bonjour de 4 h à 18 h, Bonsoir ensuite). */
+function clockKey() {
+  const now = new Date();
+  return `${F.isoDate(now)} ${now.getHours() >= 4 && now.getHours() < 18 ? "jour" : "soir"}`;
+}
+
+/** Chaque minute : les « il y a… » à jour ; au changement de jour ou de moment, la page relue en silence. */
+function watchClock() {
+  document.querySelectorAll("[data-rel]").forEach((el) => {
+    el.textContent = `${el.dataset.relPrefix || ""}${F.relative(el.dataset.rel)}`;
+  });
+  const key = clockKey();
+  if (key === state.clockKey || document.visibilityState !== "visible") return;
+  state.clockKey = key;
+  quietRefresh();
+}
+
+/** Relit le serveur et redessine la page en cours, sauf si on y fait quelque chose (saisie, fenêtre ouverte,
+ * vue en modification) : on réessaiera au prochain signal. Garde la position dans la page. */
+async function quietRefresh() {
+  const busy = state.editing || document.querySelector("dialog[open]") ||
+    (document.activeElement && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName));
+  if (busy) { state.refreshPending = true; return; }
+  state.refreshPending = false;
+  api.clearCache();
+  try { await loadBoot(); } catch (e) { return; }  // serveur injoignable : au prochain signal
+  renderBrand();
+  renderStrip();
+  renderNav();
+  renderSyncLine();
+  const y = window.scrollY;
+  rerender();
+  requestAnimationFrame(() => window.scrollTo(0, y));
 }
 
 function noData() { return !state.boot.volumes.daily && !state.boot.volumes.activities && !state.boot.strava?.seances; }
@@ -145,7 +186,29 @@ async function loadBoot() {
   watchCoach(state.boot, { toast });
 }
 
+/** « Revenir en haut » : un bouton rond en bas à droite dès qu'on a bien descendu dans une page longue
+ * (Réglages, fiche d'un élève…). */
+function setupToTop() {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "to-top";
+  button.hidden = true;
+  button.title = "Revenir en haut de la page";
+  button.setAttribute("aria-label", "Revenir en haut de la page");
+  button.innerHTML = icon("moveup");
+  button.addEventListener("click", () => {
+    const smooth = !matchMedia("(prefers-reduced-motion: reduce)").matches;
+    window.scrollTo({ top: 0, behavior: smooth ? "smooth" : "auto" });
+  });
+  document.body.append(button);
+  let ticking = false;
+  const update = () => { ticking = false; button.hidden = window.scrollY < 700; };
+  window.addEventListener("scroll", () => { if (!ticking) { ticking = true; requestAnimationFrame(update); } }, { passive: true });
+  window.addEventListener("hashchange", () => setTimeout(update, 50));
+}
+
 function setupChrome() {
+  setupToTop();
   $("#sync-btn").innerHTML = `${icon("sync")}Synchroniser`;
   $("#sync-btn").addEventListener("click", startSync);
   $("#settings-btn").innerHTML = `${icon("settings")}Réglages`;
@@ -242,37 +305,79 @@ function cycleTheme() {
 // ================================================================== navigation
 function renderNav() {
   const nav = $("#nav");
+  const partner = state.boot?.partenaire?.actif ? state.boot.partenaire : null;
+  const coach = state.boot?.coach;
+  // Trois parties, séparées d'un trait : les vues (à réordonner en les glissant), l'application partenaire, le coach
   nav.innerHTML = state.views.map((v, i) => `<button class="nav-item" type="button" data-id="${F.escape(v.id)}" data-index="${i}"
-      ${v.id === state.viewId && !isOtherPage() ? 'aria-current="page"' : ""} ${state.editing ? 'draggable="true"' : ""}>
+      ${v.id === state.viewId && !isOtherPage() ? 'aria-current="page"' : ""} draggable="true" title="Glisse pour changer l'ordre (ou Alt + ↑ ↓)">
       ${icon(v.icon)}<span>${F.escape(v.name)}</span></button>`).join("")
     + `<button class="nav-item nav-add" type="button" data-new>${icon("plus")}<span>Nouvelle vue</span></button>`
-    + (state.boot?.coach ? `<a class="nav-item nav-coach" href="#/coach" ${location.hash.startsWith("#/coach") ? 'aria-current="page"' : ""}>${icon(state.boot.coach.role === "coach" ? "club" : "user")}<span>${coachPageLabel(state.boot.coach)}</span><span class="co-badge nav-badge" data-coach-unread ${coachUnread() ? "" : "hidden"}>${coachUnread()}</span></a>` : "");
+    + (partner ? `<div class="nav-sep" role="separator"></div><a class="nav-item nav-partner" href="#/partenaire" ${location.hash.startsWith("#/partenaire") ? 'aria-current="page"' : ""}>${icon("globe")}<span>${F.escape(partner.nom)}</span></a>` : "")
+    + (coach ? `<div class="nav-sep" role="separator"></div><a class="nav-item nav-coach" href="#/coach" ${location.hash.startsWith("#/coach") ? 'aria-current="page"' : ""}>${icon(coach.role === "coach" ? "club" : "user")}<span>${coachPageLabel(coach)}</span><span class="co-badge nav-badge" data-coach-unread ${coachUnread() ? "" : "hidden"}>${coachUnread()}</span></a>` : "");
   nav.querySelectorAll("[data-id]").forEach((b) => {
     b.addEventListener("click", () => { location.hash = `#/vue/${encodeURIComponent(b.dataset.id)}`; closeMenu(); });
-    if (state.editing) wireNavDrag(b);
+    wireNavDrag(b);
   });
+  nav.querySelectorAll("a.nav-item").forEach((a) => a.addEventListener("click", () => closeMenu()));
   nav.querySelector("[data-new]").addEventListener("click", newView);
 }
 
+/** L'ordre des vues : glisser-déposer dans la colonne, ou Alt + ↑ / ↓ au clavier. */
+async function moveView(from, to) {
+  if (from === to || from == null || to < 0 || to >= state.views.length) return;
+  const before = state.views.map((v) => v.id);
+  const [moved] = state.views.splice(from, 1);
+  state.views.splice(to, 0, moved);
+  renderNav();
+  $(`#nav [data-index="${to}"]`)?.focus();
+  try {
+    await api.post("/api/views/reorder", { ids: state.views.map((v) => v.id) });
+  } catch (err) {
+    state.views.sort((a, b) => before.indexOf(a.id) - before.indexOf(b.id));
+    renderNav();
+    toast(err.message, { error: true });
+  }
+}
+
 function wireNavDrag(item) {
-  item.addEventListener("dragstart", (e) => { e.dataTransfer.effectAllowed = "move"; item.classList.add("dragging"); state.navDrag = Number(item.dataset.index); });
-  item.addEventListener("dragend", () => item.classList.remove("dragging"));
-  item.addEventListener("dragover", (e) => e.preventDefault());
-  item.addEventListener("drop", async (e) => {
+  const clear = () => document.querySelectorAll("#nav .drop-before, #nav .drop-after").forEach((el) => el.classList.remove("drop-before", "drop-after"));
+  item.addEventListener("dragstart", (e) => {
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", item.dataset.id);
+    item.classList.add("dragging");
+    state.navDrag = Number(item.dataset.index);
+  });
+  item.addEventListener("dragend", () => { item.classList.remove("dragging"); clear(); state.navDrag = null; });
+  item.addEventListener("dragover", (e) => {
+    if (state.navDrag == null) return;
+    e.preventDefault();
+    const box = item.getBoundingClientRect();
+    const after = e.clientY > box.top + box.height / 2;
+    clear();
+    item.classList.add(after ? "drop-after" : "drop-before");
+  });
+  item.addEventListener("dragleave", () => item.classList.remove("drop-before", "drop-after"));
+  item.addEventListener("drop", (e) => {
     e.preventDefault();
     const from = state.navDrag;
-    const to = Number(item.dataset.index);
-    if (from === to || from == null) return;
-    const [moved] = state.views.splice(from, 1);
-    state.views.splice(to, 0, moved);
-    renderNav();
-    await api.post("/api/views/reorder", { ids: state.views.map((v) => v.id) });
+    if (from == null) return;
+    const after = item.classList.contains("drop-after");
+    clear();
+    let to = Number(item.dataset.index) + (after ? 1 : 0);
+    if (from < to) to -= 1;
+    moveView(from, to);
+  });
+  item.addEventListener("keydown", (e) => {
+    if (!e.altKey || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
+    e.preventDefault();
+    const from = Number(item.dataset.index);
+    moveView(from, from + (e.key === "ArrowUp" ? -1 : 1));
   });
 }
 
 function isSettings() { return location.hash.startsWith("#/reglages"); }
 /** Une page qui n'est pas une vue : réglages, bienvenue, aide, retours. */
-function isOtherPage() { return /^#\/(reglages|bienvenue|aide|retours|coach)/.test(location.hash); }
+function isOtherPage() { return /^#\/(reglages|bienvenue|aide|retours|coach|partenaire)/.test(location.hash); }
 
 function markRailLinks(path) {
   [["#help-link", "/aide"], ["#feedback-link", "/retours"]].forEach(([selector, page]) => {
@@ -292,6 +397,7 @@ function route() {
   if (path === "/aide") { showHelp(params); return; }
   if (path === "/retours") { showFeedback(params); return; }
   if (path === "/coach" || path.startsWith("/coach/")) { showCoach(path, params); return; }
+  if (path === "/partenaire") { showPartner(); return; }
   const match = path.match(/^\/vue\/([^/]+)/);
   const wanted = match ? decodeURIComponent(match[1]) : null;
   const view = state.views.find((v) => v.id === wanted) || state.views[0];
@@ -306,7 +412,7 @@ function currentView() { return state.views.find((v) => v.id === state.viewId); 
 
 function rerender() {
   // Formulaires en cours (bienvenue, retours) ou texte sans graphique (aide) : on ne redessine pas
-  if (/^#\/(bienvenue|aide|retours|coach)/.test(location.hash)) return;
+  if (/^#\/(bienvenue|aide|retours|coach|partenaire)/.test(location.hash)) return;
   if (isSettings()) showSettings(); else renderView();
 }
 
@@ -741,6 +847,15 @@ function showCoach(path = "/coach", params = new URLSearchParams()) {
   renderCoachPage($("#page"), state.boot, { toast, path, params, onUnlinked: async () => { await refreshBoot(); renderNav(); } });
 }
 
+function showPartner() {
+  disposePass();
+  state.editing = false;
+  closeMenu();
+  renderNav();
+  window.scrollTo(0, 0);
+  renderPartnerPage($("#page"), state.boot, { keep: (disposable) => state.pass.disposers.push(disposable) });
+}
+
 function showFeedback(params) {
   disposePass();
   state.editing = false;
@@ -819,7 +934,7 @@ function renderSyncLine(job) {
     return;
   }
   const last = s.derniere_reussie;
-  line.innerHTML = last ? `Dernière synchro <strong>${F.escape(F.relative(last))}</strong>` : "Jamais synchronisé";
+  line.innerHTML = last ? `Dernière synchro <strong data-rel="${F.escape(last)}">${F.escape(F.relative(last))}</strong>` : "Jamais synchronisé";
   if (s.derniere?.statut === "echec") line.innerHTML += "<br>La dernière tentative a échoué.";
 }
 
@@ -885,11 +1000,14 @@ async function refreshConn() {
   try { status = await api.get("/api/sync", null, { fresh: true }); } catch (e) { return; }  // serveur injoignable : plus tard
   if (state.syncPolling) return;
   const { connexions, en_cours: busy, derniere_reussie: lastOk, derniere: last } = status;
+  const before = state.boot.synchro?.derniere_reussie;
   if (connexions) state.boot.connexions = connexions;
   state.boot.synchro = { ...state.boot.synchro, en_cours: busy, derniere_reussie: lastOk, derniere: last };
   paintConn();
   renderSyncLine(busy ? { en_cours: true, message: "Synchro automatique" } : undefined);
-  if (busy) state.connTimer = setTimeout(refreshConn, 15000);
+  if (busy) { state.connTimer = setTimeout(refreshConn, 15000); return; }
+  // Une synchro automatique vient de finir (ou une page en attente) : ses nouvelles données, sans F5
+  if ((lastOk && lastOk !== before) || state.refreshPending) quietRefresh();
 }
 
 /** Bilan d'une synchro, source par source (Garmin, Withings, Strava, calendrier), dans un seul message. */

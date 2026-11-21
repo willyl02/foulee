@@ -92,9 +92,10 @@ def build(item: dict, vma: float | None, *, zones: bool = True) -> dict[str, Any
         repeat["steps"].append(_step(order, "INTERVAL" if genre in ("corps", "libre") else INTENSITY[genre],
                                      description, block, target))
         rest = float(block.get("recup_min") or 0)
-        if rest or block.get("recup_texte"):
+        if rest or block.get("recup_texte") or block.get("recup_libre"):
             order += 1
-            repeat["steps"].append(_step(order, "RECOVERY", " · ".join(x for x in ("Récup", block.get("recup_texte"))
+            repeat["steps"].append(_step(order, "RECOVERY", " · ".join(x for x in ("Récup", block.get("recup_texte"),
+                                                                                   "touche Lap" if not rest else None)
                                                                         if x),
                                          {"duree_min": rest} if rest else {}, {}))
         steps.append(repeat)

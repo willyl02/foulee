@@ -168,6 +168,32 @@ def test_a_session_of_today_that_leaves_the_feed_stays():
                             (TODAY.isoformat(),)).fetchone()[0] == 1
 
 
+def test_a_session_moved_to_another_day_in_garmin_leaves_today():
+    """Déplacée d'aujourd'hui à demain dans Garmin Connect : elle n'est plus qu'à demain (0.8.2b10)."""
+    def ics(d):
+        return d.strftime("%Y%m%d")
+
+    with db.session() as conn:
+        calendrier.store(conn, calendrier.parse(garmin_feed(TODAY), TODAY), today=TODAY)
+        moved = garmin_feed(TODAY).replace(f"DTSTART;VALUE=DATE:{ics(TODAY)}", f"DTSTART;VALUE=DATE:{ics(day(1))}", 1)
+        calendrier.store(conn, calendrier.parse(moved, TODAY), today=TODAY)
+        rows = conn.execute("SELECT date FROM calendar_events WHERE title = 'Footing 45 min'").fetchall()
+        assert [r["date"] for r in rows] == [day(1).isoformat()]
+        # un nouvel identifiant (recréée plutôt que déplacée) : le même titre dans les jours qui viennent suffit
+        calendrier.store(conn, calendrier.parse(garmin_feed(TODAY), TODAY), today=TODAY)
+        recreated = garmin_feed(TODAY).replace(f"DTSTART;VALUE=DATE:{ics(TODAY)}", f"DTSTART;VALUE=DATE:{ics(day(2))}", 1) \
+            .replace("UID:w1-garmin", "UID:w9-garmin")
+        calendrier.store(conn, calendrier.parse(recreated, TODAY), today=TODAY)
+        rows = conn.execute("SELECT date FROM calendar_events WHERE title = 'Footing 45 min'").fetchall()
+        assert [r["date"] for r in rows] == [day(2).isoformat()]
+        # mais faite aujourd'hui, elle reste (« fait »), même si une autre du même nom suit
+        calendrier.store(conn, calendrier.parse(garmin_feed(TODAY), TODAY), today=TODAY)
+        add_activity(conn, "garmin:77", TODAY, "course", "Footing")
+        calendrier.store(conn, calendrier.parse(recreated, TODAY), today=TODAY)
+        rows = conn.execute("SELECT date FROM calendar_events WHERE title = 'Footing 45 min' ORDER BY date").fetchall()
+        assert [r["date"] for r in rows] == [TODAY.isoformat(), day(2).isoformat()]
+
+
 def test_planned_sessions_against_done_sessions():
     feed = "\r\n".join([
         "BEGIN:VCALENDAR", "PRODID:-//Garmin Connect//ICalProvider 1.0//EN",

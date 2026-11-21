@@ -1,6 +1,7 @@
 // Proposer une séance (coach) : un déroulé en blocs, en % de VMA ou en zone de FC, envoyé à un ou plusieurs élèves.
 // Chaque élève la reçoit dans son calendrier, avec ses allures à lui (calculées avec sa VMA).
 import * as api from "./api.js";
+import { levelRange } from "./coach-reglages.js";
 import * as F from "./format.js";
 import { icon } from "./icons.js";
 import {
@@ -32,30 +33,33 @@ const EXAMPLES = [
 ];
 
 const clone = (x) => JSON.parse(JSON.stringify(x));
+// « libre » : la montre passe à l'étape suivante à la touche Lap (sur piste, de ligne à ligne)
+const UNITS = [["min", "min"], ["s", "s"], ["m", "m"], ["km", "km"], ["lap", "libre (Lap)"]];
+const REST_UNITS = [["min", "min"], ["s", "s"], ["lap", "libre (Lap)"]];
 const num = (v) => { const n = Number(String(v).replace(",", ".")); return Number.isFinite(n) && n > 0 ? n : null; };
 const show = (n) => (n == null ? "" : String(Math.round(n * 100) / 100).replace(".", ","));
 
 function blockForm(b, i, n) {
   const genre = GENRES[b.genre] || GENRES.corps;
-  const qtyUnit = b.distance_m ? (b.distance_m >= 1000 && b.distance_m % 100 === 0 ? "km" : "m") : (b.duree_min && b.duree_min < 1 ? "s" : "min");
+  const qtyUnit = b.libre ? "lap" : b.distance_m ? (b.distance_m >= 1000 && b.distance_m % 100 === 0 ? "km" : "m") : (b.duree_min && b.duree_min < 1 ? "s" : "min");
   const qty = qtyUnit === "km" ? b.distance_m / 1000 : qtyUnit === "m" ? b.distance_m : qtyUnit === "s" ? Math.round((b.duree_min || 0) * 60) : b.duree_min;
   const effort = b.pct_vma ? "vma" : b.zone_fc ? "fc" : "aucune";
-  const restUnit = b.recup_min && b.recup_min < 1 ? "s" : "min";
+  const restUnit = b.recup_libre ? "lap" : b.recup_min && b.recup_min < 1 ? "s" : "min";
   const rest = restUnit === "s" ? Math.round(b.recup_min * 60) : b.recup_min;
   return `<div class="co-bform" data-block="${i}" style="--genre:${genre.color}">
     <div class="co-brow">
       <select data-k="genre" aria-label="Type de bloc">${Object.entries(GENRES).map(([k, g]) => `<option value="${k}" ${k === (b.genre || "corps") ? "selected" : ""}>${g.label}</option>`).join("")}</select>
       <input data-k="nom" type="text" maxlength="60" value="${F.escape(b.nom || "")}" placeholder="Nom du bloc" aria-label="Nom du bloc">
       <span class="co-reps"><input data-k="repetitions" type="number" min="1" max="50" value="${b.repetitions || 1}" aria-label="Répétitions"><span>×</span></span>
-      <span class="co-qty"><input data-k="qty" type="text" inputmode="decimal" value="${F.escape(show(qty))}" placeholder="durée" aria-label="Durée ou distance">
-        <select data-k="unit" aria-label="Unité">${["min", "s", "m", "km"].map((u) => `<option ${u === qtyUnit ? "selected" : ""}>${u}</option>`).join("")}</select></span>
+      <span class="co-qty"><input data-k="qty" type="text" inputmode="decimal" value="${F.escape(qtyUnit === "lap" ? "" : show(qty))}" placeholder="${qtyUnit === "lap" ? "touche Lap" : "durée"}" aria-label="Durée ou distance" ${qtyUnit === "lap" ? "disabled" : ""}>
+        <select data-k="unit" aria-label="Unité">${UNITS.map(([u, label]) => `<option value="${u}" ${u === qtyUnit ? "selected" : ""}>${label}</option>`).join("")}</select></span>
     </div>
     <div class="co-brow sub">
       <span class="co-effort"><select data-k="effort" aria-label="Intensité"><option value="vma" ${effort === "vma" ? "selected" : ""}>% VMA</option><option value="fc" ${effort === "fc" ? "selected" : ""}>Zone FC</option><option value="aucune" ${effort === "aucune" ? "selected" : ""}>Sans intensité</option></select>
         ${effort === "vma" ? `<input data-k="pct_vma" type="number" min="30" max="140" value="${b.pct_vma ?? ""}" aria-label="Pourcentage de VMA"><span>%</span>`
           : effort === "fc" ? `<input data-k="zone_fc" type="number" min="1" max="5" value="${b.zone_fc ?? ""}" aria-label="Zone de FC">` : ""}</span>
-      ${(b.repetitions || 1) > 1 ? `<span class="co-rest"><span>récup</span><input data-k="rest" type="text" inputmode="decimal" value="${F.escape(show(rest))}" aria-label="Récupération">
-        <select data-k="restunit" aria-label="Unité de récupération">${["min", "s"].map((u) => `<option ${u === restUnit ? "selected" : ""}>${u}</option>`).join("")}</select>
+      ${(b.repetitions || 1) > 1 ? `<span class="co-rest"><span>récup</span><input data-k="rest" type="text" inputmode="decimal" value="${F.escape(restUnit === "lap" ? "" : show(rest))}" placeholder="${restUnit === "lap" ? "Lap" : ""}" aria-label="Récupération" ${restUnit === "lap" ? "disabled" : ""}>
+        <select data-k="restunit" aria-label="Unité de récupération">${REST_UNITS.map(([u, label]) => `<option value="${u}" ${u === restUnit ? "selected" : ""}>${label}</option>`).join("")}</select>
         <input data-k="recup_texte" type="text" maxlength="40" value="${F.escape(b.recup_texte || "")}" placeholder="trot, marche…" aria-label="Façon de récupérer"></span>` : ""}
       <input data-k="note" class="co-note" type="text" maxlength="200" value="${F.escape(b.note || "")}" placeholder="Précision (facultatif)" aria-label="Précision">
     </div>
@@ -72,7 +76,8 @@ function readBlock(el, old) {
   const qty = num(v("qty"));
   const effort = v("effort");
   const b = { genre: v("genre"), nom: v("nom").trim(), repetitions: Math.max(1, Math.min(50, Math.round(Number(v("repetitions")) || 1))) };
-  if (qty) {
+  if (unit === "lap") b.libre = true;  // jusqu'à la touche Lap : ni durée ni distance
+  else if (qty) {
     if (unit === "km") b.distance_m = Math.round(qty * 1000);
     else if (unit === "m") b.distance_m = Math.round(qty);
     else b.duree_min = unit === "s" ? Math.round(qty) / 60 : qty;
@@ -81,7 +86,8 @@ function readBlock(el, old) {
   if (effort === "fc") { const z = num(v("zone_fc")); if (z) b.zone_fc = Math.round(z); else if (!el.querySelector('[data-k="zone_fc"]')) b.zone_fc = old?.zone_fc || 2; }
   if (effort === "vma" && !b.pct_vma && !el.querySelector('[data-k="pct_vma"]')) b.pct_vma = 70;
   const rest = num(v("rest"));
-  if (b.repetitions > 1 && rest) b.recup_min = v("restunit") === "s" ? Math.round(rest) / 60 : rest;
+  if (b.repetitions > 1 && v("restunit") === "lap") b.recup_libre = true;
+  else if (b.repetitions > 1 && rest) b.recup_min = v("restunit") === "s" ? Math.round(rest) / 60 : rest;
   else if (b.repetitions > 1 && !el.querySelector('[data-k="rest"]') && old?.recup_min) b.recup_min = old.recup_min;
   if (b.repetitions > 1 && (v("recup_texte").trim() || (!el.querySelector('[data-k="recup_texte"]') && old?.recup_texte))) b.recup_texte = v("recup_texte").trim() || old.recup_texte;
   if (v("note").trim()) b.note = v("note").trim();
@@ -92,13 +98,31 @@ export async function renderEditor(ctx) {
   const { page, params, toast } = ctx;
   const editId = /^\d+$/.test(params.get("id") || "") ? Number(params.get("id")) : null;
   const editStudent = /^\d+$/.test(params.get("eleve") || "") ? Number(params.get("eleve")) : null;
-  page.innerHTML = `${ctx.head(`<h1>${editId ? "Modifier une séance" : "Proposer une séance"}</h1>`)}${ctx.tabs("proposer")}<div class="co-page wide">${loading()}</div>`;
+  const tplParam = params.get("modele") || "";
+  // Bibliothèque : « Nouvelle séance type » (modele=nouveau) ou « Modifier » (modele=<id>&edition=1) : on édite le
+  // modèle lui-même, sans élève ni envoi
+  const tplMode = tplParam === "nouveau" ? "new" : /^\d+$/.test(tplParam) && params.get("edition") === "1" ? "edit" : null;
+  const tplTitle = tplMode === "new" ? "Nouvelle séance type" : tplMode === "edit" ? "Modifier la séance type" : null;
+  page.innerHTML = `${ctx.head(`<h1>${tplTitle || (editId ? "Modifier une séance" : "Proposer une séance")}</h1>`)}${ctx.tabs(tplMode ? "reglages" : "proposer")}<div class="co-page wide">${loading()}</div>`;
   const [group, saved] = await Promise.all([rget("groupe"), rget("modeles").then((r) => r.modeles).catch(() => [])]);
-  const students = group.eleves;
+  // Groupés par niveau (s'il y en a), puis par VMA décroissante : on coche un groupe d'un clic
+  const students = [...group.eleves].sort((a, b) => (a.niveau ? 0 : 1) - (b.niveau ? 0 : 1)
+    || (b.vma_kmh || 0) - (a.vma_kmh || 0) || a.nom.localeCompare(b.nom, "fr"));
+  const levelList = [];
+  students.forEach((s) => { if (s.niveau && !levelList.some((g) => g.id === s.niveau.id)) levelList.push(s.niveau); });
   let templates = saved;
   const tomorrow = F.isoDate(F.addDays(new Date(), 1));
   const state = { eleves: new Set(), date: /^\d{4}-\d{2}-\d{2}$/.test(params.get("date") || "") ? params.get("date") : tomorrow, ...clone(EXAMPLES[1]) };
   (params.get("eleves") || "").split(",").map(Number).filter((id) => students.some((s) => s.id === id)).forEach((id) => state.eleves.add(id));
+  const groupParam = Number(params.get("groupe")) || null;
+  if (groupParam) students.filter((s) => s.niveau?.id === groupParam).forEach((s) => state.eleves.add(s.id));
+  const startTpl = /^\d+$/.test(tplParam) ? templates.find((t) => t.id === Number(tplParam)) : null;
+  if (tplParam && /^\d+$/.test(tplParam) && !startTpl) {
+    page.innerHTML = `${ctx.head(`<h1>${tplTitle || "Proposer une séance"}</h1>`)}${ctx.tabs("reglages")}<div class="co-page">${fail("Cette séance type n'existe plus.")}</div>`;
+    return;
+  }
+  if (startTpl) Object.assign(state, { titre: startTpl.titre, sport: startTpl.sport || "course", blocs: clone(startTpl.blocs), consigne: startTpl.consigne || "" });
+  if (tplMode === "new") Object.assign(state, { titre: "", sport: "course", consigne: "", blocs: clone(EXAMPLES[1].blocs) });
 
   let editSent = false; // déjà sur sa montre : le relais la renvoie tout seul, modifiée
   const watchers = students.filter((s) => s.montre?.relie && s.montre.coach_peut_envoyer);
@@ -113,25 +137,29 @@ export async function renderEditor(ctx) {
     state.eleves = new Set([editStudent]);
     editSent = Boolean(p.montre);
   }
-  if (!editId && students.length === 1) state.eleves.add(students[0].id);
+  if (!editId && !tplMode && students.length === 1) state.eleves.add(students[0].id);
 
-  page.innerHTML = `${ctx.head(`<h1>${editId ? "Modifier une séance" : "Proposer une séance"}</h1>`,
-    `<span>${editId ? "L'élève voit la nouvelle version dans son calendrier à sa prochaine synchro." : "Elle arrive dans le calendrier de chaque élève choisi, avec ses allures à lui."}</span>`,
-    `<button class="btn" type="button" data-save-tpl>${icon("layers")}Enregistrer comme modèle</button><button class="btn btn-primary" type="button" data-send>${icon("check")}<span data-send-label>Envoyer</span></button>`)}
-    ${ctx.tabs("proposer")}
+  const headActions = tplMode
+    ? `<a class="btn" href="#/coach/reglages">${icon("left")}Bibliothèque</a><button class="btn btn-primary" type="button" data-save-model>${icon("check")}Enregistrer la séance type</button>`
+    : `<button class="btn" type="button" data-save-tpl>${icon("layers")}Enregistrer comme modèle</button><button class="btn btn-primary" type="button" data-send>${icon("check")}<span data-send-label>Envoyer</span></button>`;
+  page.innerHTML = `${ctx.head(`<h1>${tplTitle || (editId ? "Modifier une séance" : "Proposer une séance")}</h1>`,
+    `<span>${tplMode ? "Elle reste dans ta bibliothèque : tu la proposeras quand tu voudras, à un élève ou à tout un groupe." : editId ? "L'élève voit la nouvelle version dans son calendrier à sa prochaine synchro." : "Elle arrive dans le calendrier de chaque élève choisi, avec ses allures à lui."}</span>`,
+    headActions)}
+    ${ctx.tabs(tplMode ? "reglages" : "proposer")}
     <div class="co-grid2 editor">
       <div class="co-page">
-        <section class="coach-card"><h2>${icon("club")}Pour qui</h2>
-          ${students.length ? `<div class="co-pick" data-pick>${students.map((s) => `<label class="co-pickone${editId ? " locked" : ""}"><input type="checkbox" value="${s.id}" ${state.eleves.has(s.id) ? "checked" : ""} ${editId ? "disabled" : ""}>
-            ${avatar(s.nom, { size: "sm" })}<span>${F.escape(s.nom)}${s.montre?.relie && s.montre.coach_peut_envoyer ? `<i class="co-watchmini" title="Montre Garmin reliée">${icon("watch")}</i>` : ""}<small>${s.vma_kmh ? `VMA ${F.dec1(s.vma_kmh)}` : "VMA inconnue"}</small></span></label>`).join("")}</div>
+        ${tplMode ? "" : `<section class="coach-card"><h2>${icon("club")}Pour qui</h2>
+          ${students.length ? `${!editId && levelList.length ? `<div class="co-levels-pick"><span>Cocher un groupe :</span>${levelList.map((g) => `<button type="button" class="lv-pick lv-${F.escape(g.couleur || "gris")}" data-level-pick="${g.id}" title="${F.escape(levelRange(g))}">${F.escape(g.nom)}<small>${students.filter((s) => s.niveau?.id === g.id).length}</small></button>`).join("")}</div>` : ""}
+            <div class="co-pick" data-pick>${students.map((s) => `<label class="co-pickone${editId ? " locked" : ""}"><input type="checkbox" value="${s.id}" ${state.eleves.has(s.id) ? "checked" : ""} ${editId ? "disabled" : ""}>
+            ${avatar(s.nom, { size: "sm" })}<span>${F.escape(s.nom)}${s.montre?.relie && s.montre.coach_peut_envoyer ? `<i class="co-watchmini" title="Montre Garmin reliée">${icon("watch")}</i>` : ""}<small>${s.vma_kmh ? `VMA ${F.dec1(s.vma_kmh)}${s.vma_source === "test" ? " (test)" : ""}` : "VMA inconnue"}${s.niveau ? ` · ${F.escape(s.niveau.nom)}` : ""}</small></span></label>`).join("")}</div>
             ${!editId && students.length > 1 ? `<div class="inline-actions" style="margin:8px 0 0"><button type="button" class="btn btn-ghost btn-small" data-all>Tout le groupe</button><button type="button" class="btn btn-ghost btn-small" data-none>Personne</button></div>` : ""}`
           : `<p class="co-empty">Ton groupe est vide : <a href="#/coach">invite un élève</a> d'abord.</p>`}
           ${watchers.length && !editSent ? `<label class="co-check"><input type="checkbox" data-to-watch checked><span>${icon("watch")} Envoyer aussi sur leur montre Garmin (élèves qui l'ont reliée : ${F.escape(watchers.map((w) => w.nom.split(" ")[0]).join(", "))})</span></label>` : ""}
           ${editSent ? `<p class="hint" style="margin:8px 0 0">${icon("watch")} Déjà sur sa montre : elle y sera remplacée par la version modifiée.</p>` : ""}
-        </section>
+        </section>`}
         <section class="coach-card"><h2>${icon("edit")}La séance</h2>
-          <div class="co-form3">
-            <label class="field"><span>Date</span><input type="date" data-f="date" value="${state.date}"></label>
+          <div class="co-form3${tplMode ? " no-date" : ""}">
+            <label class="field"${tplMode ? " hidden" : ""}><span>Date</span><input type="date" data-f="date" value="${state.date}"></label>
             <label class="field"><span>Sport</span><select data-f="sport">${SPORTS.map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select></label>
             <label class="field co-wide"><span>Titre</span><input type="text" data-f="titre" maxlength="80" placeholder="ex. Seuil 3 × 10 min"></label>
           </div>
@@ -141,9 +169,9 @@ export async function renderEditor(ctx) {
         </section>
       </div>
       <div class="co-page">
-        <section class="coach-card"><h2>${icon("gauge")}Les allures de chacun</h2><div data-paces></div></section>
+        <section class="coach-card"><h2>${icon("gauge")}${tplMode ? "Les allures, pour exemple" : "Les allures de chacun"}</h2><div data-paces></div></section>
         <section class="coach-card"><h2>${icon("eye")}Ce que l'élève verra</h2><div data-preview></div></section>
-        <section class="coach-card"><h2>${icon("layers")}Partir d'un modèle</h2><div data-templates></div></section>
+        ${tplMode ? "" : `<section class="coach-card"><h2>${icon("layers")}Partir d'un modèle</h2><div data-templates></div></section>`}
       </div>
     </div>`;
 
@@ -165,23 +193,30 @@ export async function renderEditor(ctx) {
     state.titre = field("titre").value.trim();
     state.consigne = field("consigne").value.trim();
   };
-  const chosen = () => students.filter((s) => state.eleves.has(s.id));
+  // Les allures, comme l'élève et sa montre les auront : sa VMA à lui s'il la partage, sinon celle du test du club
+  const chosen = () => (tplMode ? [{ id: 0, nom: "VMA 15 km/h (exemple)", vma_kmh: 15 }]
+    : students.filter((s) => state.eleves.has(s.id)).map((s) => ({ ...s, vma_kmh: s.vma_partagee || s.vma_kmh })));
 
   const drawSide = () => {
     const list = chosen();
-    const label = $("[data-send-label]");
+    page.querySelectorAll("[data-level-pick]").forEach((btn) => {
+      const members = students.filter((s) => s.niveau?.id === Number(btn.dataset.levelPick));
+      btn.setAttribute("aria-pressed", String(members.length > 0 && members.every((s) => state.eleves.has(s.id))));
+    });
+    const label = $("[data-send-label]") || {};
     label.textContent = editId ? "Enregistrer" : list.length > 1 ? `Envoyer à ${list.length} élèves` : list.length ? `Envoyer à ${list[0].nom.split(" ")[0]}` : "Envoyer";
     const paced = state.blocs.map((b, i) => [b, i]).filter(([b]) => b.pct_vma);
     $("[data-paces]").innerHTML = !list.length ? `<p class="co-empty">Choisis au moins un élève.</p>`
       : !paced.length ? `<p class="co-empty">Aucun bloc en % de VMA : rien à calculer.</p>`
         : `<div class="co-table-wrap"><table class="co-paces"><thead><tr><th>Élève</th><th>VMA</th>${paced.map(([b]) => `<th>${F.escape(b.nom || "Bloc")}<small>${(b.repetitions || 1) > 1 ? `${b.repetitions} × ` : ""}${b.pct_vma} %</small></th>`).join("")}</tr></thead><tbody>
           ${list.map((s) => `<tr><td><b>${F.escape(s.nom)}</b></td><td>${s.vma_kmh ? F.dec1(s.vma_kmh) : "–"}</td>${paced.map(([b]) => `<td class="f">${s.vma_kmh ? paceFor(s.vma_kmh, b.pct_vma) : "–"}</td>`).join("")}</tr>`).join("")}
-          </tbody></table></div>${list.some((s) => !s.vma_kmh) ? `<p class="hint" style="margin:8px 0 0">Sans VMA partagée, l'élève voit les pourcentages, sans allure.</p>` : ""}`;
+          </tbody></table></div>${list.some((s) => !s.vma_kmh) ? `<p class="hint" style="margin:8px 0 0">Sans VMA partagée, l'élève voit les pourcentages, sans allure.</p>` : ""}
+          ${list.some((s) => s.vma_test && s.vma_partagee && Math.abs(s.vma_test - s.vma_partagee) >= 0.3) ? `<p class="hint" style="margin:8px 0 0">Allures calculées avec la VMA de l'élève, celle de son appli et de sa montre ; ton test du club sert à le classer dans un groupe.</p>` : ""}`;
     const first = list.find((s) => s.vma_kmh) || list[0];
     const t = totalMinutes(state.blocs, first?.vma_kmh);
     $("[data-total]").textContent = t.minutes ? `Durée totale : ${F.duration(t.minutes * 60, { short: true })}${t.km ? ` · environ ${F.dec1(t.km)} km${list.length > 1 && first ? ` (pour ${first.nom.split(" ")[0]})` : ""}` : ""}` : "";
     $("[data-preview]").innerHTML = `<div class="co-prevcard"><div class="co-prevhead"><b>${F.escape(state.titre || "Titre de la séance")}</b>
-        <span>${F.escape(state.date ? F.dateLong(state.date) : "")}${first ? ` · pour ${F.escape(first.nom)}` : ""}</span></div>
+        <span>${F.escape(state.date && !tplMode ? F.dateLong(state.date) : "")}${first ? `${tplMode ? "" : " · "}pour ${F.escape(first.nom)}` : ""}</span></div>
       ${blocksHtml(state.blocs, first?.vma_kmh)}${state.consigne ? `<p class="co-consigne">« ${F.escape(state.consigne)} »</p>` : ""}</div>`;
   };
 
@@ -192,7 +227,7 @@ export async function renderEditor(ctx) {
       el.addEventListener("input", () => { collect(); drawSide(); });
       el.addEventListener("change", (e) => {
         collect();
-        if (["effort", "repetitions", "genre"].includes(e.target.dataset.k)) {
+        if (["effort", "repetitions", "genre", "unit", "restunit"].includes(e.target.dataset.k)) {
           if (e.target.dataset.k === "effort" && e.target.value === "vma" && !state.blocs[i].pct_vma) state.blocs[i].pct_vma = 70;
           drawBlocks();
         } else drawSide();
@@ -210,6 +245,7 @@ export async function renderEditor(ctx) {
   }
 
   const drawTemplates = () => {
+    if (!$("[data-templates]")) return;
     const row = (t, i, mine) => `<div class="co-tpl"><span class="co-ico">${icon(t.sport === "renfo" ? "dumbbell" : "run")}</span>
       <div><b>${F.escape(t.titre)}</b><span>${F.escape(t.blocs.map((b) => [blockSize(b), blockIntensity(b), blockRest(b)].filter(Boolean).join(" ")).join(" · "))}</span></div>
       <span class="co-btools"><button type="button" class="btn btn-small btn-ghost" data-use="${mine ? "m" : "x"}${i}">Utiliser</button>
@@ -230,6 +266,13 @@ export async function renderEditor(ctx) {
     }));
   };
 
+  page.querySelectorAll("[data-level-pick]").forEach((btn) => btn.addEventListener("click", () => {
+    const members = students.filter((s) => s.niveau?.id === Number(btn.dataset.levelPick));
+    const allIn = members.every((s) => state.eleves.has(s.id));
+    members.forEach((s) => (allIn ? state.eleves.delete(s.id) : state.eleves.add(s.id)));
+    page.querySelectorAll("[data-pick] input").forEach((box) => { box.checked = state.eleves.has(Number(box.value)); });
+    drawSide();
+  }));
   page.querySelectorAll("[data-pick] input").forEach((box) => box.addEventListener("change", () => {
     if (box.checked) state.eleves.add(Number(box.value)); else state.eleves.delete(Number(box.value));
     drawSide();
@@ -245,7 +288,22 @@ export async function renderEditor(ctx) {
     drawBlocks();
   });
 
-  $("[data-save-tpl]").addEventListener("click", async () => {
+  $("[data-save-model]")?.addEventListener("click", async () => {
+    collect();
+    if (!state.titre) { toast("Donne un titre à la séance type."); field("titre").focus(); return; }
+    const body = { titre: state.titre, sport: state.sport, blocs: state.blocs, consigne: state.consigne };
+    try {
+      if (tplMode === "edit") await rput(`modeles/${startTpl.id}`, body);
+      else {
+        if (templates.some((t) => t.titre === state.titre) && !window.confirm(`Tu as déjà une séance type « ${state.titre} » : la remplacer ?`)) return;
+        await rpost("modeles", body);
+      }
+      toast(`Séance type « ${state.titre} » enregistrée.`);
+      location.hash = "#/coach/reglages";
+    } catch (err) { toast(err.message); }
+  });
+
+  $("[data-save-tpl]")?.addEventListener("click", async () => {
     collect();
     if (!state.titre) { toast("Donne d'abord un titre à la séance : ce sera le nom du modèle."); field("titre").focus(); return; }
     try {
@@ -255,7 +313,7 @@ export async function renderEditor(ctx) {
     } catch (err) { toast(err.message); }
   });
 
-  $("[data-send]").addEventListener("click", async () => {
+  $("[data-send]")?.addEventListener("click", async () => {
     collect();
     const list = chosen();
     if (!list.length) { toast("Choisis au moins un élève."); return; }

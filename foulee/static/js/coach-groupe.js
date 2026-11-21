@@ -3,8 +3,18 @@ import * as api from "./api.js";
 import * as F from "./format.js";
 import { icon } from "./icons.js";
 import { avatar, dayLabel, fail, rget, sessionFigures, sportIcon } from "./coach-ui.js";
+import { levelChip, levelRange } from "./coach-reglages.js";
 
 const DOW = ["L", "M", "M", "J", "V", "S", "D"];
+const state = { order: null };
+
+/** Rangement de « Mes élèves » : par groupe (s'il y en a), par VMA ou par nom ; retenu dans ce navigateur. */
+function readOrder() {
+  if (state.order) return state.order;
+  try { state.order = localStorage.getItem("foulee-coach-ordre"); } catch (e) { state.order = null; }
+  if (!["groupe", "vma", "nom"].includes(state.order)) state.order = "groupe";
+  return state.order;
+}
 const STRIP = { fait: "fait", manque: "manqué", prevu: "prévu", repos: "rien de prévu" };
 
 function countdown(days) {
@@ -30,7 +40,7 @@ function card(s) {
     !s.actif ? `<span class="co-chip red">désactivé</span>` : "",
   ].join("");
   return `<article class="co-student" data-student="${s.id}">
-    <header>${avatar(s.nom)}<div class="co-student-name"><a href="#/coach/eleve/${s.id}"><b>${F.escape(s.nom)}</b></a>
+    <header>${avatar(s.nom)}<div class="co-student-name"><a href="#/coach/eleve/${s.id}"><b>${F.escape(s.nom)}</b></a>${levelChip(s.niveau, { small: true })}
       <small>${s.partage_recu_le ? `données reçues ${F.escape(F.relative(s.partage_recu_le))}` : waiting ? "pas encore de partage" : "rien reçu pour l'instant"}</small></div>
       ${s.non_lus ? `<a class="co-badge" href="#/coach/messages?fil=eleve-${s.id}" title="${s.non_lus} message${s.non_lus > 1 ? "s" : ""} non lu${s.non_lus > 1 ? "s" : ""}">${s.non_lus}</a>` : ""}</header>
     ${flags ? `<div class="co-flags">${flags}</div>` : ""}
@@ -42,7 +52,7 @@ function card(s) {
       <div title="Séances faites cette semaine"><dt>Semaine</dt><dd><b>${week.seances || 0}</b></dd></div>
       <div title="Séances prévues (son plan et les tiennes) faites cette semaine"><dt>Prévues</dt><dd><b>${week.prevues ? `${week.faites}/${week.prevues}` : "–"}</b></dd></div>
       <div title="Charge d'entraînement des 7 derniers jours"><dt>Charge 7 j</dt><dd><b>${s.charge_7j != null ? F.int(s.charge_7j) : "–"}</b></dd></div>
-      <div><dt>VMA</dt><dd><b>${s.vma_kmh ? F.dec1(s.vma_kmh) : "–"}</b></dd></div>
+      <div title="${s.vma_source === "test" ? "VMA de ton test au club" : s.vma_source === "partagee" ? "VMA qu'il partage depuis Foulée" : "VMA inconnue : note-la dans « Groupes et séances types »"}"><dt>VMA${s.vma_source === "test" ? " (test)" : ""}</dt><dd><b>${s.vma_kmh ? F.dec1(s.vma_kmh) : "–"}</b></dd></div>
     </dl>
     <p class="co-goal">${icon("flag")}${goal ? `<span><b>${F.escape(goal.nom)}</b>${goal.temps_cible ? ` · ${F.escape(goal.temps_cible)}` : ""}</span>${goal.dans_jours != null ? `<span class="co-chip blue">${countdown(goal.dans_jours)}</span>` : ""}`
       : `<span class="muted">pas d'objectif partagé</span>`}</p>
@@ -78,7 +88,10 @@ export async function renderGroup(ctx) {
     ${ctx.tabs("eleves")}
     <div class="co-page wide">
       <div data-kpis></div>
-      <div class="co-students" data-students><p class="computed co-wait">Chargement du groupe…</p></div>
+      <div class="co-order"><span>Ranger</span><div class="segmented small" role="group" aria-label="Ranger les élèves">
+        <button type="button" data-order="groupe">par groupe</button><button type="button" data-order="vma">par VMA</button><button type="button" data-order="nom">par nom</button></div>
+        <a class="co-order-link" href="#/coach/reglages">${icon("settings")}Groupes de niveau</a></div>
+      <div data-students><p class="computed co-wait">Chargement du groupe…</p></div>
       <section class="coach-card" data-invite-card><h2>${icon("key")}Inviter un élève</h2>
         <p>Crée un code et donne-le à ton élève, avec l'adresse du relais (<b>${F.escape(host)}</b>). Dans Foulée, il va dans Réglages → Coach et élèves → «&nbsp;J'ai un code d'invitation&nbsp;», puis choisit ce qu'il partage avec toi. Un code sert une seule fois et vaut 7 jours.</p>
         <div class="inline-actions"><button class="btn btn-primary" type="button" data-invite>${icon("plus")}Créer un code d'invitation</button></div>
@@ -87,12 +100,41 @@ export async function renderGroup(ctx) {
     </div>`;
 
   const studentsBox = page.querySelector("[data-students]");
+  page.querySelectorAll("[data-order]").forEach((b) => b.addEventListener("click", () => {
+    try { localStorage.setItem("foulee-coach-ordre", b.dataset.order); } catch (e) { /* rangement du moment seulement */ }
+    state.order = b.dataset.order;
+    drawStudents(lastList);
+  }));
   const codesBox = page.querySelector("[data-codes]");
   const accountsBox = page.querySelector("[data-accounts]");
 
+  let lastList = [];
   const drawStudents = (list) => {
+    lastList = list;
     page.querySelector("[data-kpis]").innerHTML = list.length ? kpis(list) : "";
-    studentsBox.innerHTML = list.length ? list.map(card).join("")
+    const order = readOrder();
+    page.querySelectorAll("[data-order]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.order === order)));
+    const byVma = (a, b) => (b.vma_kmh || 0) - (a.vma_kmh || 0) || a.nom.localeCompare(b.nom, "fr");
+    const sorted = [...list].sort(order === "nom" ? (a, b) => a.nom.localeCompare(b.nom, "fr") : byVma);
+    let html = "";
+    if (order === "groupe" && list.some((s) => s.niveau)) {
+      const sections = new Map();
+      sorted.forEach((s) => {
+        const key = s.niveau ? `g${s.niveau.id}` : "aucun";
+        if (!sections.has(key)) sections.set(key, { level: s.niveau, list: [] });
+        sections.get(key).list.push(s);
+      });
+      const keys = [...sections.keys()].sort((a, b) => (a === "aucun") - (b === "aucun"));
+      html = keys.map((key) => {
+        const { level, list: members } = sections.get(key);
+        const vmas = members.map((m) => m.vma_kmh).filter(F.isNum);
+        return `<section class="co-level"><header class="co-level-head">${level ? levelChip(level) : `<b>Sans groupe</b>`}
+            <span>${F.escape(level ? levelRange(level) : "VMA inconnue ou hors des bornes")} · ${members.length} élève${members.length > 1 ? "s" : ""}${vmas.length ? ` · VMA ${F.dec1(Math.min(...vmas))}–${F.dec1(Math.max(...vmas))}` : ""}</span>
+            ${level ? `<a class="btn btn-small btn-ghost" href="#/coach/proposer?groupe=${level.id}">${icon("plus")}Proposer au groupe</a>` : ""}</header>
+          <div class="co-students">${members.map(card).join("")}</div></section>`;
+      }).join("");
+    } else html = `<div class="co-students">${sorted.map(card).join("")}</div>`;
+    studentsBox.innerHTML = list.length ? html
       : `<div class="co-empty-big">${icon("club")}<b>Personne pour l'instant</b><span>Invite ton premier élève : il te suffit de lui donner un code.</span></div>`;
     studentsBox.querySelectorAll("[data-student]").forEach((el) => el.addEventListener("click", (e) => {
       if (e.target.closest("a, button")) return;

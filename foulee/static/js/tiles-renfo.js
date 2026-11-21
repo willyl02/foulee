@@ -4,6 +4,8 @@
 import * as api from "./api.js";
 import { bodyMap, legend } from "./bodymap.js";
 import * as F from "./format.js";
+import { icon } from "./icons.js";
+import { openRenfoSession, presetFrom } from "./renfo-seance.js";
 import { message } from "./tiles-data.js";
 
 const NO_SESSION = "Pas encore de séance de renfo. Sur ta montre, lance une activité « Musculation » et choisis "
@@ -275,12 +277,16 @@ export const renfo_conseils = {
     const counter = c.manque_series ? `<div class="cp-count z-${F.escape(c.zone)}" title="${F.escape(`Il manque environ ${c.manque_series} séries sur ${c.jours} jours`)}"><b>+${weekly}</b><small>séries ${c.cote === "avant" ? "devant" : "derrière"}<br>par semaine</small></div>` : "";
     body.innerHTML = `<div class="cp">
       <div class="cp-head">
-        <div class="cp-lead"><h3>${F.escape(c.titre)}</h3><p>${F.escape(c.resume)}</p></div>
+        <div class="cp-lead"><h3>${F.escape(c.titre)}</h3><p>${F.escape(c.resume)}</p>
+          <div class="cp-actions"><button class="btn btn-primary btn-small" type="button" data-compose>${icon("watch")}${c.familles.length ? "En faire une séance pour ma montre" : "Composer une séance pour ma montre"}</button>
+            <button class="btn btn-ghost btn-small" type="button" data-mine>${icon("layers")}Mes séances de renfo</button></div></div>
         ${counter}
       </div>
       ${c.familles.length ? `<div class="cp-cards">${c.familles.map((f) => compensateCard(f, c.familles.length === 1)).join("")}</div>` : ""}
       ${c.cote ? `<p class="cp-foot">Ajoute-les à tes séances habituelles, à la place d'une partie des séries ${c.cote === "arriere" ? "devant" : "derrière"} si tu manques de temps. Sur la montre, choisis l'exercice à chaque série (ou écris-le dans la description Strava) : il comptera du bon côté.</p>` : ""}
     </div>`;
+    body.querySelector("[data-compose]").addEventListener("click", () => openRenfoSession({ toast: ctx.toast, preset: presetFrom(c) }));
+    body.querySelector("[data-mine]").addEventListener("click", () => openRenfoSession({ toast: ctx.toast }));
   },
 };
 

@@ -14,10 +14,11 @@ arrière-plan, avec son icône près de l'horloge ; **sur Mac** (bêta), c'est u
 Applications, avec son icône dans la barre des menus (section 1 bis). Installé sur un serveur à la maison,
 il s'ouvre aussi **sur ton téléphone**, de partout, comme une appli (section 9).
 
-**Présentation illustrée** (27 pages, avec le téléchargement, l'installation pas à pas
-et la clé API Garmin) : [le PDF](docs/presentation/Foulee-presentation-beta-testeurs.pdf),
-ou [les mêmes pages en images JPG](docs/presentation/Foulee-presentation-pages-jpg.zip)
-à partager.
+**Présentation illustrée** (30 pages, avec le téléchargement, l'installation pas à pas
+et la clé API Garmin) : [le PDF](docs/presentation/Foulee-presentation-beta-testeurs-0.8.2b10.pdf),
+ou [les mêmes pages en images JPG](docs/presentation/Foulee-presentation-pages-jpg-0.8.2b10.zip)
+à partager. Les guides de Foulée Coach (coach, élève) et « Foulée sur ton téléphone » sont dans
+[docs/presentation](docs/presentation/).
 
 Aucun service intermédiaire : ta machine parle directement à Garmin (client Python
 officiel de Garmin) et à Withings, et tout est stocké chez toi.
@@ -37,7 +38,7 @@ Withings (API publique) ──┘                                   │
 
 ## 1. Installer Foulée sur Windows
 
-En images : pages 24 à 27 de la [présentation](docs/presentation/Foulee-presentation-beta-testeurs.pdf).
+En images : pages 27 à 30 de la [présentation](docs/presentation/Foulee-presentation-beta-testeurs-0.8.2b10.pdf).
 
 1. Télécharge **`Foulee-Setup-<version>.exe`** sur la page des versions :
    https://github.com/willyl02/foulee/releases (pas besoin de compte GitHub).
@@ -252,15 +253,23 @@ ton calendrier Garmin Connect, face à ce que tu as réellement fait :
 Ce que tu obtiens :
 
 - **La vue Calendrier** : la prochaine course avec son compte à rebours et les prochaines
-  séances, puis le mois jour par jour (séances prévues, courses, séances faites). Un clic
-  sur un jour donne le détail : la consigne de la séance, l'heure et le lieu d'une course,
-  la séance faite (un clic l'ouvre). Sur téléphone, des pastilles remplacent les titres.
+  séances, puis le mois jour par jour (séances prévues, courses, séances faites). Chaque
+  séance prévue a son **esquisse** : une barre par étape, aussi large que sa durée, aussi
+  haute que son intensité, aux couleurs des allures VMA (lue dans le texte de la séance,
+  « 3 × 10 min à 85 % VMA » ; devinée de son nom, en pâle, quand il n'y a pas de chiffres).
+  Un clic sur un jour donne le détail : l'esquisse en grand, la consigne de la séance,
+  l'heure et le lieu d'une course, la séance faite (un clic l'ouvre). Sur téléphone, des
+  pastilles remplacent les titres.
 - **Dans « Ta semaine »** (Accueil) : les séances prévues de chaque jour, cochées quand
   elles sont faites, barrées quand elles sont manquées, et le bilan de la semaine
   (« Prévues 4/6 faites »).
 - **Fait ou manqué** : une séance du même sport le même jour rend une séance prévue
   « faite » (une course à pied ou un trail pour un footing, du renfo pour le renfo) ; un
-  jour passé sans rien de tel la rend « manquée ». Le calendrier publié par Garmin ne
+  jour passé sans rien de tel la rend « manquée ». Avec plusieurs séances prévues le même
+  jour (ton plan et celle du coach), chaque séance faite va à celle qui lui ressemble le
+  plus : le nom que lui donne la montre (« Mézy-Moulins - 21KM-S3-2-Seuil 60 »), puis sa
+  durée face à celle prévue. La séance du coach envoyée sur ta montre, qui revient par le
+  calendrier Garmin, ne s'affiche qu'une fois. Le calendrier publié par Garmin ne
   contient que l'avenir : Foulée garde lui-même ce qu'il a lu, jour après jour.
 - **Une pastille « Calendrier »** : verte quand la dernière lecture a réussi (le calendrier
   est relu avec la synchro automatique, toutes les 3 heures par défaut), rouge sinon. Si
@@ -281,10 +290,10 @@ Garmin Connect (une nouvelle publication donne un nouveau lien).
 |---|---|
 | Accueil | Bonjour (photo, poste du jour, objectif), objectifs (le principal, et dessous les secondaires à venir), forme du jour face à tes habitudes (chaque signal avec sa petite courbe : FC de repos face à ta moyenne 30 jours, VFC dans ta zone habituelle, sommeil face à ton besoin…), ta semaine (avec les séances prévues si ton calendrier est relié), tes allures selon ta VMA (tableau du club, piste, test VAMEVAL), Body Battery de la journée, records |
 | Calendrier | Si tu as relié ton calendrier d'entraînement : ta prochaine course (compte à rebours) et tes prochaines séances, puis le mois jour par jour, séances prévues face aux séances faites |
-| Aujourd'hui | Nuit, VFC, FC de repos, Body Battery au réveil, stress, km sur 7 jours, fraîcheur, dernière séance |
+| Aujourd'hui | « Ma séance du jour » : le verdict de la nuit en une phrase, la séance prévue (esquisse, allures, envoi sur la montre), la météo heure par heure et le meilleur créneau selon ton poste ; après la séance, le débrief (prévu face au fait, fractions) et ton ressenti, à envoyer à ton coach |
 | Entraînement | Km par semaine, forme et fatigue (charge chronique, aiguë, fraîcheur, ratio), zones FC et d'allure, liste des séances |
 | Renfo | Dès ta première séance de renfo détaillée : muscles travaillés (carte du corps face et dos, séries par muscle), régularité face à ton objectif, équilibre avant / arrière (rapport 1:x, paire par paire, semaine après semaine), exercices pour rééquilibrer (combien de séries ajouter pour viser 1:1,5, et lesquels), chaque exercice et sa progression, temps, séries et tonnage par semaine, séances |
-| Séance | Résumé, exercices de renfo (avec la carte du corps et l'équilibre avant / arrière de la séance), effet d'entraînement (jauges aérobie et anaérobie de Garmin), carte, courbes synchronisées (FC, allure, altitude, cadence…), autres mesures (dynamique de course, puissance, respiration…), tours ou découpage au km |
+| Séance | Résumé, exercices de renfo (avec la carte du corps et l'équilibre avant / arrière de la séance), effet d'entraînement (jauges aérobie et anaérobie de Garmin), analyse fraction par fraction (façon intervals.icu : temps, allure, FC moyenne, zone et % du tour dans la zone, au-dessus des courbes), carte, courbes synchronisées (FC, allure, altitude, cadence…), autres mesures (dynamique de course, puissance, respiration…), tours ou découpage au km |
 | Récup & postes | Comparaison d'un poste de travail à l'autre, sommeil, VFC, FC de repos, nuage sommeil → VFC, calendrier |
 | Objectifs | Le centre de tes objectifs : le principal (compte à rebours, temps visé, allure cible, part de ta VMA) et les secondaires (courses de préparation…), avec l'équivalence de leur temps sur la distance du principal, les courses de ton calendrier à ajouter d'un clic, les objectifs passés et ton temps réalisé ; puis fractions rapides face à l'allure cible, volume, charge, zones, VO2max |
 | Mon club | Si tu l'as coché dans les Réglages : ton club FFA (avec son logo si tu l'as importé), coordonnées, site, carte, ta licence, et son classement sur athle.fr en un clic |
@@ -558,7 +567,7 @@ Dans un terminal :
 | `reparse` | Reconstruire les tables depuis les réponses brutes (après une mise à jour de Foulée) |
 | `claude-config` | Montrer où Claude Desktop range sa configuration et si Foulée y figure ; `--ecrire` pour l'ajouter, `--retirer` pour l'enlever |
 | `acces-reseau` | Sur un serveur : choisir le mot de passe de l'accès par le réseau local |
-| `relais` | Sur la machine du relais du club : `relais serveur` le lance ; `relais admin` / `relais coach` créent un compte coach ; `relais comptes` les liste ; `relais mot-de-passe`, `desactiver`, `reactiver`, `supprimer` + identifiant |
+| `relais` | Sur la machine du relais du club : `relais serveur` le lance ; `relais admin` / `relais coach` créent un compte coach ; `relais comptes` les liste ; `relais groupes` montre chaque coach et ses élèves ; `relais email` branche le service d'envoi d'e-mails (`email tester ADRESSE`, `email retirer`) ; `relais mot-de-passe`, `desactiver`, `reactiver`, `supprimer` + identifiant. Ces commandes s'affichent à chaque connexion SSH à la machine du relais |
 | `reset-views` | Restaurer les vues d'origine |
 | `forget-key` | Supprimer la clé de ce PC |
 
@@ -714,14 +723,25 @@ ton adresse, par exemple `https://relais.mon-club.com`.
   objectifs secondaires, l'équilibre avant / arrière de son renfo (rapport, tendance, paire par paire, ce
   que tu peux lui dire, et « Lui en parler » avec un message tout prêt), ses séances proposées, sa forme
   (sommeil, VFC, FC au repos, poids) s'il la partage ;
-- chaque **séance** en détail : chiffres, tours, renfo, tracé simplifié (sans fond de carte), ce qui était
-  proposé, et un **fil** pour en parler ;
-- **proposer une séance** à un ou plusieurs élèves : un déroulé en blocs (durée ou distance, répétitions,
-  % de VMA ou zone de FC, récupération), des exemples et ses modèles ; chacun la reçoit avec **ses** allures.
+- son **calendrier** sur neuf semaines (quatre passées, celle-ci, quatre à venir) : son plan et tes séances
+  avec leur esquisse, ses séances faites (un clic les ouvre), ses courses visées ;
+- chaque **séance** en détail : l'**analyse fraction par fraction** (façon intervals.icu : pour chaque tour, son
+  temps, son allure, sa FC moyenne, sa zone et la part du tour dans cette zone, au-dessus des courbes d'allure et
+  de FC), chiffres, tours, renfo, tracé simplifié (sans fond de carte), ce qui était proposé, et un **fil** pour
+  en parler ;
+- **proposer une séance** à un ou plusieurs élèves, ou à tout un groupe de niveau d'un clic : un déroulé en
+  blocs (durée ou distance, ou **« libre (Lap) »** : jusqu'à la touche Lap, sur piste de ligne à ligne ;
+  répétitions, % de VMA ou zone de FC, récupération), des exemples et ses séances types ; chacun la reçoit avec
+  **ses** allures ;
+- **groupes de niveau et bibliothèque** (page « Groupes et séances types ») : des groupes bornés par la VMA (nom,
+  VMA mini et maxi, couleur ; ou trois groupes proposés d'après les VMA du groupe), la VMA du **test au club** de
+  chaque élève (elle passe avant celle qu'il partage pour le classer), un élève placé à la main s'il le faut ;
+  « Mes élèves » se range alors par groupe. La bibliothèque garde ses séances types : les proposer en un clic, les
+  modifier, les renommer, les dupliquer, en créer une sans l'envoyer.
 
-**Ce que voit l'élève** (page « Mon coach ») : les séances proposées, bloc par bloc avec ses allures (et dans
-sa vue « Calendrier », en pointillé bleu, face à ce qu'il fait), la conversation avec son coach, et ce qu'il
-partage.
+**Ce que voit l'élève** (page « Mon coach ») : son calendrier de neuf semaines (le même que celui de son
+coach), les séances proposées, bloc par bloc avec ses allures (et dans sa vue « Calendrier », en pointillé bleu,
+face à ce qu'il fait), la conversation avec son coach, et ce qu'il partage.
 
 **Sur la montre, sans câble** : sous chaque séance proposée, **« Envoyer sur ma montre »**. La première fois,
 Garmin Connect s'ouvre dans une autre fenêtre : l'élève s'y connecte, chez Garmin (Foulée ne voit jamais son
@@ -747,6 +767,10 @@ sudo foulee relais garmin
 (Client ID et Client Secret de l'appli Garmin, le secret ne s'affiche pas ; puis l'adresse publique du relais.
 Chez Garmin, l'« OAuth redirect URL » de l'appli est cette adresse suivie de `/garmin/retour`.)
 
+**Ses propres séances de renfo** : dans la vue Renfo, la tuile « exercices pour rééquilibrer » en fait une
+séance (« En faire une séance pour ma montre ») ; l'élève la règle, la garde dans « Mes séances de renfo » et
+l'envoie sur sa montre par le même chemin (ou en fichier .fit, sans relais).
+
 **Avec un câble** : chaque séance se télécharge aussi en **fichier .fit** (« Fichier .fit »). Montre branchée en
 USB, il se copie dans le dossier `GARMIN\NewFiles` ; débranchée, la montre la range dans Entraînement →
 Entraînements. Le coach peut télécharger le même fichier, avec les allures de l'élève, depuis sa fiche.
@@ -755,6 +779,18 @@ Si l'élève répond « oui » à « Ton coach fait-il partie de ton club ? » (
 **Messages** : une conversation par élève, le fil du groupe (le coach y épingle ses annonces) et un
 fil sous chaque séance ; Foulée relève les nouveautés toutes les minutes (badge dans la colonne). L'extrait
 part après chaque synchro.
+
+**Notifications** (Réglages → Club et coach → Notifications) : le relais prévient l'élève d'une séance reçue,
+modifiée ou annulée et d'un message, et le coach du message d'un élève, même Foulée fermé. Sur le téléphone avec
+**ntfy** (appli gratuite, sans compte : on scanne un QR code), et **par e-mail** : l'adresse se confirme avec un
+code à six chiffres reçu à cette adresse. Heures calmes (la notification ou l'e-mail attend leur fin), détail
+masqué au choix. Pour les e-mails, l'administrateur branche une fois un service d'envoi sur la machine du relais
+(Brevo par défaut, gratuit jusqu'à 300 e-mails par jour, ou tout autre SMTP) :
+
+```bash
+sudo foulee relais email                 # serveur SMTP, identifiant, clé SMTP (ne s'affiche pas), expéditeur
+sudo foulee relais email tester ADRESSE  # un e-mail d'essai
+```
 
 **Essayer avec un élève fictif** : dans ta vraie installation, relie-toi comme coach et crée un code
 d'invitation ; passe en mode démo, puis Réglages → Coach et élèves → « J'ai un code d'invitation ». L'élève

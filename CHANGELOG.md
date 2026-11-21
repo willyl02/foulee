@@ -1,8 +1,157 @@
 # Historique des versions
 
 Les versions « bêta » (par exemple 0.4.0b1) sont des avant-premières : elles arrivent d'abord
-sur le canal bêta (Réglages → Mises à jour → « Recevoir les versions bêta »), puis sortent en
+sur le canal bêta (Réglages → Application → Mises à jour → « Recevoir les versions bêta »), puis sortent en
 version stable une fois éprouvées.
+
+## 0.8.2 — 21 novembre 2026
+
+La version stable qui réunit les bêtas 0.8.2 ; le détail de chacune est dans l'historique des versions (CHANGELOG.md sur GitHub).
+
+- **« Ma séance du jour »** remplace « Aujourd'hui » : le verdict du jour (sommeil, FC de repos, body battery), la
+  séance prévue avec ses étapes et tes allures, la météo heure par heure et **ton créneau** pour courir (hors de tes
+  heures de travail si tu es posté), puis le débrief : la séance faite face à la prévue, ton **ressenti** de 1 à 10,
+  à envoyer à ton coach.
+- **Notifications** du relais du club, même Foulée fermé : sur le téléphone avec **ntfy** (gratuit, sans compte, un QR
+  code) et **par e-mail** (adresse confirmée par un code). Séance reçue, modifiée, annulée, nouveau message ; heures
+  calmes ; détail masqué au choix. Sur le relais, `sudo foulee relais email` branche le service d'envoi (Brevo…).
+- **Coach** : **groupes de niveau** par VMA (avec la VMA du test au club), « Mes élèves » rangés par groupe et
+  « Proposer au groupe », une **bibliothèque de séances**, les **répétitions libres** à la touche Lap, un **grand
+  calendrier** de neuf semaines (coach et élève) et l'**analyse fraction par fraction** de chaque séance.
+- **Réglages réorganisés** comme sur Windows et Mac (Moi, Entraînement, Connexions, Club et coach, Application), avec
+  une recherche ; tout s'enregistre tout seul.
+- **Club en ligne dans Foulée** (application partenaire), une colonne de gauche en trois parties dont on glisse les
+  vues pour les réordonner, et un bouton pour revenir en haut.
+- **Renfo** : tes propres séances, gardées et envoyées sur ta montre.
+- **Corrigés** : la séance faite rattachée à la bonne séance prévue, plus de doublon de la séance du coach ni de la
+  séance déplacée dans Garmin Connect, l'écran noir avec un bloqueur de pub, et plus d'objectif d'office à
+  l'installation.
+- **Relais** : message d'accueil à la connexion SSH avec les commandes usuelles, et `sudo foulee relais groupes`.
+
+## 0.8.2b11 — 21 novembre 2026 (bêta)
+
+- **Les notifications par e-mail** (Réglages → Club et coach → Notifications), en plus de ntfy : séance reçue,
+  modifiée ou annulée, nouveau message, avec les mêmes cases et les mêmes heures calmes (l'e-mail attend leur fin
+  sur le relais). L'adresse se confirme avec un code à six chiffres envoyé à cette adresse (30 minutes, cinq
+  essais) : personne ne reçoit les e-mails du club sans les avoir demandés. « Envoyer un e-mail d'essai »,
+  « Changer d'adresse », « Retirer ».
+- **Relais : `sudo foulee relais email`** branche le service d'envoi (Brevo par défaut, ou tout SMTP) : la clé SMTP
+  se tape sans s'afficher et reste dans le dossier des secrets du relais. `email tester ADRESSE` envoie un essai,
+  `email retirer` coupe les e-mails. Rappelées dans le message d'accueil SSH.
+- Confidentialité : Brevo ajouté aux services, avec l'adresse e-mail confirmée parmi ce que garde le relais.
+
+## 0.8.2b10 — 20 novembre 2026
+
+- **Corrigé : une séance déplacée dans Garmin Connect restait aussi à son ancien jour** (prévue aujourd'hui,
+  remise à demain : elle s'affichait les deux jours). Elle ne reste plus qu'à son nouveau jour ; une séance faite
+  aujourd'hui garde bien sa place.
+- **Relais : message d'accueil à la connexion SSH** de sa machine : version, état du relais et du tunnel, et les
+  commandes usuelles (comptes, groupes, coach, mot de passe, Garmin, mise à jour, journaux). Nouvelle commande
+  `sudo foulee relais groupes` : chaque coach et ses élèves (montre reliée, notifications).
+- Documentation : les guides et présentations portent la version de Foulée dans leur nom.
+
+## 0.8.2b9 — 20 novembre 2026
+
+- **« Aujourd'hui » devient « Ma séance du jour »** (au lieu de répéter la forme du jour de l'Accueil) :
+  - le **verdict de la nuit en une phrase** (feu vert, vas-y sans forcer, journée facile), selon ta récupération
+    et l'intensité prévue ;
+  - la **séance du jour** (ton plan, celle du coach) avec son esquisse et tes allures, et l'envoi sur la montre ;
+  - **quand courir** : la météo heure par heure (Open-Meteo, position arrondie à une dizaine de kilomètres) et
+    **ton créneau**, hors de ton poste, le moins de pluie, de vent et de nuit possible ;
+  - **après la séance** : prévu face au fait, l'analyse fraction par fraction, et ton **ressenti** de 1 à 10 avec
+    un mot, à envoyer à ton coach en un clic.
+- Une vue « Aujourd'hui » arrangée à ta façon n'est pas remplacée : ajoute-lui la tuile « Ma séance du jour ».
+
+## 0.8.2b8 — 20 novembre 2026
+
+- **Notifications sur le téléphone, avec ntfy** (appli gratuite, Android et iPhone, sans compte) : Réglages →
+  Club et coach → Notifications. Élève : prévenu quand le coach envoie une séance, la modifie ou l'annule, et quand
+  il écrit ; coach : quand un élève écrit. QR code pour s'abonner, notification d'essai, choix des événements,
+  **heures calmes** (22 h – 7 h par défaut : la notification attend leur fin), détail masquable. C'est le relais
+  qui envoie : Foulée n'a pas besoin d'être ouvert. Le relais du club doit être en 0.8.2b8.
+- L'**e-mail** est préparé (réglages et interface) : il arrivera avec la clé d'un service d'envoi posée sur le relais.
+- Page de confidentialité : ntfy ajouté aux prestataires (seulement si on active les notifications).
+
+## 0.8.2b7 — 20 novembre 2026
+
+- **Réglages réorganisés, comme ceux de Windows et du Mac** : cinq thèmes à gauche (Moi, Entraînement, Connexions,
+  Club et coach, Application), leurs rubriques à droite, et une **recherche** qui fouille toutes les rubriques
+  (« VMA », « Strava », « mise à jour »…). Sur téléphone : la liste des thèmes, puis le thème choisi.
+- **Tout s'enregistre tout de suite** : plus de bouton « Enregistrer les réglages » ; « Enregistré » s'affiche en
+  haut de la page après chaque changement.
+
+## 0.8.2b6 — 20 novembre 2026
+
+- **Application partenaire** (Réglages → Application partenaire) : le site du club, par défaut **Club en ligne**
+  (`https://app.clubenligne.fr/`), s'ouvre dans Foulée, avec précédent, suivant, recharger et « Ouvrir dans le
+  navigateur ». Nom et adresse modifiables, jusqu'à une page précise du site ; une coche l'ajoute dans la colonne.
+- **Colonne de gauche** : trois parties séparées d'un trait (tes vues, l'application partenaire, le coach), et les
+  vues se **réordonnent en les glissant** (ou Alt + ↑ / ↓), sans passer par « Modifier la vue ».
+- Corrigé : dans « Mon coach » et sur la fiche d'un élève, le grand calendrier (surtout replié) touchait les cartes
+  du dessous.
+
+## 0.8.2b5 — 20 novembre 2026
+
+- **Renfo : mes séances, sur ma montre.** Dans la tuile « Renfo : exercices pour rééquilibrer », « En faire une
+  séance pour ma montre » compose une séance avec les exercices conseillés (séries, répétitions ou durée, récup,
+  échauffement et étirements) ; « Mes séances de renfo » les garde. « Envoyer sur ma montre » la dépose dans le
+  calendrier Garmin Connect (avec un compte élève relié au relais du club), sinon « Fichier .fit ». Sur la montre,
+  chaque série dit l'exercice et ses répétitions : Lap quand elle est finie, la récup suit.
+- **Grand calendrier (coach et élève)** : plus lisible (couleurs plus franches, esquisses plus nettes, titres sur
+  deux lignes au lieu d'être coupés net), et il se **replie** d'un clic sur son titre ; Foulée retient ton choix.
+- **Revenir en haut** : un bouton rond en bas à droite dès qu'on a bien descendu dans une page (Réglages…).
+- Le relais du club doit être en 0.8.2b5 pour l'envoi des séances de renfo (il se met à jour seul la nuit).
+
+## 0.8.2b4 — 20 novembre 2026
+
+- **Corrigé : Foulée restait sur « Chargement… »** (écran noir) depuis la 0.8.2b1 chez qui a un bloqueur de pub ou
+  de pistage (extension, protection contre le suivi d'Edge) : le fichier de l'analyse fraction par fraction
+  s'appelait « analyse.js », un nom que ces bloqueurs refusent, et toute l'interface s'arrêtait avec lui. Il est
+  renommé, et un test vérifie désormais qu'aucun fichier de l'interface ne porte un nom de ce genre.
+
+## 0.8.2b3 — 20 novembre 2026
+
+- **Groupes de niveau** (coach) : une nouvelle page « Groupes et séances types » pour créer tes groupes (nom, VMA
+  mini et maxi, couleur), ou en faire proposer trois d'après les VMA de tes élèves. Chaque élève va dans le groupe
+  de sa VMA : celle de ton **test au club** (VAMEVAL, demi-Cooper…) si tu la notes sur cette page, sinon celle qu'il
+  partage. Tu peux aussi placer un élève à la main. L'aperçu montre qui va où avant d'enregistrer.
+- **« Mes élèves » rangés par groupe** (ou par VMA, ou par nom), avec « Proposer au groupe » ; dans « Proposer une
+  séance », un clic sur un groupe coche tous ses élèves ; le groupe de l'élève s'affiche sur sa fiche.
+- **Bibliothèque de séances** sur la même page : tes séances types avec leur esquisse et leur durée, à proposer en
+  un clic, modifier, renommer, dupliquer ou supprimer ; « Nouvelle séance type » en compose une sans l'envoyer.
+- Pour le coach, il faut que le relais du club soit en 0.8.2b3 : il se met à jour seul la nuit (ou tout de suite,
+  sur la machine du relais : `sudo bash /opt/foulee/scripts/mettre-a-jour-serveur.sh`).
+
+## 0.8.2b2 — 20 novembre 2026
+
+- **Quelle séance faite pour quelle séance prévue** : quand plusieurs séances sont prévues le même jour (ton plan et
+  celle du coach), chaque séance faite va à celle qui lui ressemble le plus : le nom que lui donne la montre (« Mézy-
+  Moulins - 21KM-S3-2-Seuil 60 » répond à « 21KM-S3-2-Seuil 60 »), puis sa durée face à celle des blocs prévus. Avant,
+  la première prévue du jour prenait la première faite : la séance de Jason passait « faite » alors que tu avais fait
+  celle de ton plan. Même règle chez toi (calendrier, « Ta semaine ») et chez le coach (statut de ses séances, fiche,
+  calendrier), et « Ce qui était proposé » n'apparaît plus sous une séance qui répondait à ton plan.
+- **Plus de doublon** : la séance du coach envoyée sur ta montre revient aussi par ton calendrier Garmin ; elle ne
+  s'affiche plus deux fois (« VMA courte » et « VMA courte (coach) »), ni chez toi ni chez le coach.
+
+## 0.8.2b1 — 20 novembre 2026
+
+- **Analyse fraction par fraction**, façon intervals.icu : sur chaque séance (vue « Séance », et dans les pages coach et
+  élève), une colonne par tour, aussi large que sa durée, avec son temps, son allure, sa FC moyenne, la zone de cette FC
+  et la part du tour passée dans cette zone, au-dessus des courbes d'allure et de FC. Le survol donne l'allure et la FC
+  à chaque instant. L'élève partage pour cela, avec ses tours, une courbe allégée (allure et FC, jamais de position).
+- **Calendrier** : chaque séance prévue a son esquisse (une barre par étape, aussi large que sa durée, aussi haute que
+  son intensité, aux couleurs des allures VMA), lue dans la séance du coach ou dans le texte du calendrier Garmin
+  (« 5 × 200 m à 100 % VMA ») ; à défaut, une séance type devinée du nom, en pâle. Le calendrier du mois grandit.
+- **Coach et élève** : un grand calendrier de neuf semaines (quatre passées, celle-ci, quatre à venir) sur la fiche de
+  l'élève et dans « Mon coach » : séances prévues avec leur esquisse, séances faites (un clic les ouvre), courses visées.
+- **Répétitions libres** (demande de Jason) : dans l'éditeur de séance, « libre (Lap) » à la place d'une durée ou d'une
+  distance, pour l'effort comme pour la récup ; la montre passe à la suite à la touche Lap (sur piste, de ligne à
+  ligne). Sur la montre comme dans le fichier .fit.
+- **Corrigé** : une nouvelle installation n'a plus d'objectif d'office (c'était le semi de Paris du développeur) ; un
+  profil qu'on regarde sans le synchroniser est quand même mis à niveau (« Cap semi de Paris » restait sur des profils
+  créés avant la 0.8.1) ; une séance de renfo prévue dans Garmin (« 5x10 Squat… + 5x10 Hip thrust… ») n'est plus
+  rangée en course à pied, et la séance faite s'y rattache ; l'Accueil se remet à jour sans F5 (jour, « Bonjour /
+  Bonsoir », « il y a… », nouvelles données après une synchro automatique).
 
 ## 0.8.1 — 16 novembre 2026
 

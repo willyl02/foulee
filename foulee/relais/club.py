@@ -20,7 +20,8 @@ from datetime import date, timedelta
 from typing import Any
 
 from .. import metrics, renfo
-from . import garmin
+from .. import appariement
+from . import garmin, notifs
 from .store import RelayError, local_now, now
 
 KEEP_DAYS = 28                 # le relais ne garde que 4 semaines de séances
@@ -77,7 +78,9 @@ SESSION_NUM = {"duree_s": (0, 200000, 0), "deplacement_s": (0, 200000, 0), "dist
                "cadence": (0, 400, 0), "puissance": (0, 3000, 0), "calories": (0, 30000, 0),
                "effet_aerobie": (0, 5, 1), "effet_anaerobie": (0, 5, 1), "charge": (0, 3000, 0), "effort": (0, 10, 0)}
 LAP_NUM = {"duree_s": (0, 100000, 0), "distance_m": (0, 500000, 0), "fc_moy": (20, 250, 0),
-           "vitesse_kmh": (0, 120, 1), "denivele_m": (0, 10000, 0)}
+           "vitesse_kmh": (0, 120, 1), "denivele_m": (0, 10000, 0), "debut_s": (0, 200000, 1),
+           "fin_s": (0, 200000, 1), "zone": (1, 5, 0), "zone_pct": (0, 100, 0)}
+CURVE_MAX = 400  # points de la courbe allégée (allure, FC) d'une séance
 DAY_NUM = {"sommeil_h": (0, 24, 1), "sommeil_score": (0, 100, 0), "vfc": (0, 300, 0), "fc_repos": (20, 150, 0),
            "poids_kg": (20, 400, 1)}
 
@@ -120,6 +123,14 @@ def _clean_session(raw: dict, oldest: str) -> dict | None:
             sets.append(item)
     if sets:
         out["renfo"] = sets
+    curve = raw.get("courbe")
+    if laps and isinstance(curve, dict) and isinstance(curve.get("t"), list):
+        times = [_num(x, 0, 200000, 0) for x in curve["t"][:CURVE_MAX]]
+        speeds = [_num(x, 0, 40, 2) for x in (curve.get("v") or [])[:len(times)]]
+        hrs = [_num(x, 20, 250, 0) for x in (curve.get("fc") or [])[:len(times)]]
+        if len(times) >= 2 and all(x is not None for x in times):
+            out["courbe"] = {"t": times, "v": speeds + [None] * (len(times) - len(speeds)),
+                             "fc": hrs + [None] * (len(times) - len(hrs))}
     trace = raw.get("trace")
     if isinstance(trace, list) and trace:
         points = []
@@ -216,11 +227,19 @@ def clean_share(payload: Any) -> dict:
     plan = []
     for raw in (payload.get("plan") or [])[:120]:
         if isinstance(raw, dict) and (day := _day(raw.get("date"))) and raw.get("titre"):
-            plan.append({"date": day, "heure": _txt(raw.get("heure"), 5), "titre": _txt(raw.get("titre"), 120),
-                         "type": raw.get("type") if raw.get("type") in ("seance", "course", "autre") else "seance",
-                         "sport": _txt(raw.get("sport"), 20),
-                         "statut": raw.get("statut") if raw.get("statut") in
-                         ("fait", "manque", "aujourdhui", "a_venir", "passe") else None})
+            item = {"date": day, "heure": _txt(raw.get("heure"), 5), "titre": _txt(raw.get("titre"), 120),
+                    "type": raw.get("type") if raw.get("type") in ("seance", "course", "autre") else "seance",
+                    "sport": _txt(raw.get("sport"), 20),
+                    "statut": raw.get("statut") if raw.get("statut") in
+                    ("fait", "manque", "aujourdhui", "a_venir", "passe") else None}
+            try:  # l'esquisse de la séance (blocs lus dans son texte), pour le calendrier du coach
+                blocks = clean_blocks(raw.get("blocs")) if raw.get("blocs") else []
+            except RelayError:
+                blocks = []
+            if blocks:
+                item["blocs"] = blocks
+                item["esquisse_approchee"] = bool(raw.get("esquisse_approchee"))
+            plan.append(item)
     return {"seances": sessions, "jours": sorted(days, key=lambda d: d["date"]), "profil": profile, "plan": plan}
 
 
@@ -330,8 +349,13 @@ def clean_blocks(raw: Any) -> list[dict]:
                  "recup_texte": _txt(item.get("recup_texte"), 40),
                  "note": _txt(item.get("note"), 200),
                  "genre": genre}
-        if block["duree_min"] is None and block["distance_m"] is None and not block["note"]:
-            raise RelayError(f"Bloc « {block['nom']} » : indique une durée ou une distance.")
+        if item.get("libre") and block["duree_min"] is None and block["distance_m"] is None:
+            block["libre"] = True  # jusqu'à la touche Lap (sur piste, de ligne à ligne)
+        if item.get("recup_libre") and block["recup_min"] is None:
+            block["recup_libre"] = True
+        if block["duree_min"] is None and block["distance_m"] is None and not block["note"] and not block.get("libre"):
+            raise RelayError(f"Bloc « {block['nom']} » : indique une durée ou une distance (ou « libre », à la "
+                             "touche Lap).")
         blocks.append({k: v for k, v in block.items() if v is not None})
     if not blocks:
         raise RelayError("Ajoute au moins un bloc à la séance.")
@@ -350,18 +374,32 @@ def _clean_proposal(payload: dict) -> tuple[str, str, str, dict]:
     return day, title, sport, content
 
 
-def _proposal_dict(row: sqlite3.Row, sessions: list[dict] | None = None) -> dict:
+def _proposal_dict(row: sqlite3.Row) -> dict:
     content = json.loads(row["contenu"])
-    item = {"id": row["id"], "eleve_id": row["eleve_id"], "date": row["date"], "titre": row["titre"],
+    return {"id": row["id"], "eleve_id": row["eleve_id"], "coach_id": row["coach_id"], "date": row["date"], "titre": row["titre"],
             "sport": row["sport"], "sport_label": metrics.SPORTS.get(row["sport"]), "blocs": content.get("blocs", []),
             "consigne": content.get("consigne"), "cree_le": row["cree_le"], "modifie_le": row["modifie_le"]}
-    if sessions is not None:
-        done = next((s for s in sessions if s["date"] == row["date"] and _fits(row["sport"], s.get("sport"))), None)
-        day = date.fromisoformat(row["date"])
-        item["statut"] = "fait" if done else "manque" if day < _today() else \
-            "aujourdhui" if day == _today() else "a_venir"
-        item["seance"] = {"cle": done["cle"], "nom": done.get("nom")} if done else None
-    return item
+
+
+def _with_status(items: list[dict], sessions: list[dict], plan: list[dict], vma: float | None) -> None:
+    """Fait ou pas ? Les séances du coach et celles de son plan, le même jour, se disputent ses séances faites :
+    chacune va à la séance prévue qui lui ressemble le plus (nom donné par la montre, durée ; voir appariement).
+    Une séance du coach revenue par son calendrier Garmin n'est pas une rivale : c'est la même."""
+    rivals = [p for p in plan or [] if p.get("type") != "autre" and not any(
+        appariement.same_session(i["titre"], i["date"], p.get("titre") or "", p.get("date") or "") for i in items)]
+    candidates = [{"cle": ("coach", i["id"]), "date": i["date"], "titre": i["titre"], "sport": i["sport"],
+                   "blocs": i["blocs"]} for i in items]
+    candidates += [{"cle": ("plan", n), "date": p["date"], "titre": p.get("titre"), "sport": p.get("sport"),
+                    "type": p.get("type"), "blocs": p.get("blocs")} for n, p in enumerate(rivals)]
+    done = [{"cle": s["cle"], "date": s["date"], "sport": s.get("sport"), "nom": s.get("nom"),
+             "duree_s": s.get("deplacement_s") or s.get("duree_s"), "row": s} for s in sessions]
+    matched = appariement.assign(candidates, done, _fits, vma)
+    today = _today()
+    for item in items:
+        found = matched.get(("coach", item["id"]))
+        day = date.fromisoformat(item["date"])
+        item["statut"] = "fait" if found else "manque" if day < today else "aujourdhui" if day == today else "a_venir"
+        item["seance"] = {"cle": found["cle"], "nom": found.get("nom")} if found else None
 
 
 def students_of(conn: sqlite3.Connection, coach_id: int) -> dict[int, sqlite3.Row]:
@@ -386,7 +424,10 @@ def create_proposals(conn: sqlite3.Connection, coach_id: int, payload: dict) -> 
                             stamp))
         created.append(cur.lastrowid)
     rows = conn.execute(f"SELECT * FROM propositions WHERE id IN ({','.join('?' * len(created))})", created)
-    return [_proposal_dict(row) for row in rows]
+    items = [_proposal_dict(row) for row in rows]
+    for item in items:
+        notifs.proposal_event(conn, "seance", item)
+    return items
 
 
 def update_proposal(conn: sqlite3.Connection, coach_id: int, proposal_id: int, payload: dict) -> dict:
@@ -398,22 +439,31 @@ def update_proposal(conn: sqlite3.Connection, coach_id: int, proposal_id: int, p
                  (day, title, sport, json.dumps(content, ensure_ascii=False), now(), proposal_id))
     garmin.follow_update(conn, proposal_id)  # déjà sur la montre : renvoyée telle que modifiée
     item = _proposal_dict(conn.execute("SELECT * FROM propositions WHERE id = ?", (proposal_id,)).fetchone())
+    if max(item["date"], row["date"]) >= _today().isoformat():  # une séance passée qu'on range : pas de quoi prévenir
+        notifs.proposal_event(conn, "seance_modifiee", item)
     garmin.decorate(conn, item["eleve_id"], [item])
     return item
 
 
 def delete_proposal(conn: sqlite3.Connection, coach_id: int, proposal_id: int) -> bool:
-    if conn.execute("SELECT 1 FROM propositions WHERE id = ? AND coach_id = ?", (proposal_id, coach_id)).fetchone():
+    row = conn.execute("SELECT * FROM propositions WHERE id = ? AND coach_id = ?", (proposal_id, coach_id)).fetchone()
+    if row:
         garmin.withdraw(conn, proposal_id)  # et hors du calendrier Garmin de l'élève
+        if row["date"] >= _today().isoformat():
+            notifs.proposal_event(conn, "seance_annulee", _proposal_dict(row))
     return conn.execute("DELETE FROM propositions WHERE id = ? AND coach_id = ?",
                         (proposal_id, coach_id)).rowcount > 0
 
 
 def proposals(conn: sqlite3.Connection, student_id: int, start: date, end: date,
-              sessions: list[dict] | None = None) -> list[dict]:
+              content: dict | None = None) -> list[dict]:
+    """Les séances proposées à un élève sur la période ; avec ce qu'il partage (content), leur état."""
     rows = conn.execute("SELECT * FROM propositions WHERE eleve_id = ? AND date BETWEEN ? AND ? ORDER BY date, id",
                         (student_id, start.isoformat(), end.isoformat())).fetchall()
-    items = [_proposal_dict(row, sessions) for row in rows]
+    items = [_proposal_dict(row) for row in rows]
+    if content is not None:
+        _with_status(items, content.get("seances") or [], content.get("plan") or [],
+                     (content.get("profil") or {}).get("vma_kmh"))
     garmin.decorate(conn, student_id, items)  # déjà envoyée sur sa montre ?
     return items
 
@@ -449,6 +499,147 @@ def save_template(conn: sqlite3.Connection, coach_id: int, payload: dict) -> lis
 def delete_template(conn: sqlite3.Connection, coach_id: int, template_id: int) -> list[dict]:
     conn.execute("DELETE FROM modeles WHERE id = ? AND coach_id = ?", (template_id, coach_id))
     return templates(conn, coach_id)
+
+
+def update_template(conn: sqlite3.Connection, coach_id: int, template_id: int, payload: dict) -> list[dict]:
+    """Renommer ou modifier un modèle de la bibliothèque (le titre seul suffit pour renommer)."""
+    row = conn.execute("SELECT * FROM modeles WHERE id = ? AND coach_id = ?", (template_id, coach_id)).fetchone()
+    if row is None:
+        raise RelayError("Modèle introuvable.")
+    content = json.loads(row["contenu"])
+    title = _txt(payload.get("titre"), 80) or row["titre"]
+    if conn.execute("SELECT 1 FROM modeles WHERE coach_id = ? AND titre = ? AND id <> ?",
+                    (coach_id, title, template_id)).fetchone():
+        raise RelayError(f"Tu as déjà un modèle « {title} ».")
+    sport = payload.get("sport") if payload.get("sport") in metrics.SPORTS else row["sport"]
+    if "blocs" in payload:
+        content["blocs"] = clean_blocks(payload.get("blocs"))
+    if "consigne" in payload:
+        content["consigne"] = _txt(payload.get("consigne"), 1500)
+    conn.execute("UPDATE modeles SET titre = ?, sport = ?, contenu = ? WHERE id = ?",
+                 (title, sport, json.dumps(content, ensure_ascii=False), template_id))
+    return templates(conn, coach_id)
+
+
+# ------------------------------------------------------------------ groupes de niveau
+COLORS = ("bleu", "vert", "jaune", "orange", "rouge", "violet", "gris")
+MAX_LEVELS = 12
+
+
+def levels(conn: sqlite3.Connection, coach_id: int) -> list[dict]:
+    rows = conn.execute("SELECT * FROM niveaux WHERE coach_id = ? ORDER BY position, id", (coach_id,)).fetchall()
+    return [{"id": r["id"], "nom": r["nom"], "vma_min": r["vma_min"], "vma_max": r["vma_max"], "couleur": r["couleur"]}
+            for r in rows]
+
+
+def save_levels(conn: sqlite3.Connection, coach_id: int, payload: dict) -> dict:
+    """Remplace la liste des groupes (ceux qui manquent sont supprimés ; un élève placé à la main dans un groupe
+    supprimé retrouve le groupe de sa VMA)."""
+    items = payload.get("niveaux")
+    if not isinstance(items, list) or len(items) > MAX_LEVELS:
+        raise RelayError(f"{MAX_LEVELS} groupes au plus.")
+    mine = {r["id"] for r in conn.execute("SELECT id FROM niveaux WHERE coach_id = ?", (coach_id,))}
+    kept = set()
+    for position, raw in enumerate(items):
+        if not isinstance(raw, dict):
+            continue
+        name = _txt(raw.get("nom"), 40)
+        if not name:
+            raise RelayError(f"Donne un nom au groupe n° {position + 1}.")
+        low, high = _num(raw.get("vma_min"), 5, 30, 1), _num(raw.get("vma_max"), 5, 30, 1)
+        if low is not None and high is not None and low >= high:
+            raise RelayError(f"Groupe « {name} » : la VMA mini doit être plus basse que la VMA maxi.")
+        color = raw.get("couleur") if raw.get("couleur") in COLORS else COLORS[position % len(COLORS)]
+        level_id = raw.get("id") if isinstance(raw.get("id"), int) and raw.get("id") in mine else None
+        if level_id:
+            conn.execute("UPDATE niveaux SET nom = ?, vma_min = ?, vma_max = ?, couleur = ?, position = ? WHERE id = ?",
+                         (name, low, high, color, position, level_id))
+        else:
+            level_id = conn.execute("INSERT INTO niveaux(coach_id, nom, vma_min, vma_max, couleur, position) "
+                                    "VALUES (?,?,?,?,?,?)", (coach_id, name, low, high, color, position)).lastrowid
+        kept.add(level_id)
+    for gone in mine - kept:
+        conn.execute("DELETE FROM niveaux WHERE id = ?", (gone,))
+    return level_page(conn, coach_id)
+
+
+def _follow(conn: sqlite3.Connection, student_ids: list[int]) -> dict[int, sqlite3.Row]:
+    if not student_ids:
+        return {}
+    rows = conn.execute(f"SELECT * FROM eleves_suivi WHERE eleve_id IN ({','.join('?' * len(student_ids))})",
+                        student_ids).fetchall()
+    return {r["eleve_id"]: r for r in rows}
+
+
+def level_of(vma: float | None, forced: int | None, groups: list[dict]) -> dict | None:
+    """Le groupe d'un élève : celui où le coach l'a placé, sinon le premier dont les bornes contiennent sa VMA
+    (mini comprise, maxi non comprise ; une borne vide ne limite pas)."""
+    if forced:
+        found = next((g for g in groups if g["id"] == forced), None)
+        if found:
+            return found
+    if vma is None:
+        return None
+    return next((g for g in groups if (g["vma_min"] is None or vma >= g["vma_min"])
+                 and (g["vma_max"] is None or vma < g["vma_max"])), None)
+
+
+def coach_view(conn: sqlite3.Connection, coach_id: int, student_id: int, shared_vma: float | None,
+               groups: list[dict] | None = None, follow: sqlite3.Row | None = None) -> dict:
+    """VMA de référence (test du club, sinon partagée) et groupe d'un élève, tels que le coach les voit."""
+    groups = levels(conn, coach_id) if groups is None else groups
+    if follow is None:
+        follow = _follow(conn, [student_id]).get(student_id)
+    test = follow["vma_test"] if follow else None
+    vma = test or shared_vma
+    level = level_of(vma, follow["niveau_force"] if follow else None, groups)
+    return {"vma_kmh": vma, "vma_partagee": shared_vma, "vma_test": test,
+            "vma_test_le": follow["vma_test_le"] if follow else None,
+            "vma_source": "test" if test else "partagee" if shared_vma else None,
+            "niveau": level, "niveau_force": bool(follow and follow["niveau_force"] and level)}
+
+
+def level_page(conn: sqlite3.Connection, coach_id: int) -> dict:
+    """La page « Réglages coach » : ses groupes et, pour chaque élève, sa VMA et son groupe."""
+    groups = levels(conn, coach_id)
+    students = students_of(conn, coach_id)
+    follow = _follow(conn, list(students))
+    out = []
+    for sid, row in students.items():
+        content, _ = shared(conn, sid)
+        out.append({"id": sid, "nom": row["nom"], "actif": bool(row["actif"]),
+                    **coach_view(conn, coach_id, sid, content["profil"].get("vma_kmh"), groups, follow.get(sid))})
+    out.sort(key=lambda s: (-(s["vma_kmh"] or 0), s["nom"].lower()))
+    return {"niveaux": groups, "eleves": out, "couleurs": list(COLORS)}
+
+
+def set_student_level(conn: sqlite3.Connection, coach_id: int, student_id: int, payload: dict) -> dict:
+    """VMA mesurée au club (vide : on reprend celle qu'il partage) et groupe imposé (vide : selon la VMA)."""
+    if student_id not in students_of(conn, coach_id):
+        raise PermissionError("Élève introuvable dans ton groupe.")
+    current = _follow(conn, [student_id]).get(student_id)
+    test = current["vma_test"] if current else None
+    tested_on = current["vma_test_le"] if current else None
+    forced = current["niveau_force"] if current else None
+    if "vma_test" in payload:
+        raw = payload.get("vma_test")
+        test = None if raw in (None, "") else _num(str(raw).replace(",", "."), 5, 30, 1)
+        if raw not in (None, "") and test is None:
+            raise RelayError("VMA entre 5 et 30 km/h.")
+        tested_on = (_txt(payload.get("vma_test_le"), 10) or _today().isoformat()) if test else None
+    if "niveau" in payload:
+        raw = payload.get("niveau")
+        forced = None
+        if raw not in (None, ""):
+            mine = {g["id"] for g in levels(conn, coach_id)}
+            if not str(raw).isdigit() or int(raw) not in mine:
+                raise RelayError("Groupe inconnu.")
+            forced = int(raw)
+    conn.execute("INSERT INTO eleves_suivi(eleve_id, vma_test, vma_test_le, niveau_force, modifie_le) "
+                 "VALUES (?,?,?,?,?) ON CONFLICT(eleve_id) DO UPDATE SET vma_test = excluded.vma_test, "
+                 "vma_test_le = excluded.vma_test_le, niveau_force = excluded.niveau_force, "
+                 "modifie_le = excluded.modifie_le", (student_id, test, tested_on, forced, now()))
+    return level_page(conn, coach_id)
 
 
 # ------------------------------------------------------------------ messages
@@ -498,6 +689,7 @@ def post(conn: sqlite3.Connection, account: sqlite3.Row, thread: str, text: Any)
     cur = conn.execute("INSERT INTO messages(coach_id, fil, auteur_id, texte, cree_le) VALUES (?,?,?,?,?)",
                        (group, thread, account["id"], body, now()))
     mark_read(conn, account["id"], thread, cur.lastrowid)
+    notifs.message_event(conn, account, thread, group, body)
     row = conn.execute("SELECT * FROM messages WHERE id = ?", (cur.lastrowid,)).fetchone()
     return _message(row, account["id"], conn, {})
 
@@ -641,11 +833,24 @@ def week(content: dict, props: list[dict], monday: date) -> list[dict]:
     for offset in range(7):
         day = (monday + timedelta(days=offset)).isoformat()
         done = [_session_brief(s) for s in content["seances"] if s["date"] == day]
-        planned = [{"source": "plan", **p} for p in content["plan"] if p["date"] == day and p["type"] != "autre"]
+        planned = [{"source": "plan", **p} for p in content["plan"] if p["date"] == day and p["type"] != "autre"
+                   and not any(appariement.same_session(x["titre"], x["date"], p.get("titre") or "", day) for x in props)]
         planned += [{"source": "coach", "id": p["id"], "titre": p["titre"], "sport": p["sport"],
-                     "statut": p["statut"]} for p in props if p["date"] == day]
+                     "statut": p["statut"], "blocs": p.get("blocs") or []} for p in props if p["date"] == day]
         days.append({"date": day, "prevu": planned, "fait": sorted(done, key=lambda s: s.get("debut") or "")})
     return days
+
+
+def month(conn: sqlite3.Connection, student_id: int, content: dict, today: date) -> dict:
+    """Neuf semaines autour d'aujourd'hui (4 passées, la semaine en cours, 4 à venir), jour par jour, comme
+    week() : le grand calendrier des pages coach et élève."""
+    start = _monday(today) - timedelta(days=28)
+    end = start + timedelta(days=63) - timedelta(days=1)
+    props = proposals(conn, student_id, start, end, content)
+    days = []
+    for offset in range(9):
+        days += week(content, props, start + timedelta(days=7 * offset))
+    return {"debut": start.isoformat(), "fin": end.isoformat(), "jours": days}
 
 
 def tally(days: list[dict]) -> dict:
@@ -659,12 +864,15 @@ def overview(conn: sqlite3.Connection, coach: sqlite3.Row) -> list[dict]:
     today = _today()
     monday = _monday(today)
     reads = {t["fil"]: t["non_lus"] for t in threads(conn, coach)}
+    groups = levels(conn, coach["id"])
     out = []
-    for row in conn.execute("SELECT * FROM comptes WHERE role = 'eleve' AND coach_id = ? ORDER BY nom COLLATE NOCASE",
-                            (coach["id"],)).fetchall():
+    rows = conn.execute("SELECT * FROM comptes WHERE role = 'eleve' AND coach_id = ? ORDER BY nom COLLATE NOCASE",
+                        (coach["id"],)).fetchall()
+    follow = _follow(conn, [r["id"] for r in rows])
+    for row in rows:
         content, received = shared(conn, row["id"])
         accord = get_accord(conn, row["id"])
-        props = proposals(conn, row["id"], monday, monday + timedelta(days=6), content["seances"])
+        props = proposals(conn, row["id"], monday, monday + timedelta(days=6), content)
         days = week(content, props, monday)
         sessions = content["seances"]
         last = sessions[0] if sessions else None
@@ -681,7 +889,7 @@ def overview(conn: sqlite3.Connection, coach: sqlite3.Row) -> list[dict]:
             "inscrit_le": row["cree_le"], "derniere_connexion": row["derniere_connexion"],
             "accord": accord, "partage_recu_le": received, "derniere_seance": _session_brief(last),
             "semaine": tally(days), "bande": strip(days, today), "charge_7j": round(load7) if sessions else None,
-            "vma_kmh": content["profil"].get("vma_kmh"),
+            **coach_view(conn, coach["id"], row["id"], content["profil"].get("vma_kmh"), groups, follow.get(row["id"])),
             "seances_28j": len(sessions), "objectif": goal, "non_lus": unread,
             "montre": garmin.student_flags(conn, row["id"]),
             "prochain": _next_goal(goal, content["profil"], today),
@@ -702,8 +910,8 @@ def student_page(conn: sqlite3.Connection, coach: sqlite3.Row, student_id: int, 
     monday = monday or _monday(today)
     content, received = shared(conn, student_id)
     sessions = content["seances"]
-    props_week = proposals(conn, student_id, monday, monday + timedelta(days=6), sessions)
-    upcoming = proposals(conn, student_id, today - timedelta(days=14), today + timedelta(days=90), sessions)
+    props_week = proposals(conn, student_id, monday, monday + timedelta(days=6), content)
+    upcoming = proposals(conn, student_id, today - timedelta(days=14), today + timedelta(days=90), content)
     counts = {row2["fil"]: row2["n"] for row2 in conn.execute(
         "SELECT fil, COUNT(*) AS n FROM messages WHERE coach_id = ? AND fil LIKE ? GROUP BY fil",
         (coach["id"], f"seance-{student_id}-%"))}
@@ -727,7 +935,10 @@ def student_page(conn: sqlite3.Connection, coach: sqlite3.Row, student_id: int, 
             "objectif": goal, "objectifs": _upcoming_goals(content["profil"], today),
             "semaine": {"lundi": monday.isoformat(), "jours": days, "bilan": tally(days)},
             "seances": briefs, "jours": content["jours"], "total_28j": total, "propositions": upcoming,
+            "mois": month(conn, student_id, content, today),
             "renfo": renfo_balance(sessions, today),
+            "suivi": coach_view(conn, coach["id"], student_id, content["profil"].get("vma_kmh")),
+            "niveaux": levels(conn, coach["id"]),
             "montre": {**garmin.student_flags(conn, student_id), "disponible": garmin.configured()}}
 
 
@@ -753,10 +964,13 @@ def student_session(conn: sqlite3.Connection, account: sqlite3.Row, student_id: 
     session = next((s for s in content["seances"] if s["cle"] == key), None)
     if session is None:
         raise RelayError("Séance introuvable : elle n'est plus partagée (plus de 4 semaines, ou partage retiré).")
-    plan = next((p for p in content["plan"] if p["date"] == session["date"] and p["type"] != "autre"), None)
     props = proposals(conn, student_id, date.fromisoformat(session["date"]), date.fromisoformat(session["date"]),
-                      content["seances"])
-    return {"seance": session, "prevue": plan, "proposition": props[0] if props else None,
+                      content)
+    # ce qui était proposé : la séance du coach à laquelle elle répond (sinon, rien : elle répondait à son plan)
+    mine = next((p for p in props if (p.get("seance") or {}).get("cle") == key), None)
+    plan = None if mine else next((p for p in content["plan"] if p["date"] == session["date"] and p["type"] != "autre"
+                                   and p.get("statut") == "fait"), None)
+    return {"seance": session, "prevue": plan, "proposition": mine,
             "vma_kmh": content["profil"].get("vma_kmh"), "fil": f"seance-{student_id}-{key}"}
 
 
@@ -771,7 +985,10 @@ def my_page(conn: sqlite3.Connection, student: sqlite3.Row) -> dict:
             "partage": {"seances": len(content["seances"]), "jours": len(content["jours"]),
                         "traces": sum("trace" in s for s in content["seances"])},
             "propositions": proposals(conn, student["id"], today - timedelta(days=14), today + timedelta(days=90),
-                                      content["seances"]),
+                                      content),
+            "mois": month(conn, student["id"], content, today),
+            "objectifs": [g for g in [_clean_goal(content["profil"]["objectif"]) if content["profil"].get("objectif")
+                                      else None, *(content["profil"].get("objectifs") or [])] if g and g.get("date")],
             "montre": garmin.status(conn, student)}
 
 

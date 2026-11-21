@@ -1,6 +1,9 @@
 // La fiche d'un élève (vue du coach) et la page d'une séance partagée, avec son fil (coach et élève).
 import * as api from "./api.js";
 import * as F from "./format.js";
+import { analysisHTML, wireAnalysis } from "./fractions.js";
+import { calendarCard } from "./coach-cal.js";
+import { levelChip } from "./coach-reglages.js";
 import { icon } from "./icons.js";
 import {
   avatar, blocksHtml, dayLabel, dur, km, loading, mountThread, rdel, rget, sessionFigures, sportIcon, statusChip, traceSvg,
@@ -99,6 +102,7 @@ export async function renderStudent(ctx, sid) {
   const goal = data.objectif;
   const gp = goalPace(goal);
   const vma = data.profil?.vma_kmh;
+  const testLine = data.suivi?.vma_test ? `${F.dec1(data.suivi.vma_test)} km/h${data.suivi.vma_test_le ? ` (${F.escape(F.dateLong(data.suivi.vma_test_le, { weekday: false }))})` : ""}` : "";
   const canWatch = Boolean(data.montre?.disponible && data.montre.relie && data.montre.coach_peut_envoyer);
   const week = data.semaine;
   const monday = F.parseDate(week.lundi);
@@ -114,10 +118,13 @@ export async function renderStudent(ctx, sid) {
   const t = data.total_28j;
   const b = week.bilan;
 
-  page.innerHTML = `${ctx.head(`<div class="co-crumb"><a href="#/coach">Mes élèves</a> ›</div><h1 class="co-title">${avatar(e.nom, { size: "lg" })}${F.escape(e.nom)}</h1>`,
+  page.innerHTML = `${ctx.head(`<div class="co-crumb"><a href="#/coach">Mes élèves</a> ›</div><h1 class="co-title">${avatar(e.nom, { size: "lg" })}${F.escape(e.nom)}${levelChip(data.suivi?.niveau)}</h1>`,
     `<span>Partage : ${F.escape(shareSummary(data.accord))}${data.partage_recu_le ? ` · données reçues ${F.escape(F.relative(data.partage_recu_le))}` : ""}</span>`,
     `<a class="btn" href="#/coach/messages?fil=eleve-${sid}">${icon("chat")}Message</a><a class="btn btn-primary" href="#/coach/proposer?eleves=${sid}">${icon("plus")}Proposer une séance</a>`)}
     ${ctx.tabs("eleves")}
+    ${data.mois ? calendarCard("Son calendrier", "4 semaines passées, celle-ci, 4 à venir", data.mois, {
+      vma, goals: [goal, ...(data.objectifs || [])].filter(Boolean), coachSide: true,
+      sessionHref: (s) => `#/coach/eleve/${sid}/seance/${encodeURIComponent(s.cle)}` }) : ""}
     <div class="co-grid2">
       <div class="co-page">
         <section class="coach-card"><div class="co-card-head"><h2>${icon("calendar")}${semaine && week.lundi !== thisMonday ? `Semaine du ${F.escape(F.dateLong(week.lundi, { weekday: false }))}` : "Sa semaine"}${b.prevues ? ` : ${b.faites} faite${b.faites > 1 ? "s" : ""} sur ${b.prevues} prévue${b.prevues > 1 ? "s" : ""}` : b.seances ? ` : ${b.seances} séance${b.seances > 1 ? "s" : ""}` : ""}</h2>
@@ -138,8 +145,9 @@ export async function renderStudent(ctx, sid) {
             ${goal.distance_km ? `<dt>Distance</dt><dd>${F.escape(F.dec1(goal.distance_km))} km</dd>` : ""}${goal.temps_cible ? `<dt>Temps visé</dt><dd>${F.escape(goal.temps_cible)}</dd>` : ""}
             ${gp ? `<dt>Allure</dt><dd>${F.escape(gp.pace)}${vma ? ` · ${Math.round(gp.kmh / vma * 100)} % VMA` : ""}</dd>` : ""}
             ${goal.d_plus_m ? `<dt>Dénivelé</dt><dd>${F.int(goal.d_plus_m)} m D+</dd>` : ""}
-            <dt>VMA</dt><dd>${vma ? `${F.dec1(vma)} km/h` : "–"}</dd></dl>`
-            : `<p class="co-empty">${data.accord?.objectif === false ? "Il ne partage pas son objectif." : "Pas d'objectif partagé."}${vma ? ` VMA : <b>${F.dec1(vma)} km/h</b>.` : ""}</p>`}
+            <dt>VMA</dt><dd>${vma ? `${F.dec1(vma)} km/h` : "–"}</dd>${testLine ? `<dt>Test club</dt><dd>${testLine}</dd>` : ""}</dl>`
+            : `<p class="co-empty">${data.accord?.objectif === false ? "Il ne partage pas son objectif." : "Pas d'objectif partagé."}${vma ? ` VMA : <b>${F.dec1(vma)} km/h</b>.` : ""}${testLine ? ` Test du club : <b>${testLine}</b>.` : ""}</p>`}
+          <p class="hint" style="margin:8px 0 0">${data.suivi?.niveau ? `Groupe de niveau : <b>${F.escape(data.suivi.niveau.nom)}</b>${data.suivi.niveau_force ? " (placé à la main)" : ""}. ` : data.niveaux?.length ? "Dans aucun de tes groupes. " : ""}<a href="#/coach/reglages">${data.niveaux?.length ? "Groupes et test VMA" : "Créer des groupes de niveau"}</a></p>
           ${otherGoals(data.objectifs)}
         </section>
         <section class="coach-card"><h2>${icon("gauge")}4 dernières semaines</h2>
@@ -211,12 +219,14 @@ export async function renderSession(ctx, sid, key) {
   const name = who?.nom || "";
   const crumb = coachSide ? `<a href="#/coach">Mes élèves</a> › <a href="#/coach/eleve/${sid}">${F.escape(name || "Élève")}</a> ›` : `<a href="#/coach">Mon coach</a> ›`;
   const when = s.debut ? F.whenActivity(s.debut) : F.dateLong(s.date, { year: true });
+  const analysis = s.tours?.length > 1 ? analysisHTML(s.tours, s.courbe, { running }) : "";
 
   page.innerHTML = `${ctx.head(`<div class="co-crumb">${crumb}</div><h1 class="co-title"><span class="co-ico lg">${sportIcon(s.sport)}</span>${F.escape(s.nom || s.sport_label || "Séance")}</h1>`,
     `<span>${F.escape(when)}${s.sport_label ? ` · ${F.escape(s.sport_label.toLowerCase())}` : ""}${s.avantage ? ` · ${F.escape(s.avantage)}` : ""}</span>
      ${prop ? `<span class="co-chip blue">${icon("layers")}${coachSide ? "proposée par toi" : "proposée par ton coach"}</span>${statusChip(prop.statut)}` : data.prevue ? `<span class="co-chip">${icon("calendar")}prévue : ${F.escape(data.prevue.titre)}</span>` : ""}`,
     coachSide ? `<a class="btn" href="#/coach/messages?fil=eleve-${sid}">${icon("chat")}Conversation</a>` : "")}
     ${ctx.tabs(coachSide ? "eleves" : "coach")}
+    ${analysis ? `<section class="coach-card co-analyse"><h2>${icon("wave")}Analyse fraction par fraction <span class="co-count">${s.tours.length}</span></h2>${analysis}</section>` : ""}
     <div class="co-grid2">
       <div class="co-page">
         <section class="coach-card"><div class="co-stats">${stats.map(([k, v]) => `<div><small>${k}</small><b>${F.escape(v)}</b></div>`).join("")}</div>
@@ -234,6 +244,7 @@ export async function renderSession(ctx, sid, key) {
       </div>
     </div>`;
 
+  wireAnalysis(page);
   mountThread(page.querySelector("[data-thread]"), {
     fil: data.fil, role, style: "comments", toast, onRead: () => ctx.poke(),
     placeholder: coachSide ? `Un mot à ${name || "l'élève"} sur cette séance…` : "Un mot à ton coach sur cette séance…",

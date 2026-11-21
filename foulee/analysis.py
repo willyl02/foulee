@@ -1124,6 +1124,45 @@ def activity_laps(conn: sqlite3.Connection, activity_id: str, sport: str) -> lis
     return laps
 
 
+def zone_of(hr: float | None, floors: list[float]) -> int | None:
+    """Zone FC (1 à 5) d'une fréquence cardiaque ; sous la zone 1, on la compte en zone 1."""
+    if hr is None or not floors:
+        return None
+    return min(5, 1 + sum(1 for f in floors[1:] if hr >= f))
+
+
+def lap_analysis(laps: list[dict], streams: dict | None, floors: list[float]) -> list[dict]:
+    """L'analyse « fraction par fraction » (façon intervals.icu) : pour chaque tour, son début et sa fin sur
+    l'axe du temps des courbes, sa durée, son allure, sa FC moyenne, la zone de cette FC et la part du temps
+    du tour passée dans cette zone (seconde par seconde, si la courbe de FC est là)."""
+    out = []
+    clock = 0.0
+    times = (streams or {}).get("t") or []
+    hrs = (streams or {}).get("hr") or []
+    for lap in laps:
+        start = lap.get("start_s")
+        start = float(start) if start is not None else clock
+        span = float(lap.get("elapsed_s") or lap.get("duration_s") or 0)
+        end = start + span
+        clock = end
+        avg_hr = lap.get("avg_hr")
+        in_zone = total = 0.0
+        if hrs and avg_hr:
+            zone = zone_of(avg_hr, floors)
+            for i in range(1, min(len(times), len(hrs))):
+                t, dt = times[i], times[i] - times[i - 1]
+                if t <= start or t > end or dt <= 0 or dt > 10 or hrs[i] is None:
+                    continue
+                total += dt
+                in_zone += dt if zone_of(hrs[i], floors) == zone else 0
+        zone = zone_of(avg_hr, floors) if avg_hr else None
+        out.append({"debut_s": round(start, 1), "fin_s": round(end, 1), "duree_s": lap.get("duration_s"),
+                    "distance_m": lap.get("distance_m"), "vitesse": lap.get("avg_speed"), "fc_moy": avg_hr,
+                    "zone": zone, "zone_pct": round(in_zone / total * 100) if total >= 5 else None,
+                    "intensite": lap.get("intensity")})
+    return out
+
+
 def activity_detail(conn: sqlite3.Connection, activity_id: str, settings: dict) -> dict | None:
     row = conn.execute("SELECT * FROM activities WHERE id = ?", (activity_id,)).fetchone()
     if not row:
@@ -1138,6 +1177,7 @@ def activity_detail(conn: sqlite3.Connection, activity_id: str, settings: dict) 
     data["zones_fc_bornes"] = hrp["floors"]
     data["zones_fc_noms"] = hrp["bornes"]
     data["zones_allure_noms"] = hrp["allure"]["bornes"]
+    data["analyse"] = lap_analysis(data["tours"], streams, hrp["floors"]) if len(data["tours"]) > 1 else []
     data["mesures"] = activity_measures(row, data["extra"])
     data["effet"] = training_effect(conn, row, data["extra"])  # effet aérobie et anaérobie de Garmin (ou None)
     data["renfo"] = renfo.session(conn, activity_id)  # exercices de renfo, muscles travaillés (ou None)

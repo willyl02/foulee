@@ -41,7 +41,7 @@ class FakeGarmin:
     def authorize(self, url):
         """L'élève accepte chez Garmin : renvoie (state, code) comme le ferait la redirection."""
         query = parse_qs(urlsplit(url).query)
-        assert query["code_challenge_method"] == ["S256"] and query["client_id"] == ["id-club"]
+        assert query["code_challenge_method"] == ["S256"] and query["client_id"] == ["11111111-2222-3333-4444-555555555555"]
         assert query["redirect_uri"] == [ADDRESS + "/garmin/retour"]
         code = f"code-{len(self.codes)}"
         self.codes[code] = query["code_challenge"][0]
@@ -114,7 +114,7 @@ def relay(monkeypatch, fake):
     monkeypatch.setattr(coach, "transport", send)
     with store.session() as conn:
         store.create_account(conn, ident="sophie", name="Sophie R.", password=PASSWORD, role="coach", admin=True)
-    garmin.save_app("id-club", SECRET, "relais.test")
+    garmin.save_app("11111111-2222-3333-4444-555555555555", SECRET, "relais.test")
     return client
 
 
@@ -367,12 +367,56 @@ def test_foulee_button_end_to_end(relay, fake):
 def test_cli_registers_the_garmin_app(monkeypatch, capsys):
     from foulee import cli
 
-    answers = iter(["id-du-club", "relais.mon-club.com"])
+    answers = iter(["11111111-2222-3333-4444-55555555555511111111-2222-3333-4444-555555555555", "relais.mon-club.com", "11111111-2222-3333-4444-555555555555", "relais.mon-club.com"])
     monkeypatch.setattr("builtins.input", lambda prompt="": next(answers))
     monkeypatch.setattr("getpass.getpass", lambda prompt="": "le-secret")
+    assert cli.main(["relais", "garmin"]) == 1 and "Collé deux fois" in capsys.readouterr().out
     assert cli.main(["relais", "garmin"]) == 0
     out = capsys.readouterr().out
     assert "https://relais.mon-club.com/garmin/retour" in out and "le-secret" not in out
-    assert garmin.app_settings() == {"client_id": "id-du-club", "client_secret": "le-secret",
+    assert garmin.app_settings() == {"client_id": "11111111-2222-3333-4444-555555555555", "client_secret": "le-secret",
                                      "adresse": "https://relais.mon-club.com"}
     assert cli.main(["relais", "garmin", "retirer"]) == 0 and garmin.app_settings() is None
+
+
+def test_cli_tests_the_garmin_app(monkeypatch, capsys):
+    from foulee import cli
+
+    garmin.save_app("11111111-2222-3333-4444-555555555555", "le-secret", "relais.mon-club.com")
+    replies = {"le-secret": (400, {"error": "invalid_grant"}), "mauvais": (401, {"error": "invalid_client"})}
+    def answer(method, url, **kw):
+        secret = kw["form"].get("client_secret")
+        if secret is None:  # identifiants en en-tête « Basic »
+            import base64
+            secret = base64.b64decode(kw["headers"]["Authorization"].split()[1]).decode().split(":", 1)[1]
+        return replies[secret]
+
+    monkeypatch.setattr(garmin, "transport", answer)
+    assert cli.main(["relais", "garmin", "tester"]) == 0
+    out = capsys.readouterr().out
+    assert "Garmin reconnaît l'appli" in out and "le-secret" not in out and "9 caractères" in out
+    garmin.save_app("11111111-2222-3333-4444-555555555555", "mauvais", "relais.mon-club.com")
+    assert cli.main(["relais", "garmin", "tester"]) == 1
+    assert "invalid_client" in capsys.readouterr().out
+    with pytest.raises(garmin.GarminError) as refused:
+        garmin._token_request({"grant_type": "authorization_code", "code": "x"})
+    assert "invalid_client" in str(refused.value) and "garmin tester" in str(refused.value)
+    garmin.vault.delete_secret("relais-garmin-appli")
+
+
+def test_token_service_falls_back_to_the_other_address(monkeypatch):
+    garmin.save_app("11111111-2222-3333-4444-555555555555", "le-secret", "relais.mon-club.com")
+    monkeypatch.delenv("FOULEE_GARMIN_TOKEN_URL", raising=False)
+    calls = []
+
+    def answer(method, url, **kw):
+        calls.append(url)
+        if url == garmin.TOKEN_URL:
+            return 401, "<!doctype html><html><head><title>HTTP Status 401 – Unauthorized</title></head></html>"
+        return 400, {"error": "invalid_grant"}
+
+    monkeypatch.setattr(garmin, "transport", answer)
+    result = garmin.check_app()
+    assert result["ok"] and calls == [garmin.TOKEN_URL, garmin.TOKEN_URL, garmin.TOKEN_URL_ALT]
+    assert garmin._reason("<html><title>HTTP Status 401 – Unauthorized</title></html>") == "HTTP Status 401 – Unauthorized"
+    garmin.vault.delete_secret("relais-garmin-appli")

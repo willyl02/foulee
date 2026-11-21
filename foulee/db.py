@@ -181,6 +181,15 @@ CREATE TABLE IF NOT EXISTS calendar_events (
     fetched_at  TEXT
 );
 CREATE INDEX IF NOT EXISTS calendar_events_date ON calendar_events(date);
+
+-- Ressenti après une séance (« Ma séance du jour ») : note de 1 à 10, un mot, et quand il est parti au coach
+CREATE TABLE IF NOT EXISTS ressentis (
+    activity_id TEXT PRIMARY KEY,
+    rpe         INTEGER,
+    note        TEXT,
+    modifie_le  TEXT NOT NULL,
+    envoye_le   TEXT
+);
 """
 
 # Réglages par défaut. Tous modifiables depuis la page « Réglages » ou par Claude.
@@ -189,12 +198,9 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "fc_max": None,            # None = valeur de tes zones Garmin, sinon FC max observée
     "fc_repos": None,          # None = médiane de ta FC de repos sur 30 jours
     "sexe": "H",               # coefficient du TRIMP de Banister (H = 1,92 ; F = 1,67)
-    "objectif": {
-        "nom": "Semi-marathon de Paris",
-        "date": "2027-03-07",
-        "distance_km": 21.0975,
-        "temps_cible": "1:25:00",
-    },
+    # pas d'objectif tant qu'on n'en a pas saisi (avant la 0.8.2 : le semi de Paris du développeur, qu'on
+    # voyait à la première installation ; un objectif enregistré, lui, reste)
+    "objectif": {"nom": "", "date": "", "distance_km": None, "temps_cible": ""},
     "objectifs_secondaires": [],  # les autres objectifs (voir objectifs.py) ; l'objectif principal reste ci-dessus
     "postes": {                # ancien réglage (0.1 à 0.4), relu si « horaires » est vide
         "actif": True,
@@ -216,6 +222,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "profil": {"prenom": "", "logo": "foulee"},  # en-tête de l'interface (logo au choix ou photo)
     "vameval": None,           # dernier test VAMEVAL saisi (« 12:40 »), pour la page d'accueil
     "club": None,              # club FFA du profil : numéro, coordonnées, licence (voir club.py)
+    "partenaire": None,        # application partenaire dans la colonne de gauche (voir partenaire.py)
     # synchro automatique : délai par source, en minutes (de 30 min à 12 h, voir sync.py)
     "synchro_auto": {"garmin": 180, "withings": 180, "strava": 180, "calendrier": 180},
 }
@@ -250,8 +257,29 @@ def init(conn: sqlite3.Connection) -> None:
     _migrate(conn)
     conn.commit()
     from . import views  # import local pour éviter un cycle
+    from . import __version__
 
     views.ensure_default_views(conn)
+    if get_meta(conn, "init_version") != __version__:
+        set_meta(conn, "init_version", __version__)
+        conn.commit()
+
+
+def _needs_init(path: Path) -> bool:
+    """La base a-t-elle été mise à niveau par cette version de Foulée ? Une base ouverte seulement en lecture
+    (un profil qu'on regarde sans le synchroniser) garderait sinon l'ancienne version : vues d'avant, noms
+    d'avant (« Cap semi de Paris » restée sur un profil créé avant la 0.8.1)."""
+    from . import __version__
+
+    try:
+        probe = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=5)
+        try:
+            row = probe.execute("SELECT value FROM meta WHERE key = 'init_version'").fetchone()
+        finally:
+            probe.close()
+    except sqlite3.Error:
+        return True
+    return not row or row[0] != __version__
 
 
 def _schema_version(conn: sqlite3.Connection) -> int:
@@ -336,8 +364,9 @@ def session(*, readonly: bool = False, strava: bool = False) -> Iterator[sqlite3
     strava=True (interface seulement, en lecture) : les séances du cache Strava du profil s'ajoutent à celles
     de la base pour cette connexion (voir strava/cache.py). Jamais pour Claude Desktop : règles de Strava."""
     path = config.db_path()
-    if readonly and not path.exists():
-        readonly = False
+    if readonly and (not path.exists() or _needs_init(path)):
+        with session():  # une fois : création, ou mise à niveau par cette version
+            pass
     conn = connect(path, readonly=readonly)
     try:
         if not readonly:

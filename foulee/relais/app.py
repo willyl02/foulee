@@ -15,7 +15,7 @@ from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from .. import __version__
-from . import API_VERSION, club, garmin, store
+from . import API_VERSION, club, garmin, notifs, store
 
 log = logging.getLogger("foulee.relais")
 
@@ -295,10 +295,47 @@ def create_relay_app() -> FastAPI:
     def new_template(request: Request, payload: dict = Body(...)) -> dict:
         return run(request, lambda conn, me: {"modeles": club.save_template(conn, me["id"], payload)}, role="coach")
 
+    @app.put("/api/v1/modeles/{template_id}")
+    def edit_template(template_id: int, request: Request, payload: dict = Body(...)) -> dict:
+        return run(request, lambda conn, me: {"modeles": club.update_template(conn, me["id"], template_id, payload)},
+                   role="coach")
+
+    @app.get("/api/v1/niveaux")
+    def get_levels(request: Request) -> dict:
+        return run(request, lambda conn, me: club.level_page(conn, me["id"]), role="coach")
+
+    @app.put("/api/v1/niveaux")
+    def put_levels(request: Request, payload: dict = Body(...)) -> dict:
+        return run(request, lambda conn, me: club.save_levels(conn, me["id"], payload), role="coach")
+
+    @app.put("/api/v1/eleves/{student_id}/niveau")
+    def put_student_level(student_id: int, request: Request, payload: dict = Body(...)) -> dict:
+        return run(request, lambda conn, me: club.set_student_level(conn, me["id"], student_id, payload), role="coach")
+
     @app.delete("/api/v1/modeles/{template_id}")
     def drop_template(template_id: int, request: Request) -> dict:
         return run(request, lambda conn, me: {"modeles": club.delete_template(conn, me["id"], template_id)},
                    role="coach")
+
+    @app.get("/api/v1/notifications")
+    def notification_settings(request: Request) -> dict:
+        return run(request, lambda conn, me: notifs.page(conn, me))
+
+    @app.put("/api/v1/notifications")
+    def notification_save(request: Request, payload: dict = Body(...)) -> dict:
+        return run(request, lambda conn, me: notifs.save_settings(conn, me, payload))
+
+    @app.post("/api/v1/notifications/essai")
+    def notification_test(request: Request, payload: dict | None = Body(None)) -> dict:
+        return run(request, lambda conn, me: notifs.test(conn, me, payload))
+
+    @app.post("/api/v1/notifications/email/code")
+    def notification_email_code(request: Request, payload: dict = Body(...)) -> dict:
+        return run(request, lambda conn, me: notifs.email_code(conn, me, payload))
+
+    @app.post("/api/v1/notifications/email/verifier")
+    def notification_email_verify(request: Request, payload: dict = Body(...)) -> dict:
+        return run(request, lambda conn, me: notifs.email_verify(conn, me, payload))
 
     @app.get("/api/v1/fils")
     def list_threads(request: Request) -> dict:
@@ -358,6 +395,11 @@ def create_relay_app() -> FastAPI:
             raise HTTPException(400, "Séance inconnue.")
         return garmin_run(request, lambda conn, me: garmin.student_send(conn, me, int(proposal), payload.get("vma_kmh")),
                           role="eleve")
+
+    @app.post("/api/v1/garmin/perso")
+    def garmin_personal(request: Request, payload: dict = Body(...)) -> dict:
+        """Une séance que l'élève s'est composée (son renfo…), sur sa montre."""
+        return garmin_run(request, lambda conn, me: garmin.personal_send(conn, me, payload), role="eleve")
 
     @app.put("/api/v1/garmin")
     def garmin_settings(request: Request, payload: dict = Body(...)) -> dict:

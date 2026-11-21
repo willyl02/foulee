@@ -1,13 +1,15 @@
-// Page « Réglages » : profil et logo, utilisateurs, mon club, coureur, objectifs, horaires, zones FC et d'allure,
+// Page « Réglages » : profil et logo, utilisateurs, mon club, application partenaire, coureur, objectifs, horaires, zones FC et d'allure,
 // synchro, vues, sauvegarde ; puis l'installation (clé Garmin, dossier, Claude Desktop, mises à jour :
 // voir system.js).
 import * as api from "./api.js";
 import * as F from "./format.js";
 import { icon } from "./icons.js";
 import { goalManager } from "./goals.js";
+import { partnerPanel } from "./appli-externe.js";
 import { clubPanel } from "./settings-club.js";
 import { profilePanel, transferPanel } from "./settings-profile.js";
 import { scheduleEditor } from "./settings-schedule.js";
+import { settingsShell } from "./settings-shell.js";
 import { hrZonesEditor, paceZonesEditor } from "./settings-zones.js";
 import { systemSections, wireSystem } from "./system.js";
 import { accessPanel, usersPanel } from "./users.js";
@@ -20,8 +22,14 @@ export function renderSettings(page, boot, { onSaved, onProfile, refreshBoot, to
   const me = users.find((u) => u.courant);
   page.innerHTML = `
     <header class="head"><div><h1>Réglages</h1>
-      <div class="head-sub"><span>${users.length > 1 && me ? `Profil de <b>${F.escape(me.prenom)}</b> : ces réglages ne concernent que ce profil. ` : ""}Ils servent aux calculs de l'interface et de Claude.</span></div></div></header>
-    <nav class="settings-jump" aria-label="Rubriques des réglages"></nav>
+      <div class="head-sub"><span>${users.length > 1 && me ? `Profil de <b>${F.escape(me.prenom)}</b> : ces réglages ne concernent que ce profil. ` : ""}Chaque changement s'enregistre tout de suite.</span></div></div>
+      <span class="st-status" data-status role="status" aria-live="polite"></span></header>
+    <div class="st-shell" data-mode="detail">
+    <aside class="st-side" data-side></aside>
+    <div class="st-main" data-main>
+    <button class="btn btn-ghost st-back" type="button" data-back>${icon("left")}Réglages</button>
+    <h2 class="st-title" data-theme-title></h2>
+    <p class="st-empty" data-empty hidden>Aucune rubrique ne contient ces mots. Essaie un autre terme (« VMA », « Strava », « mise à jour »…).</p>
     <div class="settings settings-system">
       <section data-section="profil">
         <h2>Profil et logo</h2>
@@ -38,6 +46,11 @@ export function renderSettings(page, boot, { onSaved, onProfile, refreshBoot, to
         <h2>Mon club</h2>
         <p class="intro">Licencié dans un club d'athlétisme ? Coche la case : Foulée t'ajoute une vue « Mon club » avec ses coordonnées, ta licence et, en un clic, le classement du club sur le site de la FFA.</p>
         <div data-club></div>
+      </section>
+      <section data-section="partenaire">
+        <h2>Application partenaire</h2>
+        <p class="intro">Le site de ton club (par défaut Club en ligne : entraînements, compétitions, annuaire…) directement dans Foulée, avec son entrée dans la colonne de gauche.</p>
+        <div data-partner></div>
       </section>
     </div>
     <form class="settings" id="settings-form" novalidate>
@@ -97,7 +110,6 @@ export function renderSettings(page, boot, { onSaved, onProfile, refreshBoot, to
         <button class="btn" type="button" data-reset-views>${icon("reset")}Restaurer les vues d'origine</button>
       </section>
 
-      <div class="settings-foot"><button class="btn btn-primary" type="submit">${icon("check")}Enregistrer les réglages</button><span class="hint" data-status></span></div>
     </form>
     <div class="settings settings-system" id="settings-system">
       <section data-section="sauvegarde">
@@ -122,7 +134,8 @@ export function renderSettings(page, boot, { onSaved, onProfile, refreshBoot, to
         </div>
         ${boot.acces === "local" && !boot.demo ? `<p class="hint"><a href="#/bienvenue">Revoir la page d'accueil</a> (clé, premier import, Claude Desktop).</p>` : ""}
       </section>
-    </div>`;
+    </div>
+    </div></div>`;
 
   const form = page.querySelector("#settings-form");
   const val = (name) => form.elements[name]?.value;
@@ -134,6 +147,7 @@ export function renderSettings(page, boot, { onSaved, onProfile, refreshBoot, to
   accessPanel(page.querySelector("[data-access]"), boot, { toast, onChange: () => refreshBoot() });
   if (principal) usersPanel(page.querySelector("[data-users]"), boot, { toast, onChange: () => refreshBoot() });
   clubPanel(page.querySelector("[data-club]"), boot, { toast, onChange: () => refreshBoot() });
+  partnerPanel(page.querySelector("[data-partner]"), boot, { toast, onChange: () => refreshBoot() });
   const schedule = scheduleEditor(page.querySelector("[data-schedule]"), s.horaires);
   const hrZones = hrZonesEditor(page.querySelector("[data-hr-zones]"), boot, profile);
   const paceZones = paceZonesEditor(page.querySelector("[data-pace-zones]"), boot, vma);
@@ -160,15 +174,16 @@ export function renderSettings(page, boot, { onSaved, onProfile, refreshBoot, to
   wireSyncRhythm(form);
   // Withings connecté ou déconnecté : la colonne (vue « Withings ») et le bandeau suivent, la page reste en place
   wireSystem(page.querySelector("#settings-system"), boot, { toast, startSync, onWithings: () => refreshBoot() });
-  buildJumps(page);
+  settingsShell(page.querySelector(".st-shell"), { section });
   if (section) {
     const target = page.querySelector(`[data-section="${CSS.escape(section)}"]`);
     if (target) keepInView(page, target);
   }
 
-  form.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const status = form.querySelector("[data-status]");
+  // Enregistrement immédiat : après chaque changement (frappe, liste, curseur des zones, bouton d'un éditeur),
+  // Foulée compare avec ce qui est enregistré et n'envoie que s'il y a du nouveau.
+  const status = page.querySelector("[data-status]");
+  const payloadNow = () => {
     const pace = paceZones.value();
     const payload = {
       vma_kmh: vma(),
@@ -185,17 +200,38 @@ export function renderSettings(page, boot, { onSaved, onProfile, refreshBoot, to
       carte_fond: val("carte_fond"),
     };
     if (pace.methode === "pct_vma" && pace.pct) payload.zones_allure_pct_vma = pace.pct;  // réglage historique
-    status.textContent = "Enregistrement…";
+    return payload;
+  };
+  let saved = JSON.stringify(payloadNow());
+  let timer = null;
+  let running = false;
+  const save = async () => {
+    const payload = payloadNow();
+    const text = JSON.stringify(payload);
+    if (text === saved || running) return;
+    running = true;
+    status.className = "st-status busy";
+    status.innerHTML = `<span class="spinner" aria-hidden="true"></span>Enregistrement…`;
     try {
       const res = await api.put("/api/settings", payload);
-      status.textContent = "";
-      toast(res.recalcul ? "Réglages enregistrés. Zones et charge sont en cours de recalcul." : "Réglages enregistrés.");
+      saved = text;
+      status.className = "st-status ok";
+      status.innerHTML = `${icon("check")}Enregistré`;
+      if (res.recalcul) toast("Enregistré : zones et charge sont en cours de recalcul.");
       onSaved(res);
     } catch (err) {
-      status.textContent = `Enregistrement impossible : ${err.message}`;
-      status.classList.add("error");
+      status.className = "st-status error";
+      status.innerHTML = `${icon("warning")}<span>${F.escape(err.message)}</span>`;
     }
-  });
+    running = false;
+    if (JSON.stringify(payloadNow()) !== saved) queue(600);  // changé pendant l'envoi
+  };
+  const queue = (delay = 700) => { clearTimeout(timer); timer = setTimeout(save, delay); };
+  form.addEventListener("input", () => queue(900));
+  form.addEventListener("change", () => queue(300));
+  form.addEventListener("pointerup", () => queue(400));
+  form.addEventListener("click", (e) => { if (e.target.closest("button")) queue(400); });
+  form.addEventListener("submit", (e) => { e.preventDefault(); queue(0); });
 }
 
 // ---------------------------------------------------------------- rythme de la synchro automatique
@@ -283,21 +319,4 @@ function keepInView(page, target) {
   observer.observe(page);
   events.forEach((name) => addEventListener(name, stop, { passive: true }));
   setTimeout(stop, 4000);
-}
-
-// =============================================================== sommaire
-const JUMPS = [["profil", "Profil"], ["utilisateurs", "Utilisateurs"], ["club", "Club"], ["coureur", "Coureur"], ["objectif", "Objectifs"], ["horaires", "Horaires"],
-  ["zones-fc", "Zones FC"], ["zones", "Allures"], ["synchro", "Synchro"], ["sauvegarde", "Sauvegarde"], ["cle", "Clé Garmin"], ["withings", "Withings"], ["strava", "Strava"],
-  ["calendrier", "Calendrier"], ["coach", "Coach"],
-  ["dossier", "Données"], ["claude", "Claude"], ["app", "Application"], ["lan", "Réseau local"], ["maj", "Mises à jour"],
-  ["installation", "Installation"], ["apropos", "À propos"]];
-
-function buildJumps(page) {
-  const nav = page.querySelector(".settings-jump");
-  const present = JUMPS.filter(([name]) => page.querySelector(`[data-section="${name}"]`));
-  nav.innerHTML = present.map(([name, label]) => `<button type="button" data-jump="${name}">${label}</button>`).join("");
-  nav.addEventListener("click", (event) => {
-    const name = event.target.closest("[data-jump]")?.dataset.jump;
-    if (name) page.querySelector(`[data-section="${name}"]`)?.scrollIntoView({ behavior: "smooth", block: "start" });
-  });
 }

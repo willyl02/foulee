@@ -76,7 +76,7 @@ def steps_for(item: dict, vma: float | None) -> list[dict]:
                       "intensity": INTENSITY.get(genre, "active"), **({"notes": notes[:80]} if notes else {})})
         if reps > 1:
             rest = float(block.get("recup_min") or 0)
-            if rest or block.get("recup_texte"):
+            if rest or block.get("recup_texte") or block.get("recup_libre"):
                 steps.append({"wkt_step_name": "Récup", "intensity": "recovery", "target_type": "open",
                               "duration_type": "time" if rest else "open",
                               "duration_value": round(rest * 60 * 1000) if rest else 0,
