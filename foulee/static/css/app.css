@@ -1777,6 +1777,21 @@ a.chip:hover { box-shadow: inset 0 0 0 1px var(--base); }
 .aday-sub { margin: 14px 0 0; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
 .aday-none { margin: 0; font-size: 14px; color: var(--muted); }
 
+/* Vue « Calendrier » : sélecteur semaine / mois / année, comme le calendrier des pages coach et élève */
+.agenda-views { margin-right: 6px; }
+.agenda-nav { display: inline-flex; align-items: center; gap: 2px; }
+.agenda-grid.is-week { grid-template-rows: minmax(0, 1fr); }
+.agenda-grid.is-week .aday { padding: 6px; gap: 4px; }
+.agenda-grid.is-week .aitem span { white-space: normal; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }
+.agenda-grid.is-week .aday-num { padding: 0; text-align: left; }
+.agenda-grid.is-week .aday.today .aday-num { padding: 0 6px; }
+.aday-dname { font-weight: 500; text-transform: uppercase; font-size: 11px; letter-spacing: .03em; opacity: .75; }
+.agenda-year { flex: 1; min-height: 0; overflow: auto; grid-template-columns: repeat(auto-fill, minmax(176px, 1fr)); gap: 10px 12px; align-content: start; }
+.agenda-year .cy-month { padding: 6px 6px 8px; }
+.cy-day.selected { box-shadow: inset 0 0 0 2px var(--s1); }
+.cy-day.today.selected { box-shadow: inset 0 0 0 2px var(--ink); }
+.cy-dot.other { background: var(--base); }
+
 /* Assez large : le détail du jour à droite du mois. Étroit : des pastilles à la place des titres. */
 @container (min-width: 760px) {
   .agenda { grid-template-columns: minmax(0, 1fr) clamp(240px, 30%, 330px); grid-template-rows: minmax(0, 1fr); }
@@ -1787,10 +1802,19 @@ a.chip:hover { box-shadow: inset 0 0 0 1px var(--base); }
   .aday-more, .aday-items { display: none; }
   .aday-dots { display: flex; }
 }
+/* la semaine, en étroit : un jour par ligne, avec ses titres */
+@container (max-width: 560px) {
+  .agenda-grid.is-week { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-auto-rows: auto; }
+  .agenda-grid.is-week .aday { align-items: stretch; padding: 6px 8px; }
+  .agenda-grid.is-week .aday-top { justify-content: flex-start; }
+  .agenda-grid.is-week .aday-items { display: flex; }
+  .agenda-grid.is-week .aday-dots { display: none; }
+}
 @media (max-width: 900px) {
   .grid > .tile--agenda, .grid > .tile--a_venir { height: auto; }
   .agenda { height: auto; grid-template-rows: auto auto; }
   .agenda-grid { grid-auto-rows: 54px; }
+  .agenda-grid.is-week { grid-auto-rows: minmax(54px, auto); }
   .agenda-day { overflow: visible; }
   .upcoming { flex-direction: column; }
   .up-race { max-width: none; }

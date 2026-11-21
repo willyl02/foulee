@@ -4,6 +4,15 @@ Les versions « bêta » (par exemple 0.4.0b1) sont des avant-premières : elles
 sur le canal bêta (Réglages → Application → Mises à jour → « Recevoir les versions bêta »), puis sortent en
 version stable une fois éprouvées.
 
+## 0.8.3b6 — 21 novembre 2026 (bêta)
+
+- **La vue « Calendrier »** (colonne de gauche) prend le même sélecteur que le calendrier des pages coach et élève :
+  **Semaine / Mois / Année** (retenu dans ce navigateur), avec les flèches pour passer d'une période à l'autre et
+  « Aujourd'hui » pour revenir. Le détail du jour choisi reste à droite. À la semaine, de grandes cases (un jour par
+  ligne sur téléphone) ; à l'année, douze petits mois avec une pastille par jour où il y a quelque chose : un clic
+  sur un jour montre son détail, un clic sur un mois ouvre ce mois. Tout vient de ta machine : rien à mettre à jour
+  sur le relais.
+
 ## 0.8.3b5 — 21 novembre 2026 (bêta)
 
 - **Le calendrier des pages coach et élève**, plus léger : au choix **à la semaine**, **au mois** ou **à l'année**
