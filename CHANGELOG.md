@@ -4,6 +4,13 @@ Les versions « bêta » (par exemple 0.4.0b1) sont des avant-premières : elles
 sur le canal bêta (Réglages → Application → Mises à jour → « Recevoir les versions bêta »), puis sortent en
 version stable une fois éprouvées.
 
+## 0.8.3b8 — 22 novembre 2026 (bêta)
+
+- **Séances prévues de Garmin, deuxième essai.** Chez William, Garmin a répondu « introuvable » au chemin des
+  séances : le numéro du calendrier est sans doute celui de la séance *planifiée* (il change quand on la déplace).
+  Foulée essaie donc la planification, puis la séance, retient le chemin qui répond, et pour les séances déjà faites
+  passe par l'activité qui les a suivies (Garmin y rattache la séance). Le journal note le statut de chaque chemin.
+
 ## 0.8.3b7 — 22 novembre 2026 (bêta)
 
 - **Les séances prévues du calendrier Garmin dessinées telles qu'elles sont.** Le calendrier de Garmin ne donne que

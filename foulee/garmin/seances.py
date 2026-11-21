@@ -25,12 +25,11 @@ from .client import GarminError
 LOG = logging.getLogger("foulee.garmin")
 
 WORKOUT_ID = re.compile(r"-(\d{6,12})@")  # UID d'un événement du calendrier Garmin
-PATH = "/workout-service/workout/{}"
 PAST_DAYS = 35       # les séances prévues relues : un mois en arrière (séances faites ou manquées) …
 AHEAD_DAYS = 70      # … et dix semaines devant
 MAX_CALLS = 40       # par synchro : de quoi rattraper un plan entier sans peser sur Garmin
 REFRESH_DAYS = 3     # une séance à venir est relue tous les 3 jours (le coach ou le plan peut l'avoir changée)
-REFUSAL_KEY = "garmin_seances_refus"
+REFUSAL_KEY = "garmin_seances_essai"  # (0.8.3b8 : le refus noté par la b7 ne bloque plus)
 REFUSAL_PAUSE = timedelta(days=7)
 
 SCHEMA = """
@@ -198,65 +197,144 @@ def refused_recently(conn: sqlite3.Connection, now: datetime | None = None) -> b
     return now - since < REFUSAL_PAUSE
 
 
+def _workout_in(payload: Any) -> dict | None:
+    """La séance (avec ses étapes) dans une réponse de Garmin : la séance elle-même, ou la séance d'une planification."""
+    if isinstance(payload, dict):
+        if payload.get("workoutSegments"):
+            return payload
+        inner = payload.get("workout")
+        if isinstance(inner, dict) and inner.get("workoutSegments"):
+            return inner
+    return None
+
+
+# Le numéro de l'UID est celui de la séance planifiée (il change quand on la déplace d'un jour à l'autre) ou celui de
+# la séance elle-même : on essaie les deux chemins, et on retient celui qui répond
+ROUTES = (("planifiée", "/workout-service/schedule/{}"), ("séance", "/workout-service/workout/{}"))
+ROUTE_KEY = "garmin_seances_chemin"
+
+
+def _norm(text: str | None) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", (text or "").lower()).strip()
+
+
+def _store(conn: sqlite3.Connection, wid: str, status: int, workout: dict | None) -> None:
+    conn.execute("INSERT OR REPLACE INTO garmin_workouts(id, fetched_at, status, json) VALUES (?, ?, ?, ?)",
+                 (wid, db.now_iso(), status, json.dumps(workout, ensure_ascii=False) if workout else None))
+
+
+def _ask(session: Any, path: str) -> tuple[Any, int]:
+    """(réponse, statut HTTP) ; 404 quand Garmin ne trouve rien (le client rend alors None)."""
+    try:
+        payload = session.call("get", path)
+    except GarminError as exc:
+        return None, exc.status or 0
+    return payload, 200 if payload is not None else 404
+
+
+def _from_activities(conn: sqlite3.Connection, session: Any, events: list, statuses: dict) -> int:
+    """Les séances déjà faites : Garmin rattache la séance suivie à l'activité (chemin documenté de l'API)."""
+    found = 0
+    by_day: dict[str, list] = {}
+    for row in events:
+        by_day.setdefault(row["date"], []).append(row)
+    days = sorted(by_day, reverse=True)
+    calls = 0
+    for day in days:
+        acts = conn.execute("SELECT source_id FROM activities WHERE source = 'garmin' AND date = ?", (day,)).fetchall()
+        for act in acts:
+            if calls >= 20 or not str(act["source_id"] or "").isdigit():
+                continue
+            calls += 1
+            try:
+                payload = session.call("get_activity_workouts", act["source_id"])
+            except GarminError as exc:
+                statuses["activité"] = exc.status or 0
+                return found
+            except Exception:  # noqa: BLE001
+                return found
+            statuses["activité"] = 200 if payload is not None else 404
+            items = payload if isinstance(payload, list) else (payload.get("workouts") if isinstance(payload, dict)
+                                                               and isinstance(payload.get("workouts"), list) else [payload])
+            for item in items or []:
+                workout = _workout_in(item)
+                if not workout:
+                    continue
+                name = _norm(workout.get("workoutName"))
+                for row in by_day[day]:
+                    title = _norm(row["title"])
+                    if name and title and (name == title or name in title or title in name):
+                        _store(conn, workout_id(row["uid"]), 200, workout)
+                        found += 1
+    return found
+
+
 def sync(conn: sqlite3.Connection, session: Any, today: date | None = None) -> dict:
     """Lit les séances prévues du calendrier Garmin qui manquent (ou à rafraîchir). Ne lève jamais : un souci ici
-    ne doit pas faire échouer la synchro ; il est résumé et écrit dans le journal."""
+    ne doit pas faire échouer la synchro ; il est résumé et écrit dans le journal (statut HTTP de chaque chemin)."""
     ensure_table(conn)
     today = today or date.today()
     if refused_recently(conn):
         return {"lues": 0, "refus": True}
-    rows = conn.execute("SELECT DISTINCT uid, date FROM calendar_events WHERE kind = 'seance' AND date BETWEEN ? AND ?",
+    rows = conn.execute("SELECT DISTINCT uid, date, title FROM calendar_events WHERE kind = 'seance' AND date BETWEEN ? AND ?",
                         ((today - timedelta(days=PAST_DAYS)).isoformat(),
                          (today + timedelta(days=AHEAD_DAYS)).isoformat())).fetchall()
+    rows = [r for r in rows if workout_id(r["uid"])]
     wanted: dict[str, str] = {}
     for row in rows:
         wid = workout_id(row["uid"])
-        if wid:
-            wanted[wid] = max(wanted.get(wid, ""), row["date"])
+        wanted[wid] = max(wanted.get(wid, ""), row["date"])
     if not wanted:
         return {"lues": 0}
     known = {r["id"]: r for r in conn.execute(
         f"SELECT id, fetched_at, status FROM garmin_workouts WHERE id IN ({','.join('?' * len(wanted))})",
         list(wanted)).fetchall()}
     stale = (datetime.now().astimezone() - timedelta(days=REFRESH_DAYS)).isoformat()
-    todo = [wid for wid, day in sorted(wanted.items(), key=lambda kv: kv[1])
+    todo = [wid for wid, day in sorted(wanted.items(), key=lambda kv: kv[1], reverse=True)
             if wid not in known or (day >= today.isoformat() and (known[wid]["fetched_at"] or "") < stale
                                     and known[wid]["status"] in (200, None))]
-    read, missing = 0, 0
-
-    def refuse(status: int | None, detail: str) -> dict:
-        # la clé ne donne sans doute pas accès aux séances : on n'insiste pas avant une semaine
-        db.set_meta(conn, REFUSAL_KEY, json.dumps({"le": db.now_iso(), "statut": status, "detail": detail[:200]},
-                                                  ensure_ascii=False))
-        conn.commit()
-        LOG.info("Séances prévues Garmin : lecture refusée (HTTP %s %s), nouvel essai dans 7 jours", status, detail[:120])
-        return {"lues": read, "refus": True, "statut": status}
-
+    if not todo:
+        return {"lues": 0}
+    statuses: dict[str, int] = {}
+    read = missing = 0
+    route = db.get_meta(conn, ROUTE_KEY) or ""
+    routes = [r for r in ROUTES if r[0] == route] or list(ROUTES)
     for wid in todo[:MAX_CALLS]:
-        try:
-            payload = session.call("get", PATH.format(wid))
-        except GarminError as exc:
-            return refuse(exc.status, exc.detail)
-        except Exception as exc:  # noqa: BLE001 — jamais d'échec de synchro pour un dessin
-            LOG.info("Séances prévues Garmin : erreur inattendue (%s)", type(exc).__name__)
-            break
-        if not isinstance(payload, dict) or not payload.get("workoutSegments"):
-            # 404 : séance supprimée de Garmin Connect… ou chemin inconnu de l'API : trois de suite sans aucune
-            # séance lue, c'est l'API qui ne les donne pas
-            missing += 1
-            conn.execute("INSERT OR REPLACE INTO garmin_workouts(id, fetched_at, status, json) VALUES (?, ?, ?, NULL)",
-                         (wid, db.now_iso(), 404))
-            if not read and missing >= 3:
-                conn.execute(f"DELETE FROM garmin_workouts WHERE status = 404 AND id IN ({','.join('?' * len(todo))})",
-                             todo)
-                return refuse(404, "séances introuvables")
+        workout = None
+        for name, path in routes:
+            payload, status = _ask(session, path.format(wid))
+            statuses[name] = status
+            workout = _workout_in(payload)
+            if workout:
+                if len(routes) > 1:
+                    routes = [(name, path)]
+                    db.set_meta(conn, ROUTE_KEY, name)
+                break
+        if workout:
+            _store(conn, wid, 200, workout)
+            read += 1
             continue
-        conn.execute("INSERT OR REPLACE INTO garmin_workouts(id, fetched_at, status, json) VALUES (?, ?, ?, ?)",
-                     (wid, db.now_iso(), 200, json.dumps(payload, ensure_ascii=False)))
-        read += 1
-    if read or missing:
-        db.set_meta(conn, REFUSAL_KEY, "")
-        LOG.info("Séances prévues Garmin : %s lue(s), %s supprimée(s) de Garmin Connect, %s à lire plus tard",
-                 read, missing, max(0, len(todo) - MAX_CALLS))
+        missing += 1
+        if not read and missing >= 3:
+            break  # aucun chemin ne répond : inutile d'insister séance par séance
+        if read:
+            _store(conn, wid, 404, None)  # le chemin marche : cette séance-là a été supprimée de Garmin Connect
+    # les séances passées : par l'activité qui les a suivies, si les chemins des séances ne répondent pas
+    past = [r for r in rows if r["date"] < today.isoformat()
+            and workout_id(r["uid"]) in todo and not _done(conn, workout_id(r["uid"]))]
+    from_acts = _from_activities(conn, session, past, statuses) if past and not read else 0
+    summary = ", ".join(f"{name} HTTP {status}" for name, status in statuses.items())
+    if not read and not from_acts:
+        db.set_meta(conn, ROUTE_KEY, "")
+        db.set_meta(conn, REFUSAL_KEY, json.dumps({"le": db.now_iso(), "chemins": statuses}, ensure_ascii=False))
+        conn.commit()
+        LOG.info("Séances prévues Garmin : rien de lisible (%s), nouvel essai dans 7 jours", summary)
+        return {"lues": 0, "refus": True, "statut": next(iter(statuses.values()), None)}
+    db.set_meta(conn, REFUSAL_KEY, "")
     conn.commit()
-    return {"lues": read}
+    LOG.info("Séances prévues Garmin : %s lue(s), %s par leur activité (%s)", read, from_acts, summary)
+    return {"lues": read + from_acts}
+
+
+def _done(conn: sqlite3.Connection, wid: str | None) -> bool:
+    return bool(wid) and conn.execute("SELECT 1 FROM garmin_workouts WHERE id = ? AND status = 200", (wid,)).fetchone() is not None
