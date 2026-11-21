@@ -14,6 +14,8 @@ version stable une fois éprouvées.
   récup. Leur vrai sport aussi : une séance de renfo n'est plus prise pour une course. Si la clé API de Garmin ne
   donne pas accès aux séances, Foulée le note dans son journal et garde le profil deviné (nouvel essai une semaine
   plus tard).
+- Tests : la date d'une séance envoyée sur la montre se compare à la date du club (un test échouait entre minuit
+  et 1 h, heure de Paris).
 
 ## 0.8.3b6 — 21 novembre 2026 (bêta)
 

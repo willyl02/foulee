@@ -221,7 +221,8 @@ def test_first_send_links_then_sends_directly(relay, fake):
     # une 2e séance part directement
     second = propose(relay, sophie, lucas_id, date.today() - timedelta(days=1), "Footing")
     res = relay.post("/api/v1/garmin/envoyer", headers=lucas, json={"proposition": second, "vma_kmh": 16})
-    assert res.json()["envoi"]["date"] == date.today().isoformat()  # passée : planifiée aujourd'hui
+    from foulee.relais.club import _today
+    assert res.json()["envoi"]["date"] == _today().isoformat()  # passée : planifiée aujourd'hui (heure du club)
     assert len(fake.workouts) == 2
     mine = relay.get("/api/v1/moi/coach", headers=lucas).json()
     assert mine["montre"]["relie"] is True
