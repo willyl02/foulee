@@ -725,8 +725,9 @@ ton adresse, par exemple `https://relais.mon-club.com`.
   objectifs secondaires, l'équilibre avant / arrière de son renfo (rapport, tendance, paire par paire, ce
   que tu peux lui dire, et « Lui en parler » avec un message tout prêt), ses séances proposées, sa forme
   (sommeil, VFC, FC au repos, poids) s'il la partage ;
-- son **calendrier** sur neuf semaines (quatre passées, celle-ci, quatre à venir) : son plan et tes séances
-  avec leur esquisse, ses séances faites (un clic les ouvre), ses courses visées ;
+- son **calendrier**, à la semaine, au mois ou à l'année (des pastilles), avec des flèches pour passer d'une
+  période à l'autre : son plan et tes séances avec leur esquisse, ses séances faites (un clic les ouvre ; elles ne
+  sont partagées que sur quatre semaines), ses courses visées ;
 - chaque **séance** en détail : l'**analyse fraction par fraction** (façon intervals.icu : pour chaque tour, son
   temps, son allure, sa FC moyenne, sa zone et la part du tour dans cette zone, au-dessus des courbes d'allure et
   de FC), chiffres, tours, renfo, tracé simplifié (sans fond de carte), ce qui était proposé, et un **fil** pour
@@ -741,8 +742,8 @@ ton adresse, par exemple `https://relais.mon-club.com`.
   « Mes élèves » se range alors par groupe. La bibliothèque garde ses séances types : les proposer en un clic, les
   modifier, les renommer, les dupliquer, en créer une sans l'envoyer.
 
-**Ce que voit l'élève** (page « Mon coach ») : son calendrier de neuf semaines (le même que celui de son
-coach), les séances proposées, bloc par bloc avec ses allures (et dans sa vue « Calendrier », en pointillé bleu,
+**Ce que voit l'élève** (page « Mon coach ») : son calendrier, à la semaine, au mois ou à
+l'année (le même que celui de son coach), les séances proposées, bloc par bloc avec ses allures (et dans sa vue « Calendrier », en pointillé bleu,
 face à ce qu'il fait), la conversation avec son coach, et ce qu'il partage.
 
 **Sur la montre, sans câble** : sous chaque séance proposée, **« Envoyer sur ma montre »**. La première fois,

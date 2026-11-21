@@ -4,6 +4,17 @@ Les versions « bêta » (par exemple 0.4.0b1) sont des avant-premières : elles
 sur le canal bêta (Réglages → Application → Mises à jour → « Recevoir les versions bêta »), puis sortent en
 version stable une fois éprouvées.
 
+## 0.8.3b5 — 21 novembre 2026 (bêta)
+
+- **Le calendrier des pages coach et élève**, plus léger : au choix **à la semaine**, **au mois** ou **à l'année**
+  (retenu dans ce navigateur), avec des **flèches** de chaque côté de la période pour avancer ou reculer, et
+  « Aujourd'hui » pour revenir. À la semaine, de grandes cases (un jour par ligne sur téléphone) ; au mois, le mois
+  seul ; à l'année, douze petits mois avec une **pastille** par jour où il y a quelque chose (séance du coach, plan,
+  faite, manquée, course) : un clic sur un jour ouvre sa semaine, sur un mois ouvre ce mois. Les séances faites ne
+  sont partagées que sur quatre semaines : avant, seules les séances prévues s'affichent (c'est indiqué).
+- **Relais** : le calendrier d'un élève sur n'importe quelle période (une année au plus). Un relais pas encore à
+  jour donne toujours les neuf semaines autour d'aujourd'hui ; Foulée le signale au-delà.
+
 ## 0.8.3b4 — 21 novembre 2026 (bêta)
 
 - **Se déplacer dans un graphique zoomé** sans dézoomer : une fois zoomé en largeur, **la main** (glisser sur le

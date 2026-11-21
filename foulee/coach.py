@@ -625,7 +625,7 @@ def my_page(conn: sqlite3.Connection) -> dict:
 
 
 # ------------------------------------------------------- passerelle vers le relais
-PROXY_PATHS = re.compile(r"^(groupe|eleves/\d+/fiche|eleves/\d+/seances/[A-Za-z0-9:_.-]+|propositions(/\d+)?|"
+PROXY_PATHS = re.compile(r"^(groupe|eleves/\d+/fiche|eleves/\d+/calendrier|moi/calendrier|eleves/\d+/seances/[A-Za-z0-9:_.-]+|propositions(/\d+)?|"
                          r"niveaux|eleves/\d+/niveau|notifications(/essai|/email/code|/email/verifier)?|"
                          r"modeles(/\d+)?|fils(/[A-Za-z0-9:_.-]+)?|messages/\d+(/epingle)?|nouveautes|"
                          r"moi/seances/[A-Za-z0-9:_.-]+|partage/accord)$")
@@ -639,7 +639,7 @@ def proxy(conn: sqlite3.Connection, method: str, path: str, payload: dict | None
         raise CoachError("Demande inconnue.", 404)
     suffix = ""
     if query:
-        allowed = {k: str(v) for k, v in query.items() if k in ("semaine", "apres") and re.fullmatch(r"[0-9-]{1,12}",
+        allowed = {k: str(v) for k, v in query.items() if k in ("semaine", "apres", "debut", "fin") and re.fullmatch(r"[0-9-]{1,12}",
                                                                                                    str(v))}
         if allowed:
             suffix = "?" + "&".join(f"{k}={v}" for k, v in allowed.items())

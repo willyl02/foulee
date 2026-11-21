@@ -275,6 +275,14 @@ def create_relay_app() -> FastAPI:
     def my_coach(request: Request) -> dict:
         return run(request, lambda conn, me: club.my_page(conn, me), role="eleve")
 
+    @app.get("/api/v1/moi/calendrier")
+    def my_calendar(request: Request, debut: str | None = None, fin: str | None = None) -> dict:
+        return run(request, lambda conn, me: club.calendar_range(conn, me, None, debut, fin), role="eleve")
+
+    @app.get("/api/v1/eleves/{student_id}/calendrier")
+    def student_calendar(student_id: int, request: Request, debut: str | None = None, fin: str | None = None) -> dict:
+        return run(request, lambda conn, me: club.calendar_range(conn, me, student_id, debut, fin), role="coach")
+
     @app.get("/api/v1/moi/seances/{key}")
     def my_session(key: str, request: Request) -> dict:
         return run(request, lambda conn, me: club.student_session(conn, me, me["id"], key), role="eleve")

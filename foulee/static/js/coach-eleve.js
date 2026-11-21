@@ -2,7 +2,7 @@
 // case par case, sans lequel rien ne part vers le relais.
 import * as api from "./api.js";
 import * as F from "./format.js";
-import { calendarCard } from "./coach-cal.js";
+import { calendarCard, wireCalendar } from "./coach-cal.js";
 import { icon } from "./icons.js";
 import { avatar, blocksHtml, dayLabel, fail, loading, mountThread, statusChip, sportIcon } from "./coach-ui.js";
 import { clubLogoURL } from "./settings-club.js";
@@ -83,8 +83,9 @@ export async function renderMyCoach(ctx) {
     ${ctx.tabs("coach")}
     ${!accord ? `<section class="co-callout">${icon("lock")}<div><b>Dernière étape : choisis ce que tu partages avec ${F.escape(first)}</b>
         <span>Rien ne part vers le relais avant ton accord. Tu pourras changer d'avis à tout moment.</span></div><a class="btn btn-primary" href="#/coach/partage">${icon("check")}Choisir</a></section>` : ""}
-    ${data.mois ? calendarCard("Ton calendrier", `ce que ${first} voit : 4 semaines passées, celle-ci, 4 à venir`, data.mois, {
-      vma: data.vma_kmh, goals: data.objectifs || [], sessionHref: (s) => `#/coach/seance/${encodeURIComponent(s.cle)}` }) : ""}
+    ${data.mois ? calendarCard("Ton calendrier", `ce que ${first} voit`, data.mois, {
+      vma: data.vma_kmh, goals: data.objectifs || [], sessionHref: (s) => `#/coach/seance/${encodeURIComponent(s.cle)}`,
+      fetchRange: (debut, fin) => api.get("/api/coach/r/moi/calendrier", { debut, fin }) }) : ""}
     <div class="co-grid2">
       <div class="co-page">
         <section class="coach-card co-coachcard">${avatar(coachName, { size: "lg" })}<div><h2>${F.escape(coachName)}</h2>
@@ -115,6 +116,7 @@ export async function renderMyCoach(ctx) {
       </div>
     </div>`;
 
+  wireCalendar(page);
   bindWatch(ctx, page, data, first);
   page.querySelectorAll("[data-fit-help]").forEach((b) => b.addEventListener("click", () => {
     const box = page.querySelector("[data-fit-box]");

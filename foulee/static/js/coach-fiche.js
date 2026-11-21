@@ -2,7 +2,7 @@
 import * as api from "./api.js";
 import * as F from "./format.js";
 import { analysisHTML, wireAnalysis } from "./fractions.js";
-import { calendarCard } from "./coach-cal.js";
+import { calendarCard, wireCalendar } from "./coach-cal.js";
 import { levelChip } from "./coach-reglages.js";
 import { icon } from "./icons.js";
 import {
@@ -122,9 +122,10 @@ export async function renderStudent(ctx, sid) {
     `<span>Partage : ${F.escape(shareSummary(data.accord))}${data.partage_recu_le ? ` · données reçues ${F.escape(F.relative(data.partage_recu_le))}` : ""}</span>`,
     `<a class="btn" href="#/coach/messages?fil=eleve-${sid}">${icon("chat")}Message</a><a class="btn btn-primary" href="#/coach/proposer?eleves=${sid}">${icon("plus")}Proposer une séance</a>`)}
     ${ctx.tabs("eleves")}
-    ${data.mois ? calendarCard("Son calendrier", "4 semaines passées, celle-ci, 4 à venir", data.mois, {
+    ${data.mois ? calendarCard("Son calendrier", "", data.mois, {
       vma, goals: [goal, ...(data.objectifs || [])].filter(Boolean), coachSide: true,
-      sessionHref: (s) => `#/coach/eleve/${sid}/seance/${encodeURIComponent(s.cle)}` }) : ""}
+      sessionHref: (s) => `#/coach/eleve/${sid}/seance/${encodeURIComponent(s.cle)}`,
+      fetchRange: (debut, fin) => api.get(`/api/coach/r/eleves/${sid}/calendrier`, { debut, fin }) }) : ""}
     <div class="co-grid2">
       <div class="co-page">
         <section class="coach-card"><div class="co-card-head"><h2>${icon("calendar")}${semaine && week.lundi !== thisMonday ? `Semaine du ${F.escape(F.dateLong(week.lundi, { weekday: false }))}` : "Sa semaine"}${b.prevues ? ` : ${b.faites} faite${b.faites > 1 ? "s" : ""} sur ${b.prevues} prévue${b.prevues > 1 ? "s" : ""}` : b.seances ? ` : ${b.seances} séance${b.seances > 1 ? "s" : ""}` : ""}</h2>
@@ -171,6 +172,7 @@ export async function renderStudent(ctx, sid) {
       </div>
     </div>`;
 
+  wireCalendar(page);
   page.querySelectorAll("[data-watch]").forEach((btn) => btn.addEventListener("click", async () => {
     btn.disabled = true;
     try {

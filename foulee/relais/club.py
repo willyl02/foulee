@@ -841,16 +841,54 @@ def week(content: dict, props: list[dict], monday: date) -> list[dict]:
     return days
 
 
-def month(conn: sqlite3.Connection, student_id: int, content: dict, today: date) -> dict:
-    """Neuf semaines autour d'aujourd'hui (4 passées, la semaine en cours, 4 à venir), jour par jour, comme
-    week() : le grand calendrier des pages coach et élève."""
-    start = _monday(today) - timedelta(days=28)
-    end = start + timedelta(days=63) - timedelta(days=1)
+CALENDAR_MAX_DAYS = 378  # une année entière, des lundis aux dimanches (54 semaines)
+CALENDAR_LIGHT_DAYS = 63  # au-delà (la vue à l'année) : pas d'esquisses ni de descriptions, des pastilles suffisent
+
+
+def calendar(conn: sqlite3.Connection, student_id: int, content: dict, start: date, end: date) -> dict:
+    """Du lundi de start au dimanche de end, jour par jour comme week() : le calendrier des pages coach et élève
+    (à la semaine, au mois ou à l'année)."""
+    start, end = _monday(start), _monday(end) + timedelta(days=6)
+    if end < start or (end - start).days + 1 > CALENDAR_MAX_DAYS:
+        raise RelayError("Calendrier : une année au plus.")
     props = proposals(conn, student_id, start, end, content)
     days = []
-    for offset in range(9):
-        days += week(content, props, start + timedelta(days=7 * offset))
+    monday = start
+    while monday <= end:
+        days += week(content, props, monday)
+        monday += timedelta(days=7)
+    if (end - start).days + 1 > CALENDAR_LIGHT_DAYS:
+        for day in days:
+            day["prevu"] = [{k: v for k, v in p.items() if k not in ("blocs", "description")} for p in day["prevu"]]
     return {"debut": start.isoformat(), "fin": end.isoformat(), "jours": days}
+
+
+def month(conn: sqlite3.Connection, student_id: int, content: dict, today: date) -> dict:
+    """Neuf semaines autour d'aujourd'hui (4 passées, la semaine en cours, 4 à venir) : le calendrier tel qu'il
+    s'ouvre ; le reste se demande à calendar_range()."""
+    start = _monday(today) - timedelta(days=28)
+    return calendar(conn, student_id, content, start, start + timedelta(days=62))
+
+
+def _range(debut: str | None, fin: str | None) -> tuple[date, date]:
+    try:
+        start, end = date.fromisoformat((debut or "")[:10]), date.fromisoformat((fin or "")[:10])
+    except ValueError:
+        raise RelayError("Calendrier : dates attendues au format AAAA-MM-JJ.") from None
+    return start, end
+
+
+def calendar_range(conn: sqlite3.Connection, account: sqlite3.Row, student_id: int | None, debut: str | None,
+                   fin: str | None) -> dict:
+    """Le calendrier sur une période : l'élève le sien, le coach celui d'un élève de son groupe."""
+    if student_id is None:
+        student_id = account["id"]
+    elif conn.execute("SELECT 1 FROM comptes WHERE id = ? AND role = 'eleve' AND coach_id = ?",
+                      (student_id, account["id"])).fetchone() is None:
+        raise PermissionError("Élève introuvable dans ton groupe.")
+    start, end = _range(debut, fin)
+    content, _ = shared(conn, student_id)
+    return calendar(conn, student_id, content, start, end)
 
 
 def tally(days: list[dict]) -> dict:
