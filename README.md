@@ -567,7 +567,7 @@ Dans un terminal :
 | `reparse` | Reconstruire les tables depuis les réponses brutes (après une mise à jour de Foulée) |
 | `claude-config` | Montrer où Claude Desktop range sa configuration et si Foulée y figure ; `--ecrire` pour l'ajouter, `--retirer` pour l'enlever |
 | `acces-reseau` | Sur un serveur : choisir le mot de passe de l'accès par le réseau local |
-| `relais` | Sur la machine du relais du club : `relais serveur` le lance ; `relais admin` / `relais coach` créent un compte coach ; `relais comptes` les liste ; `relais groupes` montre chaque coach et ses élèves ; `relais mot-de-passe`, `desactiver`, `reactiver`, `supprimer` + identifiant. Ces commandes s'affichent à chaque connexion SSH à la machine du relais |
+| `relais` | Sur la machine du relais du club : `relais serveur` le lance ; `relais admin` / `relais coach` créent un compte coach ; `relais comptes` les liste ; `relais groupes` montre chaque coach et ses élèves ; `relais email` branche le service d'envoi d'e-mails (`email tester ADRESSE`, `email retirer`) ; `relais mot-de-passe`, `desactiver`, `reactiver`, `supprimer` + identifiant. Ces commandes s'affichent à chaque connexion SSH à la machine du relais |
 | `reset-views` | Restaurer les vues d'origine |
 | `forget-key` | Supprimer la clé de ce PC |
 
@@ -779,6 +779,18 @@ Si l'élève répond « oui » à « Ton coach fait-il partie de ton club ? » (
 **Messages** : une conversation par élève, le fil du groupe (le coach y épingle ses annonces) et un
 fil sous chaque séance ; Foulée relève les nouveautés toutes les minutes (badge dans la colonne). L'extrait
 part après chaque synchro.
+
+**Notifications** (Réglages → Club et coach → Notifications) : le relais prévient l'élève d'une séance reçue,
+modifiée ou annulée et d'un message, et le coach du message d'un élève, même Foulée fermé. Sur le téléphone avec
+**ntfy** (appli gratuite, sans compte : on scanne un QR code), et **par e-mail** : l'adresse se confirme avec un
+code à six chiffres reçu à cette adresse. Heures calmes (la notification ou l'e-mail attend leur fin), détail
+masqué au choix. Pour les e-mails, l'administrateur branche une fois un service d'envoi sur la machine du relais
+(Brevo par défaut, gratuit jusqu'à 300 e-mails par jour, ou tout autre SMTP) :
+
+```bash
+sudo foulee relais email                 # serveur SMTP, identifiant, clé SMTP (ne s'affiche pas), expéditeur
+sudo foulee relais email tester ADRESSE  # un e-mail d'essai
+```
 
 **Essayer avec un élève fictif** : dans ta vraie installation, relie-toi comme coach et crée un code
 d'invitation ; passe en mode démo, puis Réglages → Coach et élèves → « J'ai un code d'invitation ». L'élève

@@ -23,6 +23,9 @@ printf '  sudo foulee relais supprimer IDENTIFIANT     supprimer un compte et ce
 printf '%sGarmin%s  %s(envoi des séances sur les montres)%s\n' "$B" "$R" "$D" "$R"
 printf '  sudo foulee relais garmin tester             vérifier l'"'"'appli Garmin du club\n'
 printf '  sudo foulee relais garmin                    poser l'"'"'identifiant et le secret de l'"'"'appli\n'
+printf '%sE-mails%s  %s(notifications par e-mail, service d'"'"'envoi Brevo ou autre SMTP)%s\n' "$B" "$R" "$D" "$R"
+printf '  sudo foulee relais email                     poser le service d'"'"'envoi (clé SMTP)\n'
+printf '  sudo foulee relais email tester ADRESSE      envoyer un e-mail d'"'"'essai\n'
 printf '%sMises à jour et service%s\n' "$B" "$R"
 printf '  sudo bash @ROOT@/scripts/mettre-a-jour-serveur.sh   mettre à jour tout de suite\n'
 printf '  systemctl status foulee-relais               état du relais\n'

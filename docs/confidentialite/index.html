@@ -40,7 +40,7 @@
 
   <h1 id="en">Privacy policy</h1>
   <p class="lang">English · <a href="#fr">Français plus bas</a></p>
-  <p class="date">Last updated: 16 November 2026</p>
+  <p class="date">Last updated: 21 November 2026</p>
 
   <p><b>Foulée</b> is a free, open-source, non-commercial application for runners and their club coach
   (source code: <a href="https://github.com/willyl02/foulee">github.com/willyl02/foulee</a>). It has no
@@ -71,6 +71,7 @@
   <h2>3. The club relay (coach and athletes)</h2>
   <p>A coach and their athletes can exchange through a small relay server run for the club. It stores only:
   accounts (username, hashed password), invitation codes, messages, the workouts proposed by the coach, the
+  notification settings (and the e-mail address, if the user confirmed one), the
   Garmin authorization of section 2, and the extract each athlete chooses, box by box, to share with their coach
   (summary of the last 4 weeks of sessions, goals, VMA; GPS, sleep, HRV and weight only if the athlete opts in).
   When an athlete leaves the group, their account and everything they shared are deleted from the relay.</p>
@@ -84,6 +85,10 @@
       text (for example "New workout from your coach: Threshold 3 × 10 min, Saturday 21") to a long random topic on
       ntfy.sh (or the ntfy server the user chooses), which keeps it for a few hours to deliver it. Turning the
       option off stops it; "without details" sends only a generic sentence.</li>
+    <li><b>Optional e-mails (Brevo):</b> if a user adds and confirms an e-mail address (with a six-digit code sent to
+      it), the relay stores that address and sends the same short texts by e-mail through Brevo (Sendinblue SAS,
+      France), the sending service chosen by the club, which delivers them and keeps its usual sending logs.
+      Unticking the option stops it; removing the address deletes it from the relay.</li>
     <li><b>Optional, chosen by the user:</b> the user may connect their own local Foulée to the Claude Desktop app
       (Anthropic) on their computer to analyse their data. This is the user's own choice and their own account;
       Foulée itself sends nothing to any AI provider.</li>
@@ -100,7 +105,7 @@
 
   <h1 id="fr">Politique de confidentialité</h1>
   <p class="lang">Français · <a href="#en">English above</a></p>
-  <p class="date">Dernière mise à jour : 16 novembre 2026</p>
+  <p class="date">Dernière mise à jour : 21 novembre 2026</p>
 
   <p><b>Foulée</b> est une application gratuite, libre et non commerciale, pour les coureurs et le coach de leur
   club (code source : <a href="https://github.com/willyl02/foulee">github.com/willyl02/foulee</a>). Pas de
@@ -130,6 +135,7 @@
   <h2>3. Le relais du club (coach et élèves)</h2>
   <p>Un coach et ses élèves échangent par un petit serveur tenu pour le club. Il ne garde que : les comptes
   (identifiant, mot de passe chiffré), les codes d'invitation, les messages, les séances proposées par le coach,
+  les réglages de notification (et l'adresse e-mail, si tu en as confirmé une),
   l'autorisation Garmin du point 2, et l'extrait que chaque élève choisit, case par case, de partager avec son
   coach (résumé de ses séances des 4 dernières semaines, objectifs, VMA ; GPS, sommeil, VFC et poids seulement
   s'il le veut). Quand un élève quitte le groupe, son compte et tout ce qu'il a partagé sont effacés du relais.</p>
@@ -143,6 +149,10 @@
       ton coach : Seuil 3 × 10 min, samedi 21 ») sur un sujet long et aléatoire de ntfy.sh (ou du serveur ntfy que tu
       choisis), qui le garde quelques heures le temps de le délivrer. Décocher l'option arrête tout ; « sans le
       détail » n'envoie qu'une phrase générale.</li>
+    <li><b>E-mails (si tu les actives) :</b> si tu ajoutes une adresse e-mail et la confirmes (avec un code à six
+      chiffres envoyé à cette adresse), le relais la garde et t'envoie les mêmes courts textes par e-mail, via Brevo
+      (Sendinblue SAS, France), le service d'envoi choisi par le club, qui les délivre et garde ses journaux d'envoi
+      habituels. Décocher l'option arrête tout ; retirer l'adresse l'efface du relais.</li>
     <li><b>Au choix de l'utilisateur :</b> tu peux relier ton Foulée à l'application Claude Desktop (Anthropic) sur
       ton ordinateur pour analyser tes données. C'est ton choix et ton compte ; Foulée lui-même n'envoie rien à
       aucun service d'IA.</li>

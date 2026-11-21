@@ -729,6 +729,79 @@ def _relay_garmin(args: argparse.Namespace) -> int:
     return 0
 
 
+def _relay_email(args: argparse.Namespace) -> int:
+    """« foulee relais email » : le service d'envoi d'e-mails du relais (SMTP, Brevo par défaut). La clé SMTP se
+    tape ici, sans s'afficher ; elle ne repart jamais du relais et n'est jamais affichée, que sa longueur."""
+    import getpass
+
+    from .relais import courriel
+
+    current = courriel.public()
+
+    def ask(question: str, default: str = "") -> str:
+        return _ask(question.replace(" :", f" [{default}] :") if default else question, default)
+
+    if args.identifiant == "retirer":
+        courriel.remove()
+        _say("Service d'envoi retiré : le relais n'envoie plus d'e-mails (les notifications ntfy continuent).")
+        return 0
+    if args.identifiant == "tester":
+        if not current:
+            _say("Aucun service d'envoi : lance « sudo foulee relais email ».")
+            return 1
+        to = args.valeur or _ask("Adresse où envoyer l'essai :").strip()
+        try:
+            courriel.send(to, "Foulée : e-mail d'essai du relais",
+                          "Le relais du club sait envoyer des e-mails : les élèves et les coachs peuvent les activer "
+                          "dans Foulée, Réglages › Club et coach › Notifications.",
+                          footer="E-mail d'essai envoyé par l'administrateur du relais Foulée.")
+        except courriel.MailError as exc:
+            _say(f"✗ {exc}")
+            return 1
+        _say(f"✓ E-mail d'essai envoyé à {to} : regarde ta boîte (et les indésirables, la première fois).")
+        return 0
+    if args.identifiant:
+        _say("Usage : foulee relais email [tester ADRESSE | retirer]")
+        return 1
+    if current:
+        _say(f"Service d'envoi : {current['hote']}:{current['port']}, identifiant {current['identifiant']}, "
+             f"clé de {current['cle']} caractères, expéditeur « {current['nom']} » <{current['expediteur']}>.")
+        if _ask("Le remplacer ? (oui/non)", "non").lower() != "oui":
+            return 0
+    _say("Les réglages SMTP de ton service d'envoi (chez Brevo : Paramètres → SMTP & API → onglet SMTP).")
+    host = ask("Serveur SMTP :", current["hote"] if current else courriel.DEFAULT_HOST).strip()
+    port = ask("Port (587 conseillé) :", str(current["port"]) if current else str(courriel.DEFAULT_PORT)).strip()
+    login = ""
+    while not login:
+        login = ask("Identifiant SMTP (chez Brevo, une adresse en …@smtp-brevo.com) :",
+                     current["identifiant"] if current else "").strip()
+    password = ""
+    for _ in range(3):
+        password = getpass.getpass("Clé SMTP (ne s'affiche pas ; colle-la avec un clic droit ou Ctrl+Maj+V, puis "
+                                   "Entrée) : ").strip()
+        if password.startswith("xkeysib-"):
+            _say("C'est une clé d'API (xkeysib-…) : il faut une clé SMTP (xsmtpsib-…), dans l'onglet SMTP.")
+            password = ""
+        elif password:
+            _say(f"Clé SMTP reçue ({len(password)} caractères).")
+            break
+        else:
+            _say("Rien reçu : dans un terminal, Ctrl+V ne colle pas. Clic droit → Coller, ou Ctrl+Maj+V.")
+    if not password:
+        return 1
+    sender = ask("Adresse d'expédition (sur le domaine authentifié, ex. notifications@foulee-coach.com) :",
+                  current["expediteur"] if current else "").strip()
+    name = ask("Nom d'expéditeur :", current["nom"] if current else courriel.DEFAULT_NAME).strip()
+    try:
+        saved = courriel.save(host, port, login, password, sender, name)
+    except courriel.MailError as exc:
+        _say(str(exc))
+        return 1
+    _say(f"✓ Service d'envoi enregistré ({saved['hote']}:{saved['port']}, fichier lisible par le relais seul).")
+    _say("Essaie-le : sudo foulee relais email tester TON-ADRESSE. Pas besoin de relancer le relais.")
+    return 0
+
+
 def cmd_relais(args: argparse.Namespace) -> int:
     """Le relais du club : le lancer, et gérer ses comptes coach (sur la machine du relais)."""
     from .relais import store
@@ -737,15 +810,19 @@ def cmd_relais(args: argparse.Namespace) -> int:
     if action == "serveur":
         import uvicorn
 
+        from .relais import notifs
         from .relais.app import create_relay_app
 
         _say(f"Relais Foulée {__version__} → http://{args.hote}:{args.port}/ (Ctrl+C pour arrêter)")
+        notifs.start_ticker()  # les e-mails retenus par les heures calmes
         # proxy_headers=False : le tunnel Cloudflare arrive par la machine elle-même ; l'adresse du visiteur
         # est lue dans CF-Connecting-IP, seulement pour ces connexions-là
         uvicorn.run(create_relay_app(), host=args.hote, port=args.port, log_level="warning", proxy_headers=False)
         return 0
     if action == "garmin":
         return _relay_garmin(args)
+    if action == "email":
+        return _relay_email(args)
     with store.session() as conn:
         if action == "comptes":
             rows = store.accounts(conn)
@@ -900,13 +977,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("relais", help="le relais du club (coach et élèves) : le lancer, gérer ses comptes")
     p.add_argument("action", choices=["serveur", "admin", "coach", "comptes", "groupes", "mot-de-passe", "desactiver",
-                                      "reactiver", "supprimer", "garmin"],
+                                      "reactiver", "supprimer", "garmin", "email"],
                    help="serveur : lancer le relais ; admin / coach : créer un compte coach ; comptes : la liste ; "
                         "groupes : chaque coach et ses élèves ; "
                         "mot-de-passe, desactiver, reactiver, supprimer : sur un compte (identifiant) ; "
                         "garmin : enregistrer l'appli Garmin du club (envoi des séances sur les montres ; "
-                        "« garmin tester » pour la vérifier, « garmin retirer » pour la retirer)")
+                        "« garmin tester » pour la vérifier, « garmin retirer » pour la retirer) ; "
+                        "email : le service d'envoi d'e-mails (« email tester ADRESSE », « email retirer »)")
     p.add_argument("identifiant", nargs="?", help="identifiant du compte visé")
+    p.add_argument("valeur", nargs="?", help="email tester : l'adresse où envoyer l'essai")
     p.add_argument("--nom", help="nom affiché du nouveau compte")
     p.add_argument("--port", type=int, default=config.DEFAULT_PORT, help="port du relais (8770 par défaut)")
     p.add_argument("--hote", default="127.0.0.1", help="adresse d'écoute (127.0.0.1 : derrière le tunnel)")

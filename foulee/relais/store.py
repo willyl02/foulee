@@ -133,6 +133,10 @@ CREATE TABLE IF NOT EXISTS notifications (compte_id INTEGER PRIMARY KEY REFERENC
   reglages TEXT NOT NULL, modifie_le TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS notifications_envois (id INTEGER PRIMARY KEY, compte_id INTEGER NOT NULL REFERENCES comptes(id)
   ON DELETE CASCADE, canal TEXT NOT NULL, evenement TEXT NOT NULL, statut TEXT NOT NULL, detail TEXT, cree_le TEXT NOT NULL);
+-- E-mails retenus par les heures calmes, envoyés à leur fin (notifs.flush_due)
+CREATE TABLE IF NOT EXISTS courriels_attente (id INTEGER PRIMARY KEY, compte_id INTEGER NOT NULL REFERENCES comptes(id)
+  ON DELETE CASCADE, evenement TEXT NOT NULL, sujet TEXT NOT NULL, texte TEXT NOT NULL, a_envoyer_le TEXT NOT NULL,
+  cree_le TEXT NOT NULL);
 -- Envoi des séances sur la montre (Training API de Garmin, voir garmin.py) : le lien de chaque élève (jetons
 -- chiffrés), les autorisations en cours (15 minutes) et les séances envoyées
 CREATE TABLE IF NOT EXISTS garmin_liens (

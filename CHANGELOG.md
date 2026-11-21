@@ -1,8 +1,20 @@
 # Historique des versions
 
 Les versions « bêta » (par exemple 0.4.0b1) sont des avant-premières : elles arrivent d'abord
-sur le canal bêta (Réglages → Mises à jour → « Recevoir les versions bêta »), puis sortent en
+sur le canal bêta (Réglages → Application → Mises à jour → « Recevoir les versions bêta »), puis sortent en
 version stable une fois éprouvées.
+
+## 0.8.2b11 — 21 novembre 2026
+
+- **Les notifications par e-mail** (Réglages → Club et coach → Notifications), en plus de ntfy : séance reçue,
+  modifiée ou annulée, nouveau message, avec les mêmes cases et les mêmes heures calmes (l'e-mail attend leur fin
+  sur le relais). L'adresse se confirme avec un code à six chiffres envoyé à cette adresse (30 minutes, cinq
+  essais) : personne ne reçoit les e-mails du club sans les avoir demandés. « Envoyer un e-mail d'essai »,
+  « Changer d'adresse », « Retirer ».
+- **Relais : `sudo foulee relais email`** branche le service d'envoi (Brevo par défaut, ou tout SMTP) : la clé SMTP
+  se tape sans s'afficher et reste dans le dossier des secrets du relais. `email tester ADRESSE` envoie un essai,
+  `email retirer` coupe les e-mails. Rappelées dans le message d'accueil SSH.
+- Confidentialité : Brevo ajouté aux services, avec l'adresse e-mail confirmée parmi ce que garde le relais.
 
 ## 0.8.2b10 — 20 novembre 2026
 

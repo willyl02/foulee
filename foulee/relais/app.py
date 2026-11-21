@@ -326,8 +326,16 @@ def create_relay_app() -> FastAPI:
         return run(request, lambda conn, me: notifs.save_settings(conn, me, payload))
 
     @app.post("/api/v1/notifications/essai")
-    def notification_test(request: Request) -> dict:
-        return run(request, lambda conn, me: notifs.test(conn, me))
+    def notification_test(request: Request, payload: dict | None = Body(None)) -> dict:
+        return run(request, lambda conn, me: notifs.test(conn, me, payload))
+
+    @app.post("/api/v1/notifications/email/code")
+    def notification_email_code(request: Request, payload: dict = Body(...)) -> dict:
+        return run(request, lambda conn, me: notifs.email_code(conn, me, payload))
+
+    @app.post("/api/v1/notifications/email/verifier")
+    def notification_email_verify(request: Request, payload: dict = Body(...)) -> dict:
+        return run(request, lambda conn, me: notifs.email_verify(conn, me, payload))
 
     @app.get("/api/v1/fils")
     def list_threads(request: Request) -> dict:
