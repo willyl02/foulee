@@ -58,6 +58,67 @@ export function zoomBarHTML({ area = true } = {}) {
   </div>`;
 }
 
+/** Barre de défilement horizontale d'un graphique zoomé (analyse fraction par fraction, tuiles). */
+export function scrollbarHTML() {
+  return `<div class="zscroll is-off"><div class="zs-thumb" role="scrollbar" tabindex="0" aria-orientation="horizontal"
+    aria-valuemin="0" aria-valuemax="100" aria-label="Se déplacer dans le graphique zoomé"></div></div>`;
+}
+
+/**
+ * get() : la fenêtre vue, {start, end} entre 0 et 1 ; move(start) : la décaler (même largeur, bornée par l'appelant).
+ * Glisser le curseur, cliquer dans la piste (la vue s'y centre), ou au clavier : flèches, Pg préc./suiv., Début, Fin.
+ * Renvoie la fonction qui remet la barre à jour.
+ */
+export function wireScrollbar(track, { get, move }) {
+  const thumb = track.querySelector(".zs-thumb");
+  let drag = null;
+  const update = () => {
+    const { start, end } = get();
+    const on = end - start < 0.999;
+    track.classList.toggle("is-off", !on);
+    if (!on) return;
+    thumb.style.left = `${(start * 100).toFixed(3)}%`;
+    thumb.style.width = `${Math.max(0, (end - start) * 100).toFixed(3)}%`;
+    thumb.setAttribute("aria-valuenow", String(Math.round((start / Math.max(1e-9, 1 - (end - start))) * 100)));
+  };
+  thumb.addEventListener("pointerdown", (ev) => {
+    if (ev.button !== 0) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    drag = { x: ev.clientX, start: get().start };
+    thumb.setPointerCapture(ev.pointerId);
+    track.classList.add("is-dragging");
+  });
+  thumb.addEventListener("pointermove", (ev) => {
+    if (drag) move(drag.start + (ev.clientX - drag.x) / track.getBoundingClientRect().width);
+  });
+  const stop = () => { drag = null; track.classList.remove("is-dragging"); };
+  thumb.addEventListener("pointerup", stop);
+  thumb.addEventListener("pointercancel", stop);
+  track.addEventListener("pointerdown", (ev) => {
+    if (ev.target === thumb || ev.button !== 0) return;
+    ev.stopPropagation();
+    const rect = track.getBoundingClientRect();
+    const { start, end } = get();
+    move((ev.clientX - rect.left) / rect.width - (end - start) / 2);
+  });
+  track.addEventListener("dblclick", (ev) => ev.stopPropagation());
+  thumb.addEventListener("keydown", (ev) => {
+    const { start, end } = get();
+    const w = end - start;
+    const steps = { ArrowLeft: -w / 10, ArrowRight: w / 10, PageUp: -w, PageDown: w };
+    let to = null;
+    if (ev.key in steps) to = start + steps[ev.key];
+    else if (ev.key === "Home") to = 0;
+    else if (ev.key === "End") to = 1 - w;
+    if (to === null) return;
+    ev.preventDefault();
+    move(to);
+  });
+  update();
+  return update;
+}
+
 /** Ajoute le zoom à un graphique ECharts à axes ; à rappeler après chaque setOption qui remplace tout. */
 export function zoomable(el, chart, option) {
   const xs = axesOf(option, "xAxis");
@@ -82,9 +143,10 @@ export function zoomable(el, chart, option) {
   if (!bar) {
     el.classList.add("zoom-host");
     if (getComputedStyle(el).position === "static") el.style.position = "relative";
-    el.insertAdjacentHTML("beforeend", zoomBarHTML());
+    el.insertAdjacentHTML("beforeend", zoomBarHTML() + scrollbarHTML());
     bar = el.querySelector(":scope > .zoombar");
   }
+  const track = el.querySelector(":scope > .zscroll");
   const zooms = () => (chart.getOption().dataZoom || []).map((d, i) => ({ ...d, index: i }));
   // zoomé en hauteur, les bornes de l'axe tombent sur des valeurs quelconques (« 29 », « -65,48 ») : on cache ces
   // deux étiquettes-là, les graduations rondes entre les deux restent ; le zoom initial rend les réglages d'origine
@@ -112,6 +174,7 @@ export function zoomable(el, chart, option) {
     area = on;
     chart.dispatchAction({ type: "takeGlobalCursor", key: "dataZoomSelect", dataZoomSelectActive: on });
     bar.querySelector('[data-zoom="area"]')?.classList.toggle("is-on", on);
+    el.classList.toggle("is-area", on);
   };
   const reset = () => {
     zooms().forEach((d) => chart.dispatchAction({ type: "dataZoom", dataZoomIndex: d.index, start: 0, end: 100 }));
@@ -136,6 +199,40 @@ export function zoomable(el, chart, option) {
     const mine = zooms().filter((d) => d.id === "zx" || String(d.id).startsWith("zy"));
     chart.setOption({ dataZoom: mine.map((d) => ({ id: d.id, moveOnMouseMove: on })) });
   };
+  // la barre de défilement, posée sur le bas de la grille du bas, suit la fenêtre en largeur
+  const windowX = () => {
+    const d = zooms().find(isX);
+    return d ? { start: (d.start ?? 0) / 100, end: (d.end ?? 100) / 100 } : { start: 0, end: 1 };
+  };
+  let wanted = null;
+  const scroll = wireScrollbar(track, {
+    get: windowX,
+    move: (start) => {
+      const first = wanted === null;
+      wanted = start;
+      if (!first) return;
+      requestAnimationFrame(() => {
+        const { start: s0, end: e0 } = windowX();
+        const w = e0 - s0;
+        const s = Math.max(0, Math.min(1 - w, wanted));
+        wanted = null;
+        zooms().filter(isX).forEach((d) => chart.dispatchAction({ type: "dataZoom", dataZoomIndex: d.index, start: s * 100, end: (s + w) * 100 }));
+      });
+    },
+  });
+  const place = () => {
+    let rect = null;
+    try {
+      chart.getModel().eachComponent("grid", (g) => {
+        const r = g.coordinateSystem?.getRect?.();
+        if (r && (!rect || r.y + r.height > rect.y + rect.height)) rect = r;
+      });
+    } catch (e) { rect = null; }
+    if (!rect) return;
+    track.style.left = `${rect.x}px`;
+    track.style.width = `${rect.width}px`;
+    track.style.top = `${rect.y + rect.height - 8}px`;
+  };
   const onZoom = () => {
     const narrowed = (d) => (d.start ?? 0) > 0.01 || (d.end ?? 100) < 99.99;
     const list = zooms();
@@ -143,14 +240,36 @@ export function zoomable(el, chart, option) {
     el.classList.toggle("is-zoomed", zoomed);
     yLabels(list.some((d) => isY(d) && narrowed(d)));
     pan(zoomed);
+    scroll();
     if (area) setArea(false); // une zone à la fois : l'outil se range après usage
+  };
+  // la main : « attrapée » pendant qu'on fait glisser la vue
+  const ungrab = () => el.classList.remove("is-grabbing");
+  const grab = (ev) => {
+    if (!el.classList.contains("is-zoomed") || area || ev.button !== 0 || ev.target.closest(".zoombar, .zscroll")) return;
+    el.classList.add("is-grabbing");
+    window.addEventListener("pointerup", ungrab, { once: true });
   };
   bar.onclick = onClick;
   if (el._zoomOff) el._zoomOff(); // rappelé après un setOption qui remplace tout : on ne double pas les écouteurs
   chart.on("datazoom", onZoom);
+  chart.on("finished", place);
   chart.getZr().on("dblclick", reset);
-  el._zoomOff = () => { chart.off("datazoom", onZoom); chart.getZr()?.off("dblclick", reset); };
-  return { dispose() { el._zoomOff?.(); el._zoomOff = null; bar?.remove(); el.classList.remove("zoom-host", "is-zoomed"); } };
+  el.addEventListener("pointerdown", grab);
+  el._zoomOff = () => {
+    chart.off("datazoom", onZoom);
+    chart.off("finished", place);
+    chart.getZr()?.off("dblclick", reset);
+    el.removeEventListener("pointerdown", grab);
+  };
+  place();
+  return {
+    dispose() {
+      el._zoomOff?.(); el._zoomOff = null;
+      bar?.remove(); track?.remove();
+      el.classList.remove("zoom-host", "is-zoomed", "is-area", "is-grabbing");
+    },
+  };
 }
 
 export function baseOption(p) {

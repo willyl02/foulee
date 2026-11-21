@@ -4,6 +4,14 @@ Les versions « bêta » (par exemple 0.4.0b1) sont des avant-premières : elles
 sur le canal bêta (Réglages → Application → Mises à jour → « Recevoir les versions bêta »), puis sortent en
 version stable une fois éprouvées.
 
+## 0.8.3b4 — 21 novembre 2026 (bêta)
+
+- **Se déplacer dans un graphique zoomé** sans dézoomer : une fois zoomé en largeur, **la main** (glisser sur le
+  graphique fait défiler la vue, au doigt aussi sur l'analyse) et une **barre de défilement** sous l'analyse fraction
+  par fraction (posée sur le bas du tracé dans les tuiles) : fais glisser le curseur, clique dans la barre pour y
+  aller, ou au clavier (flèches, Pg préc. / Pg suiv., Début, Fin). Pour choisir une autre plage en restant zoomé :
+  la loupe, ou Maj + glisser.
+
 ## 0.8.3b3 — 21 novembre 2026 (bêta)
 
 - **Zoom des graphiques** : en haut à droite de l'analyse fraction par fraction (vue détaillée d'une séance) et des

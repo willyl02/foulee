@@ -2613,8 +2613,29 @@ a.lv-who:hover b { text-decoration: underline; }
 .analyse { --an-top: 30px; padding-top: var(--an-top); }
 .analyse .zoombar { top: 0; }
 .an-plots { cursor: crosshair; }
-.an-brush { position: absolute; top: var(--an-top); bottom: 18px; background: color-mix(in srgb, var(--s1) 16%, transparent);
+.an-brush { position: absolute; top: var(--an-top); bottom: var(--an-bottom); background: color-mix(in srgb, var(--s1) 16%, transparent);
   border-left: 1px solid var(--s1); border-right: 1px solid var(--s1); pointer-events: none; }
+/* Zoomé en largeur : la main pour se déplacer (la loupe ou Maj + glisser pour choisir une autre plage) */
+.analyse.can-pan .an-plots { cursor: grab; touch-action: pan-y; }
+.analyse.can-pan.is-area .an-plots { cursor: crosshair; }
+.analyse.is-panning .an-plots, .analyse.is-panning .an-plots * { cursor: grabbing; }
+/* Barre de défilement d'un graphique zoomé : sous l'analyse ; posée sur le bas du tracé dans les tuiles */
+.zscroll { position: relative; height: 8px; border-radius: 4px; background: color-mix(in srgb, var(--ink) 9%, transparent);
+  cursor: pointer; }
+.zscroll.is-off { visibility: hidden; pointer-events: none; }
+.zs-thumb { position: absolute; top: 0; bottom: 0; min-width: 18px; border-radius: 4px; cursor: grab; touch-action: none;
+  background: color-mix(in srgb, var(--ink) 32%, transparent); }
+.zs-thumb:hover, .zscroll.is-dragging .zs-thumb { background: color-mix(in srgb, var(--s1) 75%, transparent); }
+.zscroll.is-dragging .zs-thumb { cursor: grabbing; }
+.zs-thumb:focus-visible { outline: 2px solid var(--focus, var(--s1)); outline-offset: 2px; }
+@media (pointer: coarse) { .zscroll { height: 12px; border-radius: 6px; } .zs-thumb { border-radius: 6px; min-width: 28px; } }
+.analyse { --an-bottom: 32px; }
+.analyse .zscroll { margin-top: 6px; }
+@media (pointer: coarse) { .analyse { --an-bottom: 36px; } }
+.zoom-host > .zscroll { position: absolute; z-index: 2; height: 6px; }
+.zoom-host > .zscroll:hover, .zoom-host > .zscroll.is-dragging { height: 8px; }
+.zoom-host.is-zoomed:not(.is-area) > div:not(.zoombar):not(.zscroll) { cursor: grab !important; }
+.zoom-host.is-grabbing:not(.is-area) > div:not(.zoombar):not(.zscroll) { cursor: grabbing !important; }
 
 /* ---- Esquisse des séances prévues (calendrier, coach, élève) ---- */
 .sketch { display: block; width: 100%; }

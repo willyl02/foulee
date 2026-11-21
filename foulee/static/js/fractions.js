@@ -13,6 +13,7 @@
 
 import * as F from "./format.js";
 import { icon } from "./icons.js";
+import { scrollbarHTML, wireScrollbar } from "./charts.js";
 
 const SPEED_MIN = 1.4;  // en dessous (≈ 12 min/km), à pied : arrêt ou marche, pas d'allure
 
@@ -152,12 +153,14 @@ export function analysisHTML(rawSegments, curve, { running = true } = {}) {
     <div class="zoombar" role="toolbar" aria-label="Zoom du graphique">
       <span class="zb-group" title="En largeur (le temps)">${icon("arrowsh")}${tool("x+", "plus", "Zoomer en largeur")}${tool("x-", "minus", "Dézoomer en largeur")}</span>
       <span class="zb-group" title="En hauteur (allure et FC)">${icon("arrowsv")}${tool("y+", "plus", "Zoomer en hauteur")}${tool("y-", "minus", "Dézoomer en hauteur")}</span>
+      ${tool("area", "search", "Zoomer sur une autre plage (trace-la sur les courbes)")}
       ${tool("reset", "reset", "Zoom initial (double-clic)")}
-      <span class="zb-help" title="Glisse sur les courbes pour zoomer sur une plage. Ctrl + molette : zoomer ; Maj + molette : se déplacer. Double-clic : zoom initial.">?</span>
+      <span class="zb-help" title="Glisse sur les courbes pour zoomer sur une plage. Une fois zoomé, la main : glisse pour te déplacer, ou fais glisser la barre sous le graphique ; pour choisir une autre plage, la loupe (ou Maj + glisser). Ctrl + molette : zoomer ; Maj + molette : se déplacer. Double-clic : zoom initial.">?</span>
     </div>
     <div class="an-band">${p.cols}</div>
     <div class="an-plots">${p.plots}</div>
     <div class="an-ticks">${p.ticks}</div>
+    ${scrollbarHTML()}
     <div class="an-cursor" hidden></div><div class="an-tip" hidden></div><div class="an-brush" hidden></div>
   </div>`;
 }
@@ -177,13 +180,31 @@ export function wireAnalysis(root) {
     const minSpan = Math.min(30, (data.t1 - data.t0) / 2);
     const plotRect = () => (box.querySelector(".an-plot svg") || box.querySelector(".an-band")).getBoundingClientRect();
     const zoomed = () => view.a > full.a || view.b < full.b || view.ky !== 1;
+    const zoomedX = () => view.a > full.a || view.b < full.b;
+    let area = false; // loupe armée : le prochain glisser choisit une plage, même zoomé
+    const setArea = (on) => {
+      area = on;
+      box.querySelector('[data-zoom="area"]')?.classList.toggle("is-on", on);
+      box.classList.toggle("is-area", on);
+    };
+    let scroll = () => {};
     const draw = () => {
       const p = parts(data, view);
       box.querySelector(".an-band").innerHTML = p.cols;
       box.querySelector(".an-plots").innerHTML = p.plots;
       box.querySelector(".an-ticks").innerHTML = p.ticks;
       box.classList.toggle("is-zoomed", zoomed());
+      // zoomé en largeur : la main (glisser déplace la vue) et la barre de défilement
+      box.classList.toggle("can-pan", zoomedX());
+      scroll();
       fit();
+    };
+    // une seule mise à jour par image quand on glisse (les courbes sont recalculées à chaque fois)
+    let pending = null;
+    const later = (fn) => {
+      const first = !pending;
+      pending = fn;
+      if (first) requestAnimationFrame(() => { const run = pending; pending = null; run(); });
     };
     const setX = (a, b) => {
       let span = Math.max(minSpan, Math.min(full.b - full.a, b - a));
@@ -203,17 +224,24 @@ export function wireAnalysis(root) {
       const r = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
       return view.a + r * (view.b - view.a);
     };
+    const span = () => full.b - full.a;
+    scroll = wireScrollbar(box.querySelector(".zscroll"), {
+      get: () => ({ start: (view.a - full.a) / span(), end: (view.b - full.a) / span() }),
+      move: (start) => { const w = view.b - view.a; const a = full.a + start * span(); later(() => setX(a, a + w)); },
+    });
     box.querySelectorAll("[data-zoom]").forEach((btn) => btn.addEventListener("click", () => {
       const k = btn.dataset.zoom;
       if (k === "x+") zoomX(2);
       else if (k === "x-") zoomX(0.5);
       else if (k === "y+") { view = { ...view, ky: Math.min(8, view.ky * 1.5) }; draw(); }
       else if (k === "y-") { view = { ...view, ky: Math.max(0.5, view.ky / 1.5) }; draw(); }
-      else { view = { ...full }; draw(); }
+      else if (k === "area") setArea(!area);
+      else { view = { ...full }; setArea(false); draw(); }
     }));
     box.addEventListener("dblclick", (ev) => {
-      if (ev.target.closest(".zoombar")) return;
+      if (ev.target.closest(".zoombar, .zscroll")) return;
       view = { ...full };
+      setArea(false);
       draw();
     });
     box.addEventListener("wheel", (ev) => {
@@ -226,27 +254,37 @@ export function wireAnalysis(root) {
         setX(view.a + shift, view.b + shift);
       }
     }, { passive: false });
-    // glisser sur les courbes : choisir la plage à agrandir
+    // glisser sur les courbes : choisir la plage à agrandir ; une fois zoomé en largeur, déplacer la vue (la main),
+    // sauf loupe armée ou Maj enfoncée. Au doigt, seul le déplacement (zoomé) : sinon le glisser fait défiler la page
     let drag = null;
     box.addEventListener("pointerdown", (ev) => {
-      if (ev.button !== 0 || !ev.target.closest(".an-plots") || ev.pointerType === "touch") return;
-      drag = { x: ev.clientX, t: timeAt(ev.clientX) };
+      if (ev.button !== 0 || !ev.target.closest(".an-plots")) return;
+      const pan = zoomedX() && !area && !ev.shiftKey;
+      if (ev.pointerType === "touch" && !pan) return;
+      drag = pan ? { pan: true, x: ev.clientX, a: view.a, b: view.b } : { x: ev.clientX, t: timeAt(ev.clientX) };
+      box.classList.toggle("is-panning", pan);
       box.setPointerCapture(ev.pointerId);
     });
     box.addEventListener("pointerup", (ev) => {
       if (!drag) return;
-      const moved = Math.abs(ev.clientX - drag.x);
-      const t = timeAt(ev.clientX);
-      const start = drag.t;
+      const done = drag;
       drag = null;
+      box.classList.remove("is-panning");
+      if (done.pan) return;
+      const moved = Math.abs(ev.clientX - done.x);
+      const t = timeAt(ev.clientX);
       brush.hidden = true;
-      if (moved > 6) setX(Math.min(start, t), Math.max(start, t));
+      if (moved > 6) { setArea(false); setX(Math.min(done.t, t), Math.max(done.t, t)); }
     });
-    box.addEventListener("pointercancel", () => { drag = null; brush.hidden = true; });
+    box.addEventListener("pointercancel", () => { drag = null; brush.hidden = true; box.classList.remove("is-panning"); });
     const move = (ev) => {
       const rect = plotRect();
       const host = box.getBoundingClientRect();
-      if (drag) {
+      if (drag?.pan) {
+        const shift = -((ev.clientX - drag.x) / rect.width) * (drag.b - drag.a);
+        const { a, b } = drag;
+        later(() => setX(a + shift, b + shift));
+      } else if (drag) {
         const x1 = Math.min(Math.max(drag.x, rect.left), rect.right) - host.left;
         const x2 = Math.min(Math.max(ev.clientX, rect.left), rect.right) - host.left;
         brush.hidden = false;
