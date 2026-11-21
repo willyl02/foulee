@@ -922,7 +922,7 @@ foulee/
   demo.py          données fictives
   static/          interface (HTML/CSS/JS, ECharts et Leaflet embarqués), appli installable (manifest, sw.js)
 packaging/         installateur Windows (Inno Setup), construction et essai de bout en bout
-docs/              page relais de Withings (publiée par GitHub Pages), présentation illustrée
+docs/              site (GitHub Pages) : confidentialité, présentation et guides, ancienne page relais de Withings
 scripts/           installation et mise à jour : archive Windows (.ps1), serveur Linux (.sh, maj_serveur.py)
 tests/             tests, dont un faux serveur Garmin et un faux Withings pour tester toute la chaîne
 ```
@@ -933,3 +933,9 @@ puis une entrée dans `sync.SOURCES`. Les vues, les calculs et Claude en profite
 sans autre changement.
 
 Tests : `uv run pytest`.
+
+## Licence
+
+Code source public, **tous droits réservés** : tu peux le lire, installer et utiliser Foulée pour toi,
+et proposer des corrections. Toute autre réutilisation (copie, modification, diffusion, vente, service en
+ligne) demande l'accord de l'auteur. Détails dans [LICENSE](LICENSE).
