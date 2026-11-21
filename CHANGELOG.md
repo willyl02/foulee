@@ -4,7 +4,31 @@ Les versions « bêta » (par exemple 0.4.0b1) sont des avant-premières : elles
 sur le canal bêta (Réglages → Application → Mises à jour → « Recevoir les versions bêta »), puis sortent en
 version stable une fois éprouvées.
 
-## 0.8.2b11 — 21 novembre 2026
+## 0.8.2 — 21 novembre 2026
+
+La version stable qui réunit les bêtas 0.8.2 ; le détail de chacune est dans l'historique des versions (CHANGELOG.md sur GitHub).
+
+- **« Ma séance du jour »** remplace « Aujourd'hui » : le verdict du jour (sommeil, FC de repos, body battery), la
+  séance prévue avec ses étapes et tes allures, la météo heure par heure et **ton créneau** pour courir (hors de tes
+  heures de travail si tu es posté), puis le débrief : la séance faite face à la prévue, ton **ressenti** de 1 à 10,
+  à envoyer à ton coach.
+- **Notifications** du relais du club, même Foulée fermé : sur le téléphone avec **ntfy** (gratuit, sans compte, un QR
+  code) et **par e-mail** (adresse confirmée par un code). Séance reçue, modifiée, annulée, nouveau message ; heures
+  calmes ; détail masqué au choix. Sur le relais, `sudo foulee relais email` branche le service d'envoi (Brevo…).
+- **Coach** : **groupes de niveau** par VMA (avec la VMA du test au club), « Mes élèves » rangés par groupe et
+  « Proposer au groupe », une **bibliothèque de séances**, les **répétitions libres** à la touche Lap, un **grand
+  calendrier** de neuf semaines (coach et élève) et l'**analyse fraction par fraction** de chaque séance.
+- **Réglages réorganisés** comme sur Windows et Mac (Moi, Entraînement, Connexions, Club et coach, Application), avec
+  une recherche ; tout s'enregistre tout seul.
+- **Club en ligne dans Foulée** (application partenaire), une colonne de gauche en trois parties dont on glisse les
+  vues pour les réordonner, et un bouton pour revenir en haut.
+- **Renfo** : tes propres séances, gardées et envoyées sur ta montre.
+- **Corrigés** : la séance faite rattachée à la bonne séance prévue, plus de doublon de la séance du coach ni de la
+  séance déplacée dans Garmin Connect, l'écran noir avec un bloqueur de pub, et plus d'objectif d'office à
+  l'installation.
+- **Relais** : message d'accueil à la connexion SSH avec les commandes usuelles, et `sudo foulee relais groupes`.
+
+## 0.8.2b11 — 21 novembre 2026 (bêta)
 
 - **Les notifications par e-mail** (Réglages → Club et coach → Notifications), en plus de ntfy : séance reçue,
   modifiée ou annulée, nouveau message, avec les mêmes cases et les mêmes heures calmes (l'e-mail attend leur fin
