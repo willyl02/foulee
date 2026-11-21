@@ -1,0 +1,38 @@
+Foulée — Copyright © 2025-2026 William (willyl02 sur GitHub). Tous droits réservés.
+
+Ce dépôt est public pour qu'on puisse lire le code, vérifier ce que fait Foulée de ses données,
+installer Foulée et recevoir ses mises à jour. Cela ne donne aucun autre droit sur le code.
+
+Ce qui est permis :
+- lire le code et la documentation ;
+- installer et utiliser Foulée, pour soi, à partir des versions publiées dans ce dépôt ;
+- copier le dépôt dans GitHub (« fork »), dans les limites des conditions d'utilisation de GitHub ;
+- signaler un problème ou proposer une modification (issue, pull request). Une contribution
+  proposée ici peut être intégrée à Foulée sous la présente licence.
+
+Ce qui demande l'accord écrit de l'auteur :
+- reproduire, modifier, traduire ou adapter tout ou partie du code, de l'interface, des textes,
+  des images ou de la documentation en dehors de ce dépôt ;
+- diffuser, publier, vendre, louer ou proposer comme service (en ligne ou non) Foulée, une version
+  modifiée ou une œuvre qui en dérive ;
+- utiliser le nom « Foulée », son logo ou son apparence pour un autre produit.
+
+Les bibliothèques tierces fournies avec Foulée (ECharts, Leaflet, polices Barlow…) restent sous leurs
+propres licences, indiquées dans leurs fichiers.
+
+Foulée est fourni « tel quel », sans garantie d'aucune sorte. L'auteur ne peut être tenu responsable
+d'un dommage lié à son utilisation. Foulée n'est pas un dispositif médical.
+
+Pour toute autre utilisation : ouvrir une issue sur https://github.com/willyl02/foulee.
+
+---
+
+Foulée — Copyright © 2025-2026 William (willyl02 on GitHub). All rights reserved.
+
+This repository is public so that the code can be read, Foulée can be installed and updated.
+No other right is granted. You may read the code, install and use the published releases for
+yourself, fork it on GitHub within GitHub's Terms of Service, and open issues or pull requests
+(contributions offered here may be merged under this licence). Any reproduction, modification,
+distribution, sale or provision as a service of Foulée or a derived work, and any use of the name
+or logo, requires the author's written permission. Third-party libraries keep their own licences.
+Provided "as is", without warranty of any kind.
