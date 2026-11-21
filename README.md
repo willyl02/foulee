@@ -14,10 +14,11 @@ arrière-plan, avec son icône près de l'horloge ; **sur Mac** (bêta), c'est u
 Applications, avec son icône dans la barre des menus (section 1 bis). Installé sur un serveur à la maison,
 il s'ouvre aussi **sur ton téléphone**, de partout, comme une appli (section 9).
 
-**Présentation illustrée** (27 pages, avec le téléchargement, l'installation pas à pas
-et la clé API Garmin) : [le PDF](docs/presentation/Foulee-presentation-beta-testeurs.pdf),
-ou [les mêmes pages en images JPG](docs/presentation/Foulee-presentation-pages-jpg.zip)
-à partager.
+**Présentation illustrée** (30 pages, avec le téléchargement, l'installation pas à pas
+et la clé API Garmin) : [le PDF](docs/presentation/Foulee-presentation-beta-testeurs-0.8.2b10.pdf),
+ou [les mêmes pages en images JPG](docs/presentation/Foulee-presentation-pages-jpg-0.8.2b10.zip)
+à partager. Les guides de Foulée Coach (coach, élève) et « Foulée sur ton téléphone » sont dans
+[docs/presentation](docs/presentation/).
 
 Aucun service intermédiaire : ta machine parle directement à Garmin (client Python
 officiel de Garmin) et à Withings, et tout est stocké chez toi.
@@ -37,7 +38,7 @@ Withings (API publique) ──┘                                   │
 
 ## 1. Installer Foulée sur Windows
 
-En images : pages 24 à 27 de la [présentation](docs/presentation/Foulee-presentation-beta-testeurs.pdf).
+En images : pages 27 à 30 de la [présentation](docs/presentation/Foulee-presentation-beta-testeurs-0.8.2b10.pdf).
 
 1. Télécharge **`Foulee-Setup-<version>.exe`** sur la page des versions :
    https://github.com/willyl02/foulee/releases (pas besoin de compte GitHub).
