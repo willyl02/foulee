@@ -405,6 +405,11 @@ dialog:has(.dlg-goal) { width: min(620px, calc(100vw - 32px)); }
 .tile-tools button { width: 28px; height: 28px; border: 0; border-radius: 6px; background: transparent; cursor: pointer; display: grid; place-items: center; color: var(--ink-2); }
 .tile-tools button:hover { background: var(--surface-2); color: var(--ink); }
 .tile-tools svg { width: 16px; height: 16px; }
+.tt-step { display: inline-flex; align-items: center; gap: 1px; padding: 0 2px 0 6px; border-radius: 7px; background: var(--surface-2); color: var(--muted); }
+.tt-step > svg { width: 14px; height: 14px; }
+.tile-tools .tt-step button { width: 24px; height: 28px; }
+.tile-tools .tt-step button:disabled { opacity: .35; cursor: default; background: transparent; }
+.tt-step b { min-width: 34px; text-align: center; font: 600 12.5px var(--font-figures); color: var(--ink); }
 .editing .tile[draggable="true"] { cursor: grab; }
 .tile.drop-before { box-shadow: -4px 0 0 0 var(--focus); }
 .tile.drop-after { box-shadow: 4px 0 0 0 var(--focus); }

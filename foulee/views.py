@@ -332,6 +332,7 @@ TILE_TYPES: list[dict[str, Any]] = [
 ]
 TILE_INDEX = {t["type"]: t for t in TILE_TYPES}
 WIDTHS = (3, 4, 6, 8, 9, 12)
+MAX_H = 8  # hauteur d'une tuile : de 1 à 8 rangées (0.8.3 ; 3 au plus avant, ce qui rabotait les grandes tuiles)
 VIEW_PERIODS = (7, 30, 90, 180, 365, 730)
 ICONS = ["home", "sun", "activity", "map", "moon", "flag", "heart", "chart", "calendar", "star", "bolt", "layers",
          "run", "trophy", "clock", "user", "club", "scale", "dumbbell"]
@@ -486,7 +487,7 @@ def clean_spec(spec: dict) -> dict:
             continue
         w = int(tile.get("w") or TILE_INDEX[kind]["taille"]["w"])
         w = min(WIDTHS, key=lambda candidate: abs(candidate - w))
-        h = max(1, min(3, int(tile.get("h") or TILE_INDEX[kind]["taille"]["h"])))
+        h = max(1, min(MAX_H, int(tile.get("h") or TILE_INDEX[kind]["taille"]["h"])))
         clean = {"id": str(tile.get("id") or uuid.uuid4().hex[:8])[:16], "type": kind, "w": w, "h": h,
                  "params": _clean_params(kind, tile.get("params"))}
         if tile.get("titre"):

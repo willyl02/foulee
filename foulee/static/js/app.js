@@ -52,6 +52,8 @@ function viewDays(view) {
   return Number(store("foulee-period")) || 90;
 }
 const WIDTHS = [3, 4, 6, 8, 9, 12];
+const MAX_H = 8;  // hauteur d'une tuile : de 1 à 8 rangées
+const widthPct = (w) => `${Math.round((w / 12) * 100)} %`;
 const THEMES = ["auto", "light", "dark"];
 const THEME_LABELS = { auto: "Thème : automatique", light: "Thème : clair", dark: "Thème : sombre" };
 
@@ -592,7 +594,7 @@ function renderTile(view, tile, index, ctx) {
   const fixed = hasPeriod(tile) && !followsView(tile) && view.spec.tuiles.some(followsView)
     ? `<span class="tile-fixed" title="Période propre à cette tuile : le sélecteur de la vue ne la change pas (Modifier la vue pour la changer).">${icon("lock")}${F.escape(PERIOD_LABEL[tile.params.periode] || `${tile.params.periode} j`)}</span>` : "";
   el.innerHTML = `${renderer.ownHead ? "" : `<div class="tile-head"><h2 class="tile-title" title="${F.escape(title)}">${F.escape(title)}</h2>${fixed}<span class="tile-src" hidden></span><span class="tile-sub"></span></div>`}
-    <div class="tile-body"></div>${state.editing ? tileTools() : ""}`;
+    <div class="tile-body"></div>${state.editing ? tileTools(tile) : ""}`;
   const body = el.querySelector(".tile-body");
   // Sources des chiffres (Garmin, Strava, Withings), d'après les réponses de chaque requête de la tuile
   let sources = [];
@@ -699,12 +701,18 @@ function wireViewBar(view) {
   });
 }
 
-function tileTools() {
+function tileTools(tile) {
+  // largeur et hauteur : un petit compteur chacune (− valeur +), en % de la largeur et en rangées
+  const stepper = (kind, ic, label, value, canDown, canUp) => `<span class="tt-step" title="${label}">${icon(ic)}
+    <button type="button" data-tool="${kind}-" aria-label="${label} : moins" ${canDown ? "" : "disabled"}>${icon("minus")}</button>
+    <b aria-live="polite">${value}</b>
+    <button type="button" data-tool="${kind}+" aria-label="${label} : plus" ${canUp ? "" : "disabled"}>${icon("plus")}</button></span>`;
+  const wi = WIDTHS.indexOf(tile.w);
   return `<div class="tile-tools" role="toolbar" aria-label="Outils de la tuile">
     <button type="button" data-tool="left" title="Déplacer avant" aria-label="Déplacer avant">${icon("left")}</button>
     <button type="button" data-tool="right" title="Déplacer après" aria-label="Déplacer après">${icon("right")}</button>
-    <button type="button" data-tool="width" title="Changer la largeur" aria-label="Changer la largeur">${icon("width")}</button>
-    <button type="button" data-tool="height" title="Changer la hauteur" aria-label="Changer la hauteur">${icon("height")}</button>
+    ${stepper("width", "width", "Largeur", widthPct(tile.w), wi > 0, wi < WIDTHS.length - 1)}
+    ${stepper("height", "height", "Hauteur (rangées)", tile.h, tile.h > 1, tile.h < MAX_H)}
     <button type="button" data-tool="edit" title="Régler" aria-label="Régler la tuile">${icon("settings")}</button>
     <button type="button" data-tool="delete" title="Retirer" aria-label="Retirer la tuile">${icon("trash")}</button>
   </div>`;
@@ -718,8 +726,15 @@ function wireTileTools(view, el, index) {
     if (!tool) return;
     if (tool === "left" && index > 0) [tiles[index - 1], tiles[index]] = [tiles[index], tiles[index - 1]];
     else if (tool === "right" && index < tiles.length - 1) [tiles[index + 1], tiles[index]] = [tiles[index], tiles[index + 1]];
-    else if (tool === "width") tile.w = WIDTHS[(WIDTHS.indexOf(tile.w) + 1) % WIDTHS.length];
-    else if (tool === "height") tile.h = (tile.h % 3) + 1;
+    else if (tool === "width+" || tool === "width-") {
+      const i = WIDTHS.indexOf(tile.w) + (tool === "width+" ? 1 : -1);
+      if (i < 0 || i >= WIDTHS.length) return;
+      tile.w = WIDTHS[i];
+    } else if (tool === "height+" || tool === "height-") {
+      const h = tile.h + (tool === "height+" ? 1 : -1);
+      if (h < 1 || h > MAX_H) return;
+      tile.h = h;
+    }
     else if (tool === "edit") {
       const res = await E.editTile(tile, state.types[tile.type], state.boot);
       if (!res) return;

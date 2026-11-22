@@ -176,8 +176,8 @@ export function editTile(tile, typeDef, boot) {
         <label class="field"><span>Titre (laisse vide pour le titre automatique)</span><input type="text" data-title value="${F.escape(tile.titre || "")}"></label>
         ${typeDef.params.map((p) => fieldHTML(p, tile.params?.[p.key] ?? p.default, boot)).join("")}
         <div class="form-grid" style="grid-template-columns:1fr 1fr">
-          <label class="field"><span>Largeur</span><select data-w>${[3, 4, 6, 8, 9, 12].map((w) => `<option value="${w}" ${w === tile.w ? "selected" : ""}>${{ 3: "Quart", 4: "Tiers", 6: "Moitié", 8: "Deux tiers", 9: "Trois quarts", 12: "Toute la largeur" }[w]}</option>`).join("")}</select></label>
-          <label class="field"><span>Hauteur</span><select data-h>${[1, 2, 3].map((h) => `<option value="${h}" ${h === tile.h ? "selected" : ""}>${{ 1: "Basse", 2: "Moyenne", 3: "Haute" }[h]}</option>`).join("")}</select></label>
+          <label class="field"><span>Largeur (% de la page)</span><select data-w>${[3, 4, 6, 8, 9, 12].map((w) => `<option value="${w}" ${w === tile.w ? "selected" : ""}>${Math.round((w / 12) * 100)} %</option>`).join("")}</select></label>
+          <label class="field"><span>Hauteur (rangées, de 1 à 8)</span><select data-h>${[1, 2, 3, 4, 5, 6, 7, 8].map((h) => `<option value="${h}" ${h === tile.h ? "selected" : ""}>${h}</option>`).join("")}</select></label>
         </div>
       </div>
       <div class="dlg-foot"><button class="btn" value="cancel" type="submit">Annuler</button><button class="btn btn-primary" value="ok" type="submit">Enregistrer</button></div>

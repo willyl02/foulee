@@ -4,6 +4,13 @@ Les versions « bêta » (par exemple 0.4.0b1) sont des avant-premières : elles
 sur le canal bêta (Réglages → Application → Mises à jour → « Recevoir les versions bêta »), puis sortent en
 version stable une fois éprouvées.
 
+## 0.8.3b13 — 22 novembre 2026 (bêta)
+
+- **Taille des tuiles en chiffres.** En modifiant une vue, chaque tuile a deux petits compteurs (− valeur +) :
+  la **largeur** en % de la page (25, 33, 50, 67, 75, 100 %) et la **hauteur** en rangées, **de 1 à 8** (au lieu
+  de « basse, moyenne, haute »). Même chose dans la roue dentée de la tuile. Avant, la hauteur ne dépassait pas 3
+  rangées, et enregistrer une vue rabotait les tuiles plus grandes (le calendrier en a 5) : c'est fini.
+
 ## 0.8.3b12 — 22 novembre 2026 (bêta)
 
 - **Zones FC : la montre OU Foulée, plus de mélange.** Dans Réglages → Entraînement → Zones FC, deux choix

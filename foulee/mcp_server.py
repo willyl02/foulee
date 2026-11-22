@@ -687,7 +687,7 @@ def types_de_tuiles() -> dict[str, Any]:
     """Types de tuiles disponibles et leurs réglages, pour composer une vue avec enregistrer_vue."""
     return {
         "tuiles": views.TILE_TYPES,
-        "tailles": "w = largeur sur 12 colonnes (3, 4, 6, 8, 9 ou 12) ; h = hauteur (1, 2 ou 3).",
+        "tailles": "w = largeur sur 12 colonnes (3, 4, 6, 8, 9 ou 12) ; h = hauteur en rangées, de 1 à 8.",
         "periode": "'herite' suit le sélecteur de période de la vue, sinon un nombre de jours.",
         "sports": views.SPORT_OPTIONS,
         "icones": views.ICONS,
