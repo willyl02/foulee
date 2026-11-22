@@ -53,12 +53,17 @@ export const profil = {
     const avatar = b.profil?.photo
       ? `<img class="hello-photo" src="/api/profil/photo?v=${b.profil.photo_maj || 0}" alt="">`
       : `<span class="hello-logo">${brandMark(b.profil, 52)}</span>`;
+    // Le logo du club (Réglages → Mon club), au milieu du bandeau, sauf si on l'a décoché
+    const clubLogo = b.club_logo && b.logotheque?.accueil !== false
+      ? `<a class="hello-club" href="${b.club ? "#/vue/club" : "#/reglages?section=club"}" title="${F.escape(b.club?.nom || "Mon club")}"><img src="/api/club/logo?v=${b.club_logo}" alt="Logo du club${b.club?.nom ? ` ${F.escape(b.club.nom)}` : ""}"></a>`
+      : "";
     body.innerHTML = `<div class="hello">
       ${avatar}
       <div class="hello-text">
         <h2>${greeting()}${name ? ` ${F.escape(name)}` : ""}</h2>
         <div class="hello-date">${F.escape(F.dateLong(F.isoDate(today), { year: true }))}</div>
       </div>
+      ${clubLogo}
       <div class="hello-chips">${chips.join("")}</div>
     </div>`;
   },

@@ -7,10 +7,11 @@ import { icon } from "./icons.js";
 import { goalManager } from "./goals.js";
 import { partnerPanel, sitesPanel } from "./appli-externe.js";
 import { clubPanel } from "./settings-club.js";
+import { logoLibrary } from "./logo-choice.js";
 import { profilePanel, transferPanel } from "./settings-profile.js";
 import { scheduleEditor } from "./settings-schedule.js";
 import { settingsShell } from "./settings-shell.js";
-import { hrZonesEditor, paceZonesEditor } from "./settings-zones.js";
+import { hrZonesEditor, paceZonesEditor, zoneColorsEditor } from "./settings-zones.js";
 import { systemSections, wireSystem } from "./system.js";
 import { accessPanel, usersPanel } from "./users.js";
 
@@ -86,6 +87,8 @@ export function renderSettings(page, boot, { onSaved, onProfile, refreshBoot, to
         <h2>Zones de fréquence cardiaque</h2>
         <p class="intro">Elles comptent ton temps par zone dans chaque séance : soit celles de ta montre, soit les tiennes, réglées ici.</p>
         <div data-hr-zones></div>
+        <h3>Couleurs des zones</h3>
+        <div data-zone-colors></div>
       </section>
 
       <section data-section="zones">
@@ -151,12 +154,16 @@ export function renderSettings(page, boot, { onSaved, onProfile, refreshBoot, to
   profilePanel(page.querySelector("[data-profile]"), boot, { toast, onProfile });
   accessPanel(page.querySelector("[data-access]"), boot, { toast, onChange: () => refreshBoot() });
   if (principal) usersPanel(page.querySelector("[data-users]"), boot, { toast, onChange: () => refreshBoot() });
-  clubPanel(page.querySelector("[data-club]"), boot, { toast, onChange: () => refreshBoot() });
-  partnerPanel(page.querySelector("[data-partner]"), boot, { toast, onChange: () => refreshBoot() });
+  const logos = logoLibrary(boot);  // une seule liste pour le logo du club et celui de l'application partenaire
+  clubPanel(page.querySelector("[data-club]"), boot, { toast, onChange: () => refreshBoot(), logos });
+  partnerPanel(page.querySelector("[data-partner]"), boot, { toast, onChange: () => refreshBoot(), logos });
   sitesPanel(page.querySelector("[data-sites]"), boot, { toast, onChange: () => refreshBoot() });
   const schedule = scheduleEditor(page.querySelector("[data-schedule]"), s.horaires);
   const hrZones = hrZonesEditor(page.querySelector("[data-hr-zones]"), boot, profile);
   const paceZones = paceZonesEditor(page.querySelector("[data-pace-zones]"), boot, vma);
+  const zoneColors = zoneColorsEditor(page.querySelector("[data-zone-colors]"), boot, {
+    onApply: () => { hrZones.refresh(); paceZones.refresh(); },
+  });
   goalManager(page.querySelector("[data-goals]"), {
     toast,
     vma,
@@ -199,6 +206,7 @@ export function renderSettings(page, boot, { onSaved, onProfile, refreshBoot, to
       horaires: schedule.value(),
       zones_fc: hrZones.value(),
       zones_allure: pace,
+      couleurs_zones: zoneColors.value(),
       fractions_seuil_pct_vma: num("fractions") || 85,
       fit_auto_jours: Number(val("fit_auto_jours")),
       synchro_auto: syncRhythmValue(form, s),

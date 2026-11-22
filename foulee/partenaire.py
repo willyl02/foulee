@@ -5,9 +5,9 @@ une entrée s'ajoute dans la colonne de gauche, sous « Nouvelle vue » ; la pag
 précédent, suivant, recharger et « ouvrir dans le navigateur ». L'adresse peut aller jusqu'à une page précise.
 
 Les sites externes (réglage « sites_externes ») : d'autres sites, tiers, sur le même modèle, chacun avec son entrée
-sous l'application partenaire et, au choix, son logo (un PNG importé, sinon le petit globe) ; l'application
-partenaire peut avoir le sien aussi (identifiant « partenaire »). Les logos sont rangés avec les données du profil,
-réduits à 96 pixels.
+sous l'application partenaire et, au choix, son logo (un PNG importé, sinon le petit globe), rangé avec les données
+du profil, réduit à 96 pixels. L'application partenaire (identifiant « partenaire ») prend le sien dans la
+logothèque (voir logotheque.py), la même liste que le logo du club.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
-from . import config
+from . import config, logotheque
 
 DEFAULT = {"actif": False, "nom": "Club en ligne", "adresse": "https://app.clubenligne.fr/"}
 MAX_NAME = 30
@@ -121,18 +121,29 @@ def _logo_dir() -> Path:
 
 
 def logo_path(site_id: str) -> Path:
-    if site_id != PARTNER_LOGO and not SITE_ID.fullmatch(site_id or ""):
+    if site_id == PARTNER_LOGO:  # celui choisi dans la logothèque (sinon un chemin qui n'existe pas : le globe)
+        return logotheque.chosen_path("partenaire") or _logo_dir() / f"{PARTNER_LOGO}.png"
+    if not SITE_ID.fullmatch(site_id or ""):
         raise LogoError("Site inconnu.")
     return _logo_dir() / f"{site_id}.png"
 
 
 def logo_version(site_id: str) -> int | None:
+    if site_id == PARTNER_LOGO:
+        return logotheque.chosen_version("partenaire")
     path = logo_path(site_id)
     return int(path.stat().st_mtime_ns // 1_000_000) if path.exists() else None
 
 
 def save_logo(site_id: str, data: bytes) -> dict:
-    """Contrôle le PNG (dimensions, poids), le réduit à 96 pixels sans métadonnées et le range."""
+    """Contrôle le PNG (dimensions, poids), le réduit à 96 pixels sans métadonnées et le range. Pour l'application
+    partenaire : le logo entre dans la logothèque et devient celui du menu."""
+    if site_id == PARTNER_LOGO:
+        try:
+            logotheque.add(logotheque.LEGACY_NAMES["partenaire"], data, use="partenaire")
+        except logotheque.LogoError as exc:
+            raise LogoError(str(exc)) from None
+        return {"id": site_id, "logo": logo_version(site_id)}
     path = logo_path(site_id)
     if not data:
         raise LogoError("Fichier vide.")
@@ -167,5 +178,8 @@ def save_logo(site_id: str, data: bytes) -> dict:
 
 
 def delete_logo(site_id: str) -> dict:
+    if site_id == PARTNER_LOGO:  # le globe revient ; le logo reste dans la liste
+        logotheque.choose("partenaire", None)
+        return {"id": site_id, "logo": None}
     logo_path(site_id).unlink(missing_ok=True)
     return {"id": site_id, "logo": None}

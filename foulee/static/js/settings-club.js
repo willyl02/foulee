@@ -1,9 +1,10 @@
 // Réglages → Mon club : « Je fais partie d'un club », le numéro de la licence, la fiche du club collée
 // depuis athle.fr (Foulée en tire les coordonnées) et la licence. Enregistré à part du reste du formulaire.
-// « Fier de ton club ? » : le logo du club, envoyé tout de suite (comme la photo de profil).
+// « Fier de ton club ? » : le logo du club, choisi dans la logothèque (voir logo-choice.js), enregistré tout de suite.
 import * as api from "./api.js";
 import * as F from "./format.js";
 import { icon } from "./icons.js";
+import { logoChoice, logoLibrary, logoURL } from "./logo-choice.js";
 
 const FIND = "https://www.athle.fr/trouver-un-club/";
 const FIELDS = [  // [clé, libellé, clavier du téléphone, exemple]
@@ -18,7 +19,6 @@ const FIELDS = [  // [clé, libellé, clavier du téléphone, exemple]
   ["page", "Page du club sur athle.fr", "url", "https://www.athle.fr/clubs/…"],
 ];
 const WIDE = new Set(["nom", "adresse", "page"]);
-const LOGO_MAX = 5 * 1024 * 1024;  // comme le serveur
 
 /** L'adresse du logo du club (la date du fichier évite l'ancienne image en cache), ou null sans logo. */
 export function clubLogoURL(version) {
@@ -34,7 +34,7 @@ function classementUrl(number, year) {
   return `https://www.athle.fr/bases/liste.aspx?frmbase=cclubs&frmmode=2&frmespace=&frmtypeclub=M&frmsaison=${year}&frmnclub=${number}&frmruptures=`;
 }
 
-export function clubPanel(box, boot, { toast, onChange }) {
+export function clubPanel(box, boot, { toast, onChange, logos = logoLibrary(boot) }) {
   const saved = boot.reglages?.club || {};
   const lic = saved.licence || {};
   const year = season();
@@ -154,50 +154,23 @@ export function clubPanel(box, boot, { toast, onChange }) {
     await save(true, "Club enregistré : retrouve-le dans la vue « Mon club », dans la colonne de gauche.");
   });
 
-  // « Fier de ton club ? » : le logo, enregistré dès qu'il est choisi
+  // « Fier de ton club ? » : le logo, choisi dans la liste (ceux de l'ACCT, ceux importés et nommés), enregistré aussitôt
   const logoBox = box.querySelector("[data-logo-box]");
-  let logo = boot.club_logo || null;
-  const paintLogo = (message = "", error = false) => {
-    const url = clubLogoURL(logo);
-    logoBox.innerHTML = `
-      <div class="club-logo-preview${url ? "" : " empty"}" title="${url ? "Le damier montre les parties transparentes" : ""}">
-        ${url ? `<img src="${url}" alt="Logo du club">` : icon("club")}</div>
-      <div class="club-logo-body">
-        <b>Fier de ton club ?</b>
-        <p class="hint">Ajoute son logo : il s'affiche dans « Mon club » et, si ton coach en fait partie (Réglages → Coach et élèves), sur la page « Mon coach ». Idéal : un <b>PNG à fond transparent</b>, carré, <b>500 × 500 pixels</b> (5 Mo au plus).</p>
-        <div class="inline-actions">
-          <button class="btn" type="button" data-logo-pick>${icon("upload")}${url ? "Changer le logo" : "Importer le logo"}</button>
-          ${url ? `<button class="btn btn-ghost btn-danger" type="button" data-logo-remove>${icon("trash")}Retirer</button>` : ""}
-          <input type="file" accept="image/png,image/webp,image/jpeg" hidden data-logo-file>
-        </div>
-        <p class="hint club-logo-status${error ? " error" : ""}" role="status">${F.escape(message)}</p>
-      </div>`;
-  };
-  paintLogo();
-  logoBox.addEventListener("click", async (e) => {
-    if (e.target.closest("[data-logo-pick]")) logoBox.querySelector("[data-logo-file]").click();
-    if (e.target.closest("[data-logo-remove]")) {
-      try {
-        await api.del("/api/club/logo");
-        logo = null;
-        paintLogo();
-        toast("Logo du club retiré.");
-        await onChange?.();
-      } catch (err) { paintLogo(err.message, true); }
-    }
-  });
-  logoBox.addEventListener("change", async (e) => {
-    const file = e.target.closest("[data-logo-file]")?.files[0];
-    if (!file) return;
-    if (file.size > LOGO_MAX) { paintLogo(`Image trop lourde (${F.dec1(file.size / 1024 / 1024)} Mo) : 5 Mo au plus.`, true); return; }
-    logoBox.querySelector("[data-logo-pick]").disabled = true;
-    try {
-      const res = await api.putBlob("/api/club/logo", file);
-      logo = res.logo_maj;
-      paintLogo(res.transparent ? "" : "Ce logo n'a pas de fond transparent : il s'affichera avec son fond. Un PNG transparent se fond mieux dans la page.");
-      toast("Logo enregistré : il s'affiche dans « Mon club ».");
-      await onChange?.();
-    } catch (err) { paintLogo(err.message, true); }
+  logoBox.innerHTML = `
+    <div class="club-logo-preview" data-logo-preview></div>
+    <div class="club-logo-body">
+      <b>Fier de ton club ?</b>
+      <p class="hint">Choisis son logo : il s'affiche dans « Mon club », dans le bandeau de l'Accueil et, si ton coach en fait partie (Réglages → Coach et élèves), sur la page « Mon coach ». Le tien n'est pas dans la liste ? « Importer un logo… », donne-lui un nom : il s'y ajoute, pour le club comme pour l'application partenaire.</p>
+      <div data-logo-choice></div>
+    </div>`;
+  const preview = logoBox.querySelector("[data-logo-preview]");
+  logoChoice(logoBox.querySelector("[data-logo-choice]"), logos, {
+    use: "club", none: "Aucun logo", home: true, toast, onChange,
+    onPreview: (entry) => {
+      preview.classList.toggle("empty", !entry);
+      preview.title = entry ? "Le damier montre les parties transparentes" : "";
+      preview.innerHTML = entry ? `<img src="${logoURL(entry)}" alt="Logo du club">` : icon("club");
+    },
   });
 
   // La fiche collée : Foulée en tire les coordonnées

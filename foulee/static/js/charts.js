@@ -21,6 +21,39 @@ export function palette() {
   };
 }
 
+// ------------------------------------------------------------------ couleurs des zones
+// Réglage « couleurs_zones » : Garmin (les jetons --z1…--z5 de la feuille de style, par défaut), « bleus »
+// (attribut data-zones sur la racine) ou « perso » (cinq couleurs posées sur la racine, les mêmes en clair et en sombre).
+export const ZONE_STYLES = [
+  ["garmin", "Comme Garmin", "Gris, bleu, vert, orange, rouge : les couleurs de ta montre et de Garmin Connect."],
+  ["bleus", "Dégradé de bleus", "Les bleus des premières versions de Foulée."],
+  ["perso", "À mon goût", "Choisis la couleur de chaque zone."],
+];
+export const GARMIN_ZONE_COLORS = ["#9ea8a3", "#2a78d6", "#13a06e", "#f08a1c", "#d3263a"];
+
+export function applyZoneColors(value) {
+  const root = document.documentElement;
+  const style = value?.style || "garmin";
+  if (style === "bleus") root.dataset.zones = "bleus";
+  else delete root.dataset.zones;
+  const colors = style === "perso" && Array.isArray(value.perso) ? value.perso : null;
+  [1, 2, 3, 4, 5].forEach((z, i) => {
+    if (colors) root.style.setProperty(`--z${z}`, colors[i]);
+    else root.style.removeProperty(`--z${z}`);
+  });
+}
+
+/** Encre lisible sur une couleur de fond (« #rrggbb » ou « rgb(…) ») : foncée sur les teintes claires, blanche sinon. */
+export function inkOn(color) {
+  const hex = /^#([0-9a-f]{6})$/i.exec(String(color).trim());
+  const rgb = hex ? [0, 2, 4].map((i) => parseInt(hex[1].slice(i, i + 2), 16))
+    : (String(color).match(/\d+(\.\d+)?/g) || []).slice(0, 3).map(Number);
+  if (rgb.length < 3) return "#ffffff";
+  const lin = rgb.map((c) => { const v = c / 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; });
+  const lum = 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2];
+  return lum > 0.2 ? "#15201b" : "#ffffff";  // ~ là où les deux contrastes se croisent
+}
+
 export function mount(el, option, onReady) {
   const chart = echarts.init(el, null, { renderer: "canvas" });
   chart.setOption(option);

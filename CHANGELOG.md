@@ -4,6 +4,20 @@ Les versions « bêta » (par exemple 0.4.0b1) sont des avant-premières : elles
 sur le canal bêta (Réglages → Application → Mises à jour → « Recevoir les versions bêta »), puis sortent en
 version stable une fois éprouvées.
 
+## 0.8.3b14 — 22 novembre 2026 (bêta)
+
+- **Zones aux couleurs de Garmin.** Les zones FC et d'allure passent en gris, bleu, vert, orange et rouge, comme
+  sur la montre et dans Garmin Connect : graphiques « Temps par zone », barres des réglages, fiche du coach.
+  Réglable dans Réglages → Entraînement → Zones FC, rubrique *Couleurs des zones* : *Comme Garmin* (par défaut),
+  *Dégradé de bleus* (celui d'avant) ou *À mon goût*, une couleur par zone.
+- **Logos de club en liste.** « Fier de ton club ? » (Réglages → Mon club) et le logo de l'application partenaire
+  se choisissent dans un menu déroulant : les logos de l'ACCT sont livrés avec Foulée (le bandeau pour le club, le
+  rond 1904-2024 pour Club en ligne). Pour un autre club, *Importer un logo…* : on lui donne un nom, il s'ajoute à
+  la liste, pour le club comme pour l'application partenaire ; *Retirer de la liste* l'efface. Les logos déjà
+  importés y entrent tout seuls, et la sauvegarde des réglages les emporte.
+- **Le logo du club sur l'Accueil**, au milieu du bandeau « Bonjour » (un clic ouvre « Mon club ») ; une case le
+  retire. Les logos en largeur s'affichent aussi en entier dans « Mon club » et « Mon coach ».
+
 ## 0.8.3b13 — 22 novembre 2026 (bêta)
 
 - **Taille des tuiles en chiffres.** En modifiant une vue, chaque tuile a deux petits compteurs (− valeur +) :

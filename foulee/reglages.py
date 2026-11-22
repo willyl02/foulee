@@ -13,7 +13,7 @@ import copy
 import sqlite3
 from typing import Any
 
-from . import __version__, analysis, club, db, objectifs, partenaire, profile, schedule, views, zones
+from . import __version__, analysis, club, db, logotheque, objectifs, partenaire, profile, schedule, views, zones
 
 # Réglages dont dépendent TRIMP, zones et charge : les changer relance le recalcul des séances
 DERIVED = {"vma_kmh", "fc_max", "fc_repos", "sexe", "zones_allure_pct_vma", "charge_source", "zones_fc",
@@ -47,6 +47,8 @@ def clean(key: str, value: Any) -> Any:
             return zones.clean_hr(value)
         if key == "zones_allure":
             return zones.clean_pace(value)
+        if key == "couleurs_zones":
+            return zones.clean_colors(value)
     except ValueError as exc:
         raise SettingsError(str(exc)) from None
     if key == "profil":
@@ -153,12 +155,18 @@ def export(conn: sqlite3.Connection, *, with_views: bool = True, with_photo: boo
     if with_photo and profile.photo_path().exists():
         data["photo"] = base64.b64encode(profile.photo_path().read_bytes()).decode("ascii")
     if with_logo and club.logo_path().exists():
+        # le logo choisi pour le club (lu aussi par les versions d'avant la logothèque)
         data["logo_club"] = base64.b64encode(club.logo_path().read_bytes()).decode("ascii")
+    if with_logo:
+        library = logotheque.export_data()  # les logos importés (nommés) et les choix
+        if library:
+            data["logotheque"] = library
     return data
 
 
 def import_(conn: sqlite3.Connection, data: Any, *, parts: set[str] | None = None) -> dict:
-    """Reprend un export. parts : {"reglages", "vues", "photo", "logo"} (tout par défaut).
+    """Reprend un export. parts : {"reglages", "vues", "photo", "logo"} (tout par défaut ; « logo » : les logos
+    importés et ceux choisis pour le club et l'application partenaire).
     Les vues de même identifiant sont remplacées, les autres ajoutées ; aucune vue n'est supprimée."""
     if not isinstance(data, dict) or data.get("foulee_reglages") != EXPORT_FORMAT:
         raise SettingsError("Ce fichier n'est pas un export de réglages Foulée.")
@@ -189,7 +197,11 @@ def import_(conn: sqlite3.Connection, data: Any, *, parts: set[str] | None = Non
             report["photo"] = True
         except (binascii.Error, ValueError) as exc:
             report["ignores"].append(f"photo ({exc})")
-    if "logo" in parts and data.get("logo_club"):
+    if "logo" in parts and isinstance(data.get("logotheque"), dict):
+        count, ignored = logotheque.import_data(data["logotheque"])
+        report["logo"] = bool(count) or bool(logotheque.chosen("club") or logotheque.chosen("partenaire"))
+        report["ignores"] += ignored
+    elif "logo" in parts and data.get("logo_club"):  # export d'avant la logothèque : un seul logo, celui du club
         try:
             club.save_logo(base64.b64decode(data["logo_club"], validate=True))
             report["logo"] = True

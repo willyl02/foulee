@@ -11,6 +11,11 @@ Zones d'allure (réglage « zones_allure ») : cinq zones, décrites par quatre 
 - pct_vma      : en % de la VMA (réglage historique « zones_allure_pct_vma ») ;
 - pct_seuil    : en % de la vitesse au seuil (allure saisie, ou lue chez Garmin) ;
 - bornes       : quatre allures en min/km.
+
+Couleurs des zones (réglage « couleurs_zones »), les mêmes pour les zones FC et d'allure :
+- garmin       : gris, bleu, vert, orange, rouge, comme Garmin Connect (par défaut) ;
+- bleus        : le dégradé de bleus des premières versions de Foulée ;
+- perso        : cinq couleurs choisies (« #rrggbb »).
 """
 
 from __future__ import annotations
@@ -40,6 +45,10 @@ PACE_METHODS = {
 }
 PACE_DEFAULT_PCT = {"pct_vma": [70, 80, 88, 95], "pct_seuil": [75, 85, 95, 102]}
 PACE_ZONE_NAMES = ["Récup / EF", "Endurance active", "Seuil / semi", "Allure 10 km", "VMA"]
+
+COLOR_STYLES = ("garmin", "bleus", "perso")
+GARMIN_COLORS = ["#9ea8a3", "#2a78d6", "#13a06e", "#f08a1c", "#d3263a"]  # repère des couleurs « perso »
+HEX_COLOR = re.compile(r"#[0-9a-fA-F]{6}")
 
 
 class ZoneError(ValueError):
@@ -104,6 +113,27 @@ def clean_hr(data: Any) -> dict:
     if data.get("bornes") is not None:
         clean["bornes"] = [int(round(v)) for v in _numbers(data["bornes"], 4, 60, 230, "Bornes des zones FC")]
     return clean
+
+
+def clean_colors(data: Any) -> dict | None:
+    """Couleurs des zones : None (Garmin, par défaut) ou {"style", "perso"} ; « perso » garde cinq « #rrggbb »."""
+    if data in (None, ""):
+        return None
+    if isinstance(data, str):
+        data = {"style": data}
+    if not isinstance(data, dict):
+        raise ValueError("Couleurs des zones : réglage illisible.")
+    style = data.get("style") or "garmin"
+    if style not in COLOR_STYLES:
+        raise ValueError("Couleurs des zones : « garmin », « bleus » ou « perso ».")
+    out: dict[str, Any] = {"style": style}
+    colors = data.get("perso")
+    if colors is not None or style == "perso":
+        if not isinstance(colors, list) or len(colors) != 5 or not all(isinstance(c, str) and HEX_COLOR.fullmatch(c.strip())
+                                                                       for c in colors):
+            raise ValueError("Couleurs des zones : cinq couleurs, de la zone 1 à la zone 5 (« #rrggbb »).")
+        out["perso"] = [c.strip().lower() for c in colors]
+    return out
 
 
 def hr_floors(config: dict | None, hr_max: float, hr_rest: float, garmin: dict | None,

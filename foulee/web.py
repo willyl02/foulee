@@ -55,6 +55,7 @@ from . import (
     db,
     jour,
     keyinput,
+    logotheque,
     metrics,
     objectifs,
     partenaire,
@@ -290,7 +291,8 @@ def create_app() -> FastAPI:
                 "categories_tuiles": views.TILE_CATEGORIES, "categories_metriques": metrics.CATEGORIES,
                 "objectif": analysis.objective(settings), "profil_fc": analysis.hr_profile(conn, settings),
                 "club": club.summary(settings.get("club")), "club_licences": club.LICENCE_TYPES,
-                "club_logo": club.logo_version(),  # date du logo (pour l'adresse de l'image), ou None
+                "club_logo": club.logo_version(),  # repère du logo (pour l'adresse de l'image), ou None
+                "logotheque": logotheque.listing(),  # logos au choix (club, application partenaire), case de l'Accueil
                 "partenaire": partenaire.resolve(settings.get("partenaire")),
                 "sites_externes": partenaire.resolve_sites(settings.get("sites_externes")),
                 "garmin_profil": analysis.garmin_profile(conn),
@@ -709,6 +711,51 @@ def create_app() -> FastAPI:
     @app.delete("/api/club/logo")
     def delete_club_logo() -> dict:
         return club.delete_logo()
+
+    # Logothèque : les logos au choix pour le club (Mon club, Accueil, Mon coach) et l'application partenaire,
+    # ceux livrés avec Foulée et ceux importés (nommés à l'import)
+    @app.get("/api/logos")
+    def logos_list() -> dict:
+        return logotheque.listing()
+
+    @app.get("/api/logos/{logo_id}/image")
+    def logo_image(logo_id: str):
+        try:
+            path = logotheque.path(logo_id)
+        except logotheque.LogoError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        return FileResponse(path, media_type="image/png",
+                            headers={"Cache-Control": "no-cache", "X-Content-Type-Options": "nosniff"})
+
+    @app.put("/api/logos/import")
+    async def logo_import(request: Request, nom: str = "", pour: str = "") -> dict:
+        if int(request.headers.get("content-length") or 0) > logotheque.MAX_UPLOAD:
+            raise HTTPException(413, "Image trop lourde : 5 Mo au plus.")
+        data = await request.body()
+        try:
+            return logotheque.add(nom, data, use=pour or None)
+        except logotheque.LogoError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+    @app.put("/api/logos/choix")
+    def logo_choice(payload: dict = Body(...)) -> dict:
+        """{"club": id | null} ou {"partenaire": id | null} : le logo choisi ; {"accueil": bool} : sur l'Accueil."""
+        try:
+            for use in logotheque.USES:
+                if use in payload:
+                    logotheque.choose(use, str(payload[use]) if payload[use] else None)
+            if "accueil" in payload:
+                logotheque.set_home(bool(payload["accueil"]))
+        except logotheque.LogoError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return logotheque.listing()
+
+    @app.delete("/api/logos/{logo_id}")
+    def logo_remove(logo_id: str) -> dict:
+        try:
+            return logotheque.remove(logo_id)
+        except logotheque.LogoError as exc:
+            raise HTTPException(400, str(exc)) from exc
 
     # Sites externes : le logo de chaque site (un PNG, rangé avec les données du profil)
     @app.get("/api/sites/{site_id}/logo")

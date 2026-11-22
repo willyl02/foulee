@@ -185,6 +185,7 @@ async function loadBoot() {
   state.catalog = Object.fromEntries(state.boot.metriques.map((m) => [m.key, m]));
   state.types = Object.fromEntries(state.boot.tuiles.map((t) => [t.type, t]));
   state.views = state.boot.vues;
+  C.applyZoneColors(state.boot.reglages?.couleurs_zones);
   watchCoach(state.boot, { toast });
 }
 

@@ -1,10 +1,12 @@
 // L'application partenaire (Réglages → Application partenaire ; par défaut Club en ligne) et les sites externes
 // (Réglages → Sites externes) : un site dans Foulée, dans un cadre, avec précédent, suivant, recharger et « ouvrir
-// dans le navigateur ». Chaque site externe peut avoir son logo (un PNG), sinon le petit globe.
+// dans le navigateur ». Chaque site externe peut avoir son logo (un PNG), sinon le petit globe ; celui de
+// l'application partenaire se choisit dans la logothèque (voir logo-choice.js), comme le logo du club.
 // Le nom du fichier évite « partner », que certains bloqueurs de pub arrêtent.
 import * as api from "./api.js";
 import * as F from "./format.js";
 import { icon } from "./icons.js";
+import { logoChoice, logoLibrary, logoURL } from "./logo-choice.js";
 
 function host(url) {
   try { return new URL(url).host; } catch (e) { return url; }
@@ -68,7 +70,7 @@ export function renderPartnerPage(page, boot, { keep, siteId = null }) {
 }
 
 /** Réglages → Application partenaire. */
-export function partnerPanel(box, boot, { toast, onChange }) {
+export function partnerPanel(box, boot, { toast, onChange, logos = logoLibrary(boot) }) {
   const app = { ...(boot.partenaire || {}) };
   box.innerHTML = `
     <label class="check club-toggle"><input type="checkbox" data-on ${app.actif ? "checked" : ""}>
@@ -79,10 +81,9 @@ export function partnerPanel(box, boot, { toast, onChange }) {
         spellcheck="false" autocomplete="off"><span class="hint">Tu peux viser une page précise en ajoutant la fin de son adresse, par exemple <code>https://app.clubenligne.fr/entrainements</code> (copie-la depuis ton navigateur).</span></label>
     </div>
     <div class="site-logo-line">
-      <div class="site-logo-box" data-logo-preview title="Logo (${F.escape(LOGO_RULES)})">${siteIcon(app, "partenaire")}</div>
-      <div><b>Logo dans le menu</b><span class="hint">${F.escape(LOGO_RULES)}</span>
-        <div class="inline-actions"><label class="btn btn-small btn-ghost">${icon("upload")}<span data-logo-label>${app.logo ? "Changer le logo" : "Importer un logo"}</span><input type="file" accept="image/png" data-logo hidden></label>
-          <button class="btn btn-small btn-ghost" type="button" data-nologo ${app.logo ? "" : "hidden"}>${icon("globe")}Remettre le globe</button></div></div>
+      <div class="site-logo-box" data-logo-preview>${siteIcon(app, "partenaire")}</div>
+      <div class="site-logo-choice"><b>Logo dans le menu</b><span class="hint">Choisis-le dans la liste (la même que pour le logo du club), ou importe le tien en lui donnant un nom. Sans logo, le petit globe.</span>
+        <div data-logo-choice></div></div>
     </div>
     <div class="inline-actions">
       <button class="btn btn-primary" type="button" data-save>${icon("check")}Enregistrer</button>
@@ -112,22 +113,12 @@ export function partnerPanel(box, boot, { toast, onChange }) {
     save("Club en ligne remis par défaut.");
   });
   input("adresse").addEventListener("input", () => { box.querySelector("[data-try]").href = input("adresse").value.trim() || "#"; });
-  const showLogo = (version) => {
-    app.logo = version;
-    box.querySelector("[data-logo-preview]").innerHTML = siteIcon(app, "partenaire");
-    box.querySelector("[data-logo-label]").textContent = version ? "Changer le logo" : "Importer un logo";
-    box.querySelector("[data-nologo]").hidden = !version;
-  };
-  box.querySelector("[data-logo]").addEventListener("change", async (e) => {
-    const file = e.target.files[0];
-    e.target.value = "";
-    if (!file) return;
-    try { showLogo(await sendLogo("partenaire", file, toast)); await onChange?.(); }
-    catch (err) { toast(err.message, { error: true }); }
-  });
-  box.querySelector("[data-nologo]").addEventListener("click", async () => {
-    try { await api.del("/api/sites/partenaire/logo"); showLogo(null); toast("Le globe est remis."); await onChange?.(); }
-    catch (err) { toast(err.message, { error: true }); }
+  // Le logo du menu : la logothèque (logos de l'ACCT livrés avec Foulée, logos importés et nommés)
+  logoChoice(box.querySelector("[data-logo-choice]"), logos, {
+    use: "partenaire", none: "Le petit globe", toast, onChange,
+    onPreview: (entry) => {
+      box.querySelector("[data-logo-preview]").innerHTML = entry ? `<img class="site-logo" src="${logoURL(entry)}" alt="">` : icon("globe");
+    },
   });
 }
 

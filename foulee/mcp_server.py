@@ -732,6 +732,8 @@ def modifier_reglages(changements: dict[str, Any]) -> dict[str, Any]:
     Un réglage composé est complété, pas remplacé : {"horaires": {"conges": [...]}} ne touche qu'aux congés.
     Zones : {"zones_fc": {"methode": "pct_reserve", "pct": [50, 60, 70, 80, 90]}} (méthodes garmin, pct_max,
     pct_reserve, pct_seuil, bornes) ; {"zones_allure": {"methode": "pct_vma", "pct": [70, 80, 88, 95]}}.
+    Couleurs des zones : {"couleurs_zones": {"style": "garmin"}} (gris, bleu, vert, orange, rouge : par défaut),
+    « bleus », ou {"style": "perso", "perso": ["#9ea8a3", "#2a78d6", "#13a06e", "#f08a1c", "#d3263a"]}.
     Club FFA : {"club": {"actif": true, "numero": "012345", "nom": "…"}} ajoute la vue « Mon club » (numéro de
     club de la licence, 6 chiffres) ; {"club": {"actif": false}} la retire en gardant les informations.
     Synchro automatique : {"synchro_auto": {"garmin": 180, "withings": 180}}, un délai par source en minutes, de 30 à

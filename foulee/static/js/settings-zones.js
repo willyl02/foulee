@@ -1,5 +1,6 @@
 // Réglages → zones FC et zones d'allure : méthode (Garmin, % FC max, % FC de réserve, % du seuil,
 // bornes à la main façon Strava), valeurs, et une barre à cinq couleurs dont on tire les séparations.
+// Les couleurs des zones (Garmin par défaut, bleus ou à son goût) se règlent sous les zones FC.
 import * as C from "./charts.js";
 import * as F from "./format.js";
 import { icon } from "./icons.js";
@@ -26,7 +27,7 @@ function zoneBar(box, { lo, hi, bounds, start, label, onDrag, editable, step = 1
   const P = C.palette();
   const pct = (v) => Math.max(0, Math.min(100, ((v - lo) / (hi - lo)) * 100));
   const edges = [start ?? lo, ...bounds, hi];
-  box.innerHTML = `<div class="zb-track">${[0, 1, 2, 3, 4].map((i) => `<div class="zb-seg" style="left:${pct(edges[i])}%;width:${pct(edges[i + 1]) - pct(edges[i])}%;background:${P.zones[i]}">
+  box.innerHTML = `<div class="zb-track">${[0, 1, 2, 3, 4].map((i) => `<div class="zb-seg" style="left:${pct(edges[i])}%;width:${pct(edges[i + 1]) - pct(edges[i])}%;background:${P.zones[i]};color:${C.inkOn(P.zones[i])}">
       <b>Z${i + 1}</b><span>${F.escape(label(i))}</span></div>`).join("")}
     ${editable ? bounds.map((b, i) => `<button type="button" class="zb-handle" data-handle="${i}" style="left:${pct(b)}%"
         aria-label="Séparation entre les zones ${i + 1} et ${i + 2}" role="slider" aria-valuenow="${b}"></button>`).join("") : ""}</div>`;
@@ -310,4 +311,64 @@ export function paceZonesEditor(box, boot, getVma) {
     value: () => ({ methode: z.methode, pct: z.methode === "bornes" ? null : pctOf(), seuil: z.seuil || null,
       bornes: z.methode === "bornes" ? z.bornes : null }),
   };
+}
+
+// ================================================================ couleurs
+const ZONE_LABELS = ["Échauffement", "Facile", "Aérobie", "Seuil", "Maximum"];
+
+/**
+ * Couleurs des zones, les mêmes pour la FC et l'allure : comme Garmin (par défaut), dégradé de bleus, ou à son goût.
+ * Chaque choix s'applique tout de suite à toute l'interface ; onApply repeint les barres des zones.
+ */
+export function zoneColorsEditor(box, boot, { onApply } = {}) {
+  const saved = boot.reglages.couleurs_zones || {};
+  const z = { style: saved.style || "garmin", perso: saved.perso ? [...saved.perso] : null };
+  const value = () => (z.style === "garmin" && !z.perso ? null : { style: z.style, perso: z.perso });
+  // Les couleurs d'un style dans le thème affiché (clair ou sombre) : appliquées un instant, lues, puis rendues
+  const colorsOf = (style) => {
+    C.applyZoneColors({ style, perso: z.perso });
+    const colors = C.palette().zones;
+    C.applyZoneColors(value());
+    return colors;
+  };
+  const hex = (c) => (/^#[0-9a-f]{6}$/i.test(c) ? c.toLowerCase() : C.GARMIN_ZONE_COLORS[0]);
+  const strip = (colors) => `<span class="zc-strip" aria-hidden="true">${colors.map((c) => `<i style="background:${c}"></i>`).join("")}</span>`;
+
+  function render() {
+    const perso = z.style === "perso";
+    box.innerHTML = `<div class="zc-choices" role="radiogroup" aria-label="Couleurs des zones">
+        ${C.ZONE_STYLES.map(([id, label, hint]) => `<button type="button" role="radio" class="zc-choice" data-style="${id}" aria-checked="${z.style === id}">
+          ${strip(id === "perso" && !z.perso ? C.GARMIN_ZONE_COLORS.map(() => "var(--surface-2)") : colorsOf(id))}
+          <span><b>${F.escape(label)}</b><small>${F.escape(hint)}</small></span></button>`).join("")}
+      </div>
+      ${perso ? `<div class="zc-picks">${z.perso.map((c, i) => `<label class="zc-pick"><input type="color" data-color="${i}" value="${hex(c)}">
+          <span><b>Z${i + 1}</b> ${ZONE_LABELS[i]}</span></label>`).join("")}
+        <button class="btn btn-ghost btn-small" type="button" data-from-garmin>${icon("reset")}Repartir des couleurs Garmin</button></div>` : ""}
+      <p class="hint">Les mêmes couleurs pour les zones FC et les zones d'allure : graphiques, barres ci-dessus et ci-dessous, fiche du coach.</p>`;
+  }
+  const apply = () => { C.applyZoneColors(value()); onApply?.(); };
+
+  box.addEventListener("click", (e) => {
+    const choice = e.target.closest("[data-style]");
+    if (choice) {
+      if (choice.dataset.style === z.style) return;
+      // « À mon goût » part des couleurs affichées (celles de Garmin ou les bleus), à retoucher zone par zone
+      if (choice.dataset.style === "perso" && !z.perso) z.perso = C.palette().zones.map(hex);
+      z.style = choice.dataset.style;
+    } else if (e.target.closest("[data-from-garmin]")) {
+      z.perso = [...C.GARMIN_ZONE_COLORS];
+    } else return;
+    apply();
+    render();
+  });
+  box.addEventListener("input", (e) => {
+    const i = e.target.dataset?.color;
+    if (i === undefined) return;
+    z.perso[Number(i)] = e.target.value.toLowerCase();
+    apply();
+    box.querySelector('[data-style="perso"] .zc-strip').innerHTML = z.perso.map((c) => `<i style="background:${c}"></i>`).join("");
+  });
+
+  render();
+  return { value };
 }

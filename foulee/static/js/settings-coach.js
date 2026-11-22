@@ -41,7 +41,7 @@ export async function coachPanel(box, boot, { toast, onChange }) {
   // « Ton coach fait-il partie de ton club ? » : si oui, le logo du club s'affiche sur « Mon coach »
   const sameClub = () => `<div class="co-sameclub">
       <div><b>Ton coach fait-il partie de ton club ?</b>
-        <span class="hint">Si oui, le logo de ton club s'affiche sur la page « Mon coach ».${boot.club_logo ? "" : ` Importe-le d'abord dans <a href="#/reglages?section=club">Réglages → Mon club</a>, rubrique « Fier de ton club ? ».`}</span></div>
+        <span class="hint">Si oui, le logo de ton club s'affiche sur la page « Mon coach ».${boot.club_logo ? "" : ` Choisis-le d'abord dans <a href="#/reglages?section=club">Réglages → Mon club</a>, rubrique « Fier de ton club ? ».`}</span></div>
       <div class="segmented" role="group" aria-label="Ton coach fait-il partie de ton club ?">
         <button type="button" data-same-club="1" aria-pressed="${Boolean(info.meme_club)}">Oui</button>
         <button type="button" data-same-club="0" aria-pressed="${!info.meme_club}">Non</button>
