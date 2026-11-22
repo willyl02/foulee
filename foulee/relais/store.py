@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS comptes (
     id                  INTEGER PRIMARY KEY,
     identifiant         TEXT NOT NULL UNIQUE,
     nom                 TEXT NOT NULL,
-    role                TEXT NOT NULL CHECK (role IN ('coach', 'eleve')),
+    role                TEXT NOT NULL CHECK (role IN ('coach', 'eleve', 'solo')),
     admin               INTEGER NOT NULL DEFAULT 0,
     coach_id            INTEGER REFERENCES comptes(id) ON DELETE CASCADE,
     mot_de_passe        TEXT NOT NULL,
@@ -216,6 +216,37 @@ def after_commit(conn: sqlite3.Connection, job) -> None:
     _AFTER_COMMIT.setdefault(id(conn), []).append(job)
 
 
+_SOLO_READY: set[str] = set()
+
+
+def _allow_solo(conn: sqlite3.Connection) -> None:
+    """0.8.3b16 : les comptes « solo » (sans coach). Un relais d'avant a la contrainte du rôle à deux valeurs :
+    on refait la table des comptes (une seule fois, à l'identique, les clés étrangères en pause le temps de la copie)."""
+    path = str(db_path())
+    if path in _SOLO_READY:
+        return
+    row = conn.execute("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'comptes'").fetchone()
+    if row and "'solo'" not in row["sql"]:
+        conn.commit()
+        conn.execute("PRAGMA foreign_keys = OFF")
+        try:
+            new_sql = row["sql"].replace("CREATE TABLE comptes", "CREATE TABLE comptes_solo", 1).replace(
+                "CHECK (role IN ('coach', 'eleve'))", "CHECK (role IN ('coach', 'eleve', 'solo'))")
+            if "'solo'" not in new_sql:
+                raise RuntimeError("Relais : table des comptes inattendue, impossible d'y ajouter les comptes sans coach.")
+            conn.executescript(f"""BEGIN;
+                {new_sql};
+                INSERT INTO comptes_solo SELECT * FROM comptes;
+                DROP TABLE comptes;
+                ALTER TABLE comptes_solo RENAME TO comptes;
+                COMMIT;""")
+        finally:
+            conn.execute("PRAGMA foreign_keys = ON")
+        if conn.execute("PRAGMA foreign_key_check").fetchall():
+            raise RuntimeError("Relais : clés étrangères abîmées après l'ajout des comptes sans coach.")
+    _SOLO_READY.add(path)
+
+
 @contextmanager
 def session() -> Iterator[sqlite3.Connection]:
     conn = sqlite3.connect(db_path(), timeout=10)
@@ -224,6 +255,7 @@ def session() -> Iterator[sqlite3.Connection]:
     conn.execute("PRAGMA journal_mode = WAL")
     try:
         conn.executescript(SCHEMA)
+        _allow_solo(conn)
         conn.execute("INSERT OR IGNORE INTO meta(key, value) VALUES ('schema', ?)", (str(SCHEMA_VERSION),))
         yield conn
         conn.commit()
@@ -302,7 +334,7 @@ def account_dict(row: sqlite3.Row, conn: sqlite3.Connection | None = None) -> di
 def create_account(conn: sqlite3.Connection, *, ident: str, name: str, password: str, role: str,
                    admin: bool = False, coach_id: int | None = None) -> dict:
     ident, name, password = clean_ident(ident), clean_name(name), validate_password(password)
-    if role not in ("coach", "eleve"):
+    if role not in ("coach", "eleve", "solo"):
         raise RelayError("Rôle inconnu.")
     if conn.execute("SELECT 1 FROM comptes WHERE identifiant = ?", (ident,)).fetchone():
         raise RelayError(f"L'identifiant « {ident} » est déjà pris : choisis-en un autre.")
@@ -439,12 +471,52 @@ def cancel_invitation(conn: sqlite3.Connection, coach_id: int, code: str) -> boo
     return cur.rowcount > 0
 
 
-def join(conn: sqlite3.Connection, *, code: str, ident: str, name: str, password: str) -> dict:
-    """Crée le compte élève avec un code d'invitation valable (à usage unique)."""
+# ------------------------------------------------------------ comptes sans coach (« solo »)
+# Pour envoyer les séances de son Atelier sur sa montre (l'appli Garmin du relais), sans coach ni groupe : le compte
+# ne voit rien d'autre sur le relais et ne partage rien. Ouvert à tous, sauf si l'administrateur le ferme
+# (FOULEE_RELAIS_SOLO=0), avec un plafond (FOULEE_RELAIS_SOLO_MAX, 500 par défaut).
+def solo_open() -> bool:
+    return os.environ.get("FOULEE_RELAIS_SOLO", "1").strip() not in ("0", "non", "false", "")
+
+
+def solo_max() -> int:
+    try:
+        return max(0, int(os.environ.get("FOULEE_RELAIS_SOLO_MAX", "500")))
+    except ValueError:
+        return 500
+
+
+def register_solo(conn: sqlite3.Connection, *, ident: str, name: str, password: str) -> dict:
+    """Crée un compte sans coach (pour envoyer ses séances sur sa montre)."""
+    if not solo_open():
+        raise RelayError("Ce relais n'ouvre pas de compte sans coach : demande un code d'invitation à un coach.")
+    if conn.execute("SELECT COUNT(*) AS n FROM comptes WHERE role = 'solo'").fetchone()["n"] >= solo_max():
+        raise RelayError("Ce relais a atteint son nombre de comptes sans coach : réessaie plus tard, ou demande un "
+                         "code d'invitation à un coach.")
+    return create_account(conn, ident=ident, name=name, password=password, role="solo")
+
+
+def _invitation(conn: sqlite3.Connection, code: str) -> sqlite3.Row:
     row = conn.execute("""SELECT i.*, c.actif FROM invitations i JOIN comptes c ON c.id = i.coach_id
                           WHERE i.code = ?""", (clean_code(code),)).fetchone()
     if row is None or row["utilisee_par"] is not None or row["expire_le"] < now() or not row["actif"]:
         raise RelayError("Code d'invitation inconnu, déjà utilisé ou expiré : demande un nouveau code à ton coach.")
+    return row
+
+
+def attach(conn: sqlite3.Connection, account_id: int, code: str) -> dict:
+    """Un compte sans coach rejoint un coach avec son code d'invitation : il devient élève (même identifiant, même
+    mot de passe, sa montre reste reliée)."""
+    row = _invitation(conn, code)
+    conn.execute("UPDATE comptes SET role = 'eleve', coach_id = ? WHERE id = ? AND role = 'solo'",
+                 (row["coach_id"], account_id))
+    conn.execute("UPDATE invitations SET utilisee_par = ?, utilisee_le = ? WHERE code = ?", (account_id, now(), row["code"]))
+    return account_dict(conn.execute("SELECT * FROM comptes WHERE id = ?", (account_id,)).fetchone(), conn)
+
+
+def join(conn: sqlite3.Connection, *, code: str, ident: str, name: str, password: str) -> dict:
+    """Crée le compte élève avec un code d'invitation valable (à usage unique)."""
+    row = _invitation(conn, code)
     account = create_account(conn, ident=ident, name=name, password=password, role="eleve",
                              coach_id=row["coach_id"])
     conn.execute("UPDATE invitations SET utilisee_par = ?, utilisee_le = ? WHERE code = ?",

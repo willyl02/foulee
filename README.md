@@ -714,7 +714,12 @@ ton adresse, par exemple `https://relais.mon-club.com`.
 - un élève rejoint son coach avec ce code (« J'ai un code d'invitation ») et choisit son identifiant et son
   mot de passe, puis **ce qu'il partage, case par case** (rien ne part avant) ; une page « Mon coach »
   s'ajoute à sa colonne. Il peut quitter le groupe à tout moment : son compte et tout ce qu'il a partagé sont
-  alors effacés du relais.
+  alors effacés du relais ;
+- sans coach (« Sans coach »), n'importe qui crée un compte qui sert à une seule chose : envoyer les séances de
+  son Atelier dans son calendrier Garmin Connect. Il ne voit rien d'autre sur le relais et ne partage rien ; le
+  code d'invitation d'un coach en fait plus tard un compte élève (« J'ai maintenant un coach »). L'administrateur
+  peut fermer ces inscriptions (`FOULEE_RELAIS_SOLO=0` dans l'environnement du service) ou en changer le plafond
+  (`FOULEE_RELAIS_SOLO_MAX`, 500 par défaut).
 
 **Ce que fait le coach** (page « Mes élèves ») :
 - le tableau de bord du groupe : pour chaque élève sa dernière séance, sa semaine jour par jour (fait, manqué,

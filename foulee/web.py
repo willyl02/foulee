@@ -1679,7 +1679,7 @@ def create_app() -> FastAPI:
             raise HTTPException(503, busy_db) from None
 
     def coach_info(request: Request, conn) -> dict:
-        return {**coach.status(conn), "local": bool(request.state.local)}
+        return {**coach.status(conn), "local": bool(request.state.local), "relais_defaut": coach.DEFAULT_RELAY}
 
     @app.get("/api/coach")
     def coach_status(request: Request) -> dict:
@@ -1703,6 +1703,22 @@ def create_app() -> FastAPI:
                                                      name=str(payload.get("nom") or ""),
                                                      password=str(payload.get("mot_de_passe") or "")),
                                         "local": True})
+
+    @app.post("/api/coach/solo")
+    def coach_solo(request: Request, payload: dict = Body(...)) -> dict:
+        """Un compte sans coach sur le relais, pour envoyer les séances de l'Atelier sur sa montre."""
+        require_local(request)
+        return coach_call(lambda conn: {**coach.join_solo(conn, str(payload.get("adresse") or ""),
+                                                          ident=str(payload.get("identifiant") or ""),
+                                                          name=str(payload.get("nom") or ""),
+                                                          password=str(payload.get("mot_de_passe") or "")),
+                                        "local": True})
+
+    @app.post("/api/coach/rejoindre")
+    def coach_attach(request: Request, payload: dict = Body(...)) -> dict:
+        """Le compte sans coach rejoint un coach (code d'invitation) : il devient élève."""
+        return coach_call(lambda conn: {**coach.attach(conn, str(payload.get("code") or "")),
+                                        "local": bool(request.state.local)})
 
     @app.post("/api/coach/actualiser")
     def coach_refresh(request: Request) -> dict:
@@ -1766,7 +1782,7 @@ def create_app() -> FastAPI:
             link = coach.status(conn)
             role = (link.get("compte") or {}).get("role") if link.get("relie") else None
             return {"seances": renfo_seances.saved(conn), "bibliotheque": renfo_seances.library(),
-                    "montre": role == "eleve"}
+                    "montre": role in ("eleve", "solo")}
 
     @app.put("/api/renfo/seances")
     def renfo_sessions_save(payload: dict = Body(...)) -> dict:
@@ -1806,7 +1822,7 @@ def create_app() -> FastAPI:
                     "modeles_renfo": renfo_seances.templates(settings), "faites": renfo_seances.done_sessions(conn),
                     "bibliotheque": [{**f, "exercices": [{**e, "materiel_ok": renfo.has_gear(e["nom"], conf["materiel"])}
                                                          for e in f["exercices"]]} for f in renfo_seances.library()],
-                    "montre": role == "eleve", "relie": bool(link.get("relie")),
+                    "montre": role in ("eleve", "solo"), "relie": bool(link.get("relie")), "role": role,
                     "vma": settings.get("vma_kmh"), "renfo_reglages": conf,
                     "date_renfo": atelier.next_day(conf["jours"]), "niveaux": renfo.options()["niveaux"]}
 

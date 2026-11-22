@@ -41,6 +41,9 @@ class CoachError(RuntimeError):
         self.status = status
 
 
+DEFAULT_RELAY = "https://relais.foulee-coach.com"  # le relais Foulée, proposé pour un compte sans coach
+
+
 def clean_url(value: str | None) -> str:
     """« relais.mon-club.com » → « https://relais.mon-club.com » ; HTTPS obligatoire hors de la machine."""
     text = (value or "").strip().rstrip("/")
@@ -114,9 +117,10 @@ def status(conn: sqlite3.Connection) -> dict:
 
 
 def light(conn: sqlite3.Connection) -> dict | None:
-    """Ce que l'interface affiche dans la colonne : le rôle et le nom (ou None)."""
+    """Ce que l'interface affiche dans la colonne : le rôle et le nom (ou None ; un compte sans coach n'a pas de page
+    « Mon coach » : il sert à l'Atelier)."""
     info = status(conn)
-    if not info.get("relie"):
+    if not info.get("relie") or (info["compte"] or {}).get("role") == "solo":
         return None
     account = info["compte"]
     return {"role": account.get("role"), "nom": account.get("nom"), "coach": (account.get("coach") or {}).get("nom"),
@@ -147,7 +151,7 @@ def _save(conn: sqlite3.Connection, url: str, token: str, account: dict) -> None
     db.set_meta(conn, META_URL, url)
     db.set_meta(conn, META_ACCOUNT, json.dumps(_public(account), ensure_ascii=False))
     db.set_meta(conn, META_SINCE, db.now_iso())
-    calendar_view(conn, True)
+    calendar_view(conn, account.get("role") != "solo")
     conn.commit()
 
 
@@ -223,11 +227,35 @@ def join(conn: sqlite3.Connection, url: str, *, code: str, ident: str, name: str
     return status(conn)
 
 
+def join_solo(conn: sqlite3.Connection, url: str, *, ident: str, name: str, password: str) -> dict:
+    """Un compte sans coach sur le relais : pour envoyer les séances de l'Atelier sur sa montre."""
+    url = clean_url(url or DEFAULT_RELAY)
+    info = check_relay(url)
+    if not info.get("solo"):
+        raise CoachError("Ce relais n'ouvre pas (encore) de compte sans coach : il se met à jour seul chaque nuit, "
+                         "ou son administrateur l'a fermé.", 409)
+    data = call(url, "POST", "/api/v1/inscription",
+                payload={"solo": True, "identifiant": ident, "nom": name, "mot_de_passe": password,
+                         "appareil": device_name()})
+    _save(conn, url, data["jeton"], data["compte"])
+    return status(conn)
+
+
+def attach(conn: sqlite3.Connection, code: str) -> dict:
+    """Le compte sans coach rejoint un coach avec son code d'invitation : il devient élève."""
+    data = _authed(conn, "POST", "/api/v1/moi/rejoindre", {"code": code})
+    db.set_meta(conn, META_ACCOUNT, json.dumps(_public(data["compte"]), ensure_ascii=False))
+    calendar_view(conn, True)
+    conn.commit()
+    return status(conn)
+
+
 def refresh(conn: sqlite3.Connection) -> dict:
     """Relit le compte sur le relais (nom du coach, rôle) ; une session fermée délie le profil."""
     data = _authed(conn, "GET", "/api/v1/moi")
     db.set_meta(conn, META_ACCOUNT, json.dumps(_public(data["compte"]), ensure_ascii=False))
-    calendar_view(conn, True)  # profils reliés avant que la vue vienne avec le mode coach ou élève
+    if data["compte"].get("role") != "solo":
+        calendar_view(conn, True)  # profils reliés avant que la vue vienne avec le mode coach ou élève
     conn.commit()
     return status(conn)
 
@@ -522,9 +550,9 @@ def garmin_send(conn: sqlite3.Connection, proposal_id: int) -> dict:
 
 def garmin_personal(conn: sqlite3.Connection, item: dict) -> dict:
     """Une séance que je me suis composée (renfo…), dans mon calendrier Garmin par le relais du club."""
-    if (status(conn).get("compte") or {}).get("role") != "eleve":
-        raise CoachError("L'envoi sur la montre passe par le relais du club, avec un compte élève relié : "
-                         "télécharge plutôt le fichier .fit.", 409)
+    if (status(conn).get("compte") or {}).get("role") not in ("eleve", "solo"):
+        raise CoachError("L'envoi sur la montre passe par le relais : relie ce profil (Réglages → Coach et élèves, avec "
+                         "ou sans coach), ou télécharge plutôt le fichier .fit.", 409)
     return _garmin(conn, "POST", "/perso", item)
 
 

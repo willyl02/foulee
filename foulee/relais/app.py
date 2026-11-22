@@ -91,12 +91,18 @@ def create_relay_app() -> FastAPI:
         value = request.headers.get("authorization") or ""
         return value[7:].strip() if value.lower().startswith("bearer ") else None
 
-    def current(request: Request, conn, *, role: str | None = None):
+    def current(request: Request, conn, *, role: str | None = None, solo: bool = False):
+        """Le compte de la session. Un compte sans coach (« solo ») n'entre que là où ``solo`` l'autorise : son compte,
+        et l'envoi de ses séances sur sa montre."""
         found = store.session_account(conn, bearer(request))
         if found is None:
             raise HTTPException(401, "Session expirée ou fermée : reconnecte-toi.")
         account, fingerprint = found
-        if role and account["role"] != role:
+        if account["role"] == "solo":
+            if not solo:
+                raise HTTPException(403, "Compte sans coach : il sert à envoyer tes séances sur ta montre. Pour le suivi "
+                                         "d'un coach, rejoins-le avec son code d'invitation.")
+        elif role and account["role"] != role:
             raise HTTPException(403, "Réservé aux coachs." if role == "coach" else "Réservé aux élèves.")
         return account, fingerprint
 
@@ -126,7 +132,8 @@ def create_relay_app() -> FastAPI:
 
     @app.get("/api/v1/sante")
     def health() -> dict:
-        return {"service": "foulee-relais", "api": API_VERSION, "version": __version__}
+        # « solo » : le relais ouvre des comptes sans coach (pour envoyer ses séances sur sa montre)
+        return {"service": "foulee-relais", "api": API_VERSION, "version": __version__, "solo": store.solo_open()}
 
     # ------------------------------------------------------------ connexion
     @app.post("/api/v1/connexion")
@@ -153,6 +160,21 @@ def create_relay_app() -> FastAPI:
         keys = (f"ip:{client_ip(request)}",)
         if throttle.blocked(*keys):
             raise HTTPException(429, "Trop d'essais : réessaie dans 15 minutes.")
+        if payload.get("solo"):  # un compte sans coach, pour envoyer ses séances sur sa montre
+            solo_keys = (f"solo:{client_ip(request)}",)
+            if throttle.blocked(*solo_keys):
+                raise HTTPException(429, "Trop de comptes créés d'ici : réessaie dans 15 minutes.")
+            with store.session() as conn:
+                try:
+                    account = store.register_solo(conn, ident=str(payload.get("identifiant") or ""),
+                                                  name=str(payload.get("nom") or ""),
+                                                  password=str(payload.get("mot_de_passe") or ""))
+                except store.RelayError as exc:
+                    raise refuse(exc) from None
+                throttle.failure(*solo_keys)  # quelques comptes d'affilée au plus, depuis la même adresse
+                token = store.open_session(conn, account["id"], payload.get("appareil"))
+                log.info("Inscription sans coach de %s", account["identifiant"])
+                return {"jeton": token, "compte": account}
         with store.session() as conn:
             try:
                 account = store.join(conn, code=str(payload.get("code") or ""),
@@ -179,13 +201,13 @@ def create_relay_app() -> FastAPI:
     @app.get("/api/v1/moi")
     def me(request: Request) -> dict:
         with store.session() as conn:
-            account, _ = current(request, conn)
+            account, _ = current(request, conn, solo=True)
             return {"compte": store.account_dict(account, conn)}
 
     @app.post("/api/v1/moi/mot-de-passe")
     def change_password(request: Request, payload: dict = Body(...)) -> dict:
         with store.session() as conn:
-            account, fingerprint = current(request, conn)
+            account, fingerprint = current(request, conn, solo=True)
             if not store.check_password(str(payload.get("actuel") or ""), account["mot_de_passe"]):
                 raise HTTPException(400, "Mot de passe actuel incorrect.")
             try:
@@ -196,14 +218,33 @@ def create_relay_app() -> FastAPI:
 
     @app.post("/api/v1/moi/quitter")
     def leave(request: Request, payload: dict = Body(...)) -> dict:
-        """Un élève quitte son coach : son compte et tout ce qu'il a partagé sont effacés du relais."""
+        """Un élève quitte son coach (ou un compte sans coach se supprime) : son compte et tout ce qu'il a partagé sont
+        effacés du relais."""
         with store.session() as conn:
-            account, _ = current(request, conn, role="eleve")
+            account, _ = current(request, conn, role="eleve", solo=True)
             if not store.check_password(str(payload.get("mot_de_passe") or ""), account["mot_de_passe"]):
                 raise HTTPException(400, "Mot de passe incorrect.")
             store.delete_account(conn, account["id"])
             log.info("%s a quitté le relais", account["identifiant"])
         return {"ok": True}
+
+    @app.post("/api/v1/moi/rejoindre")
+    def attach(request: Request, payload: dict = Body(...)) -> dict:
+        """Un compte sans coach rejoint un coach avec son code d'invitation : il devient élève."""
+        keys = (f"ip:{client_ip(request)}",)
+        if throttle.blocked(*keys):
+            raise HTTPException(429, "Trop d'essais : réessaie dans 15 minutes.")
+        with store.session() as conn:
+            account, _ = current(request, conn, solo=True)
+            if account["role"] != "solo":
+                raise HTTPException(400, "Ton compte a déjà un coach.")
+            try:
+                done = store.attach(conn, account["id"], str(payload.get("code") or ""))
+            except store.RelayError as exc:
+                throttle.failure(*keys)
+                raise refuse(exc) from None
+            log.info("%s rejoint un coach", account["identifiant"])
+            return {"compte": done}
 
     # -------------------------------------------------------------- coach
     @app.get("/api/v1/eleves")
@@ -398,9 +439,9 @@ def create_relay_app() -> FastAPI:
                                               "repere": club.last_activity(conn, me)})
 
     # ------------------------------------------------ séances sur la montre (Garmin)
-    def garmin_run(request: Request, action, *, role: str | None = None):
+    def garmin_run(request: Request, action, *, role: str | None = None, solo: bool = False):
         with store.session() as conn:
-            account, _ = current(request, conn, role=role)
+            account, _ = current(request, conn, role=role, solo=solo)
             try:
                 return action(conn, account)
             except garmin.GarminError as exc:
@@ -410,11 +451,12 @@ def create_relay_app() -> FastAPI:
 
     @app.get("/api/v1/garmin")
     def garmin_status(request: Request) -> dict:
-        return garmin_run(request, lambda conn, me: garmin.status(conn, me))
+        return garmin_run(request, lambda conn, me: garmin.status(conn, me), solo=True)
 
     @app.post("/api/v1/garmin/relier")
     def garmin_link(request: Request) -> dict:
-        return garmin_run(request, lambda conn, me: {"adresse": garmin.authorize_url(conn, me["id"])}, role="eleve")
+        return garmin_run(request, lambda conn, me: {"adresse": garmin.authorize_url(conn, me["id"])}, role="eleve",
+                          solo=True)
 
     @app.post("/api/v1/garmin/envoyer")
     def garmin_send(request: Request, payload: dict = Body(...)) -> dict:
@@ -427,7 +469,7 @@ def create_relay_app() -> FastAPI:
     @app.post("/api/v1/garmin/perso")
     def garmin_personal(request: Request, payload: dict = Body(...)) -> dict:
         """Une séance que l'élève s'est composée (son renfo…), sur sa montre."""
-        return garmin_run(request, lambda conn, me: garmin.personal_send(conn, me, payload), role="eleve")
+        return garmin_run(request, lambda conn, me: garmin.personal_send(conn, me, payload), role="eleve", solo=True)
 
     @app.put("/api/v1/garmin")
     def garmin_settings(request: Request, payload: dict = Body(...)) -> dict:
@@ -441,7 +483,7 @@ def create_relay_app() -> FastAPI:
         def action(conn, me):
             garmin.unlink(conn, me["id"])
             return garmin.status(conn, me)
-        return garmin_run(request, action, role="eleve")
+        return garmin_run(request, action, role="eleve", solo=True)
 
     @app.post("/api/v1/garmin/coach")
     def garmin_coach_send(request: Request, payload: dict = Body(...)) -> dict:

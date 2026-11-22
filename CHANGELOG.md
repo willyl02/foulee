@@ -4,6 +4,17 @@ Les versions « bêta » (par exemple 0.4.0b1) sont des avant-premières : elles
 sur le canal bêta (Réglages → Application → Mises à jour → « Recevoir les versions bêta »), puis sortent en
 version stable une fois éprouvées.
 
+## 0.8.3b16 — 22 novembre 2026 (bêta)
+
+- **Envoyer ses séances sur sa montre, même sans coach.** Réglages → Coach et élèves → *Sans coach* : un compte
+  sur le relais Foulée (adresse proposée : relais.foulee-coach.com) qui sert à une seule chose, envoyer les séances
+  de l'Atelier (course ou renfo) dans son calendrier Garmin Connect, au jour choisi. Il ne voit rien d'autre sur le
+  relais et ne partage rien ; pas de page « Mon coach ». On y relie ou délie sa montre Garmin, et *J'ai maintenant
+  un coach* en fait un compte élève avec le code d'invitation du coach (même identifiant, montre toujours reliée).
+- Relais : le rôle « solo » (la table des comptes se met à jour toute seule), l'inscription sans code limitée à
+  quelques comptes d'affilée par adresse, `FOULEE_RELAIS_SOLO=0` pour la fermer et `FOULEE_RELAIS_SOLO_MAX` pour
+  le plafond (500 par défaut) ; `foulee relais comptes` les montre « sans coach (montre) ».
+
 ## 0.8.3b15 — 22 novembre 2026 (bêta)
 
 - **L'Atelier**, nouvelle entrée de la colonne de gauche : on y compose ses séances soi-même, avec ou sans coach.

@@ -123,7 +123,9 @@ export async function renderAtelier(page, boot, { toast, params = new URLSearchP
       </div>
       <p class="hint at-send-hint">${data.montre
         ? "Elle arrive dans ton calendrier Garmin Connect au jour choisi ; ta montre la récupère à sa synchro."
-        : `L'envoi direct dans ton calendrier Garmin passe par le relais du club, avec un compte élève relié (${data.relie ? "ton compte n'est pas un compte élève" : "Réglages → Coach et élèves"}). En attendant : le fichier .fit, à copier dans le dossier GARMIN\\NewFiles de ta montre branchée en USB.`}</p>
+        : data.relie
+          ? "Un compte coach n'envoie pas de séance sur sa propre montre : le fichier .fit, à copier dans le dossier GARMIN\\NewFiles de ta montre branchée en USB."
+          : `Pour l'envoyer directement dans ton calendrier Garmin, relie ce profil au relais Foulée, même sans coach : <a href="#/reglages?section=coach">Réglages → Coach et élèves → « Sans coach »</a>. Sinon, le fichier .fit, à copier dans le dossier GARMIN\\NewFiles de ta montre branchée en USB.`}</p>
       <p class="at-link" data-link ${S.link ? "" : "hidden"}>${S.link || ""}</p>
     </div>`;
   }
