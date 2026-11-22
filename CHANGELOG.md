@@ -4,6 +4,12 @@ Les versions « bêta » (par exemple 0.4.0b1) sont des avant-premières : elles
 sur le canal bêta (Réglages → Application → Mises à jour → « Recevoir les versions bêta »), puis sortent en
 version stable une fois éprouvées.
 
+## 0.8.3b11 — 22 novembre 2026 (bêta)
+
+- **Séances faites, dessin plus juste** : un effort sans allure visée dans la séance (« Allure rapide » d'un plan,
+  comme les 7 × 30 s d'*Avis de tempête*) prend l'allure réellement courue sur les intervalles de l'activité, au
+  lieu d'être dessiné au niveau d'un footing. Les séances faites déjà lues sont relues une fois.
+
 ## 0.8.3b10 — 22 novembre 2026 (bêta)
 
 - **Les zones cardio de l'élève chez son coach.** Une nouvelle case dans « Ce que je partage » : *Tes zones cardio

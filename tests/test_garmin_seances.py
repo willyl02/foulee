@@ -183,3 +183,15 @@ def test_a_done_session_is_drawn_as_it_was_followed():
     tempete = plan["21KM-S3-6-"]
     assert tempete["statut"] == "fait" and tempete["esquisse_approchee"] is False
     assert tempete["blocs"][1]["repetitions"] == 7
+
+
+def test_efforts_without_target_take_the_pace_actually_run():
+    workout = {"workoutSegments": [{"workoutSteps": [
+        step(1, "warmup", "time", 1200, "pace.zone", 2.915, 3.195),
+        {"type": "RepeatGroupDTO", "stepOrder": 2, "numberOfIterations": 7, "workoutSteps": [
+            step(1, "interval", "time", 30), step(2, "rest", "time", 180)]},
+        step(3, "cooldown", "time", 600, "pace.zone", 2.915, 3.195)]}]}
+    seances.fill_efforts(workout, CHARTEVES)
+    blocks = seances.blocks_of(workout, 16)
+    assert blocks[1] == {"genre": "corps", "duree_min": 0.5, "pct_vma": 122, "repetitions": 7, "recup_min": 3.0}
+    assert blocks[0]["pct_vma"] == 69  # une allure visée reste celle du plan

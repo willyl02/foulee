@@ -362,9 +362,35 @@ def workout_from_fit(messages: dict) -> dict | None:
             continue
         out.append((index, dict(_fit_step(m), stepOrder=index + 1)))
     head = (messages.get("workout_mesgs") or [{}])[0] or {}
-    return {"workoutName": head.get("wkt_name"), "sportType": {"sportTypeKey": FIT_SPORTS.get(str(head.get("sport")), "running")},
+    name = head.get("wkt_name")
+    if isinstance(name, list):  # le SDK rend parfois le nom en morceaux : le premier suffit
+        name = next((part for part in name if isinstance(part, str) and part.strip()), None)
+    return {"workoutName": name, "sportType": {"sportTypeKey": FIT_SPORTS.get(str(head.get("sport")), "running")},
             "workoutSegments": [{"segmentOrder": 1, "workoutSteps": [dict(item, stepOrder=k) for k, (_, item) in enumerate(out, 1)]}],
             "_source": "fit"}
+
+
+def fill_efforts(workout: dict, activity: dict) -> None:
+    """Des efforts sans allure visée (« Allure rapide » d'un plan, 30 s à fond) : l'allure réellement courue sur
+    les intervalles actifs de l'activité, pour que le dessin les montre rapides et non au niveau d'un footing."""
+    parts = {str(s.get("splitType")): s for s in activity.get("splitSummaries") or [] if isinstance(s, dict)}
+    speed = (parts.get("INTERVAL_ACTIVE") or {}).get("averageSpeed")
+    if not speed:
+        return
+
+    def walk(steps):
+        for step in steps or []:
+            if not isinstance(step, dict):
+                continue
+            walk(step.get("workoutSteps"))
+            if step.get("type") == "ExecutableStepDTO" and _key(step.get("stepType"), "stepTypeKey") in ("interval", "active") \
+                    and _key(step.get("targetType"), "workoutTargetTypeKey") in ("", "no.target", "open"):
+                step.update(targetType={"workoutTargetTypeKey": "pace.zone"}, targetValueOne=speed, targetValueTwo=speed,
+                            _reelle=True)
+
+    for segment in workout.get("workoutSegments") or []:
+        if isinstance(segment, dict):
+            walk(segment.get("workoutSteps"))
 
 
 def workout_from_intervals(activity: dict) -> dict | None:
@@ -399,6 +425,9 @@ def workout_from_intervals(activity: dict) -> dict | None:
             "workoutSegments": [{"segmentOrder": 1, "workoutSteps": steps}], "_source": "intervalles"}
 
 
+FOLLOWED_VERSION = 2  # 0.8.3b11 : efforts sans allure visée remplis avec l'allure courue (relecture une fois)
+
+
 def followed_key(activity_id: str) -> str:
     return f"activite:{activity_id}"
 
@@ -420,7 +449,8 @@ def followed_sync(conn: sqlite3.Connection, today: date | None = None, limit: in
         key = followed_key(act["id"])
         old = seen.get(key)
         has_fit = bool(act["fit_path"]) and Path(act["fit_path"]).exists()
-        if old and not (has_fit and old["json"] and '"_source": "intervalles"' in old["json"]):
+        current = old is not None and (old["status"] == 204 or f'"_v": {FOLLOWED_VERSION}' in (old["json"] or ""))
+        if current and not (has_fit and '"_source": "intervalles"' in (old["json"] or "")):
             continue  # déjà lue (ou rien à lire) ; seul un FIT arrivé depuis peut l'améliorer
         if done >= limit:
             break
@@ -433,13 +463,18 @@ def followed_sync(conn: sqlite3.Connection, today: date | None = None, limit: in
                 workout = workout_from_fit(messages)
             except Exception as exc:  # noqa: BLE001
                 LOG.info("Séance suivie illisible dans le FIT de %s (%s)", act["id"], type(exc).__name__)
+        raw = conn.execute("SELECT payload FROM raw WHERE source = 'garmin' AND kind = 'activity' AND key = ?",
+                           (str(act["source_id"]),)).fetchone()
+        try:
+            summary = json.loads(raw["payload"]) if raw else None
+        except (TypeError, ValueError):
+            summary = None
         if workout is None:
-            raw = conn.execute("SELECT payload FROM raw WHERE source = 'garmin' AND kind = 'activity' AND key = ?",
-                               (str(act["source_id"]),)).fetchone()
-            try:
-                workout = workout_from_intervals(json.loads(raw["payload"])) if raw else None
-            except (TypeError, ValueError):
-                workout = None
+            workout = workout_from_intervals(summary) if isinstance(summary, dict) else None
+        elif isinstance(summary, dict):
+            fill_efforts(workout, summary)
+        if workout:
+            workout["_v"] = FOLLOWED_VERSION
         _store(conn, key, 200 if workout else 204, workout)
         found += bool(workout)
     if done:
