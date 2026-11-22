@@ -2221,6 +2221,22 @@ a.co-pl:hover { box-shadow: inset 3px 0 0 var(--good), 0 0 0 1px var(--base); }
 .co-prop b { display: block; color: var(--ink); font-size: 14.5px; }
 .co-prop span:not(.co-chip):not(.co-prop-tools) { display: block; color: var(--muted); font-size: 13px; }
 .co-prop-tools { display: flex; }
+/* Réglages → zones FC : d'où elles viennent (montre OU Foulée) */
+.hz-source { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 0 0 14px; max-width: 640px; }
+.hz-choice { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border: 1px solid var(--hair); border-radius: 10px;
+  background: var(--surface-2); color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+.hz-choice svg { width: 18px; height: 18px; flex: none; margin-top: 2px; color: var(--muted); }
+.hz-choice span { display: flex; flex-direction: column; gap: 2px; }
+.hz-choice b { font-weight: 600; font-size: 14.5px; }
+.hz-choice small { color: var(--muted); font-size: 12.5px; }
+.hz-choice[aria-checked="true"] { border-color: var(--s1); box-shadow: inset 0 0 0 1px var(--s1); background: color-mix(in srgb, var(--s1) 10%, var(--surface-2)); }
+.hz-choice[aria-checked="true"] svg { color: var(--s1); }
+.hz-profiles { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin: 0 0 10px; }
+.hz-profiles > span { font-size: 13px; color: var(--ink-2); }
+.hz-facts { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; }
+.hz-facts span { padding: 3px 9px; border-radius: 999px; background: var(--surface-2); font-size: 13px; color: var(--ink); }
+@media (max-width: 560px) { .hz-source { grid-template-columns: minmax(0, 1fr); } }
+
 /* Zones cardio de l'élève (réglages Garmin) */
 .co-zones-scroll { overflow-x: auto; }
 .co-zones-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }

@@ -411,13 +411,9 @@ def _shared_session(conn: sqlite3.Connection, row: sqlite3.Row, accord: dict, fl
 
 def garmin_zone_profiles(conn: sqlite3.Connection) -> list[dict]:
     """Les zones FC réglées dans Garmin Connect, lues à la dernière synchro (raw hr_zones)."""
-    from .garmin import parse
+    from . import analysis
 
-    row = conn.execute("SELECT payload FROM raw WHERE source = 'garmin' AND kind = 'hr_zones' AND key = 'latest'").fetchone()
-    try:
-        return parse.heart_rate_zone_profiles(json.loads(row["payload"])) if row else []
-    except (TypeError, ValueError):
-        return []
+    return analysis.garmin_zone_profiles(conn)
 
 
 def snapshot(conn: sqlite3.Connection, accord: dict, today: date | None = None) -> dict:

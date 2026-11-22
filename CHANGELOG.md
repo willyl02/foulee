@@ -4,6 +4,21 @@ Les versions « bêta » (par exemple 0.4.0b1) sont des avant-premières : elles
 sur le canal bêta (Réglages → Application → Mises à jour → « Recevoir les versions bêta »), puis sortent en
 version stable une fois éprouvées.
 
+## 0.8.3b12 — 22 novembre 2026 (bêta)
+
+- **Zones FC : la montre OU Foulée, plus de mélange.** Dans Réglages → Entraînement → Zones FC, deux choix
+  clairs en tête : *Celles de ma montre* ou *Réglées dans Foulée*.
+  - **Ma montre** : on choisit le profil Garmin à suivre (course à pied, général, trail… selon ce que la montre a),
+    et Foulée prend tout de lui : bornes des zones, mais aussi FC max et FC au repos (pour la charge
+    d'entraînement), en lecture seule, avec la méthode et les remarques (mêmes zones partout, pas de zones course…).
+    « Les reprendre dans Foulée » les recopie pour les ajuster à la main.
+  - **Foulée** : % de la FC max, de la FC de réserve, du seuil, ou bornes à la main, comme avant.
+  - Les zones d'allure le disent maintenant : Garmin ne donne pas celles de la montre, elles se règlent dans
+    Foulée (VMA, seuil ou à la main).
+- **« Mes zones FC »**, un nouvel onglet dans Mon coach (à côté de « Mon partage ») : le même tableau que voit le
+  coach (tous les profils de la montre, méthode, FC max / repos / seuil, zones et %), les zones que Foulée
+  applique, et si le coach les voit, avec le bouton pour les partager ou non.
+
 ## 0.8.3b11 — 22 novembre 2026 (bêta)
 
 - **Séances faites, dessin plus juste** : un effort sans allure visée dans la séance (« Allure rapide » d'un plan,

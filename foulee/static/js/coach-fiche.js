@@ -7,7 +7,7 @@ import { levelChip } from "./coach-reglages.js";
 import { icon } from "./icons.js";
 import {
   avatar, blocksHtml, dayLabel, dur, km, loading, mountThread, rdel, rget, sessionFigures, sportIcon, statusChip, traceSvg,
-  watchLine, watchSummary,
+  watchLine, watchSummary, zoneProfilesHTML,
 } from "./coach-ui.js";
 import { beam, headline, pairs } from "./tiles-renfo.js";
 
@@ -20,64 +20,13 @@ function shareSummary(accord) {
   return items.length ? items.join(", ") : "rien";
 }
 
-// ------------------------------------------------------------------ zones cardio (réglages Garmin)
-const ZONE_SPORTS = { DEFAULT: "Général", RUNNING: "Course à pied", CYCLING: "Vélo", SWIMMING: "Natation" };
-const ZONE_METHODS = {
-  HR_MAX_BASED: ["% de la FC max", "fc_max", "FC max"],
-  HRR_BASED: ["% de la FC de réserve", "reserve", "FC de réserve"],
-  LACTATE_THRESHOLD: ["% de la FC au seuil", "fc_seuil", "Seuil lactique"],
-};
-
-function zonePct(bpm, z) {
-  const [, ref] = ZONE_METHODS[z.methode] || [];
-  if (ref === "fc_max" && z.fc_max) return Math.round((bpm / z.fc_max) * 100);
-  if (ref === "fc_seuil" && z.fc_seuil) return Math.round((bpm / z.fc_seuil) * 100);
-  if (ref === "reserve" && z.fc_max && z.fc_repos) return Math.round(((bpm - z.fc_repos) / (z.fc_max - z.fc_repos)) * 100);
-  return null;
-}
-
-/** Ce qui saute aux yeux d'un coach : pas de zones propres à la course, les mêmes partout, un écart avec Foulée. */
-function zoneNotes(list, profil) {
-  const notes = [];
-  const run = list.find((z) => z.sport === "RUNNING");
-  const base = list.find((z) => z.sport === "DEFAULT");
-  const same = (a, b) => a && b && a.methode === b.methode && a.bornes.join() === b.bornes.join();
-  if (!run) notes.push("Pas de zones propres à la course : la montre prend les zones générales en course à pied.");
-  else if (same(run, base)) notes.push("La course utilise exactement les mêmes zones que le profil général.");
-  const ref = run || base;
-  if (ref && profil?.fc_max && ref.fc_max && Math.abs(profil.fc_max - ref.fc_max) >= 3) {
-    notes.push(`FC max dans Foulée : ${F.int(profil.fc_max)}, dans Garmin : ${F.int(ref.fc_max)}.`);
-  }
-  if (ref && !ref.repos_auto && ref.methode === "HRR_BASED") notes.push("FC au repos fixée à la main (pas mise à jour par la montre).");
-  return notes;
-}
-
 function zonesCard(list, profil, accord, name) {
   if (!accord?.zones) return "";
   if (!list?.length) {
     return `<section class="coach-card"><h2>${icon("heart")}Zones cardio</h2><p class="co-empty">${F.escape(name)} partage ses zones, mais rien n'est encore arrivé (une synchro Garmin de son côté suffit).</p></section>`;
   }
-  const order = ["RUNNING", "DEFAULT"];
-  const profiles = [...list].sort((a, b) => ((order.indexOf(a.sport) + 1) || 9) - ((order.indexOf(b.sport) + 1) || 9));
-  const cols = profiles.map((z) => `<th>${F.escape(ZONE_SPORTS[z.sport] || z.sport.toLowerCase())}</th>`).join("");
-  const cell = (z, i) => {
-    const low = z.bornes[i];
-    const high = i < 4 ? z.bornes[i + 1] - 1 : z.fc_max;
-    const pct = zonePct(low, z);
-    return `<td><b>${F.int(low)}${high ? `–${F.int(high)}` : "+"}</b>${pct != null ? `<small>${pct} %</small>` : ""}</td>`;
-  };
-  const row = (label, fn) => `<tr><th scope="row">${label}</th>${profiles.map((z) => `<td>${fn(z)}</td>`).join("")}</tr>`;
-  const notes = zoneNotes(list, profil);
   return `<section class="coach-card co-zones"><h2>${icon("heart")}Zones cardio <span class="co-sub">réglages Garmin Connect</span></h2>
-    <div class="co-zones-scroll"><table class="co-zones-table"><thead><tr><th></th>${cols}</tr></thead><tbody>
-      ${row("Méthode", (z) => (ZONE_METHODS[z.methode] ? `<span title="Les % des zones : ${F.escape(ZONE_METHODS[z.methode][0])}">${F.escape(ZONE_METHODS[z.methode][2])}</span>` : "–"))}
-      ${row("FC max", (z) => (z.fc_max ? F.int(z.fc_max) : "–"))}
-      ${row("FC au repos", (z) => (z.fc_repos ? `${F.int(z.fc_repos)}${z.repos_auto ? " <small>auto</small>" : ""}` : "–"))}
-      ${row("FC au seuil", (z) => (z.fc_seuil ? F.int(z.fc_seuil) : "–"))}
-      ${[0, 1, 2, 3, 4].map((i) => `<tr class="co-zone-row"><th scope="row"><span class="co-zone-dot z${i + 1}"></span>Zone ${i + 1}</th>${profiles.map((z) => cell(z, i)).join("")}</tr>`).join("")}
-    </tbody></table></div>
-    ${notes.length ? `<ul class="co-zone-notes">${notes.map((n) => `<li>${icon("info")}<span>${F.escape(n)}</span></li>`).join("")}</ul>` : ""}
-  </section>`;
+    ${zoneProfilesHTML(list, { fcMax: profil?.fc_max })}</section>`;
 }
 
 function goalPace(goal) {

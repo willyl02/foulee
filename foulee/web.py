@@ -411,6 +411,21 @@ def create_app() -> FastAPI:
                                                settings.get("objectifs_secondaires") or []) if g]
             return data
 
+    # ----------------------------------------------------------- zones FC
+    @app.get("/api/zones/montre")
+    def watch_zones() -> dict:
+        """Les zones FC de la montre (profil par profil), celles que Foulée utilise, et si le coach les voit."""
+        with db.session(readonly=True) as conn:
+            settings = db.get_settings(conn)
+            hrp = analysis.hr_profile(conn, settings)
+            config = settings.get("zones_fc") if isinstance(settings.get("zones_fc"), dict) else {}
+            accord = coach.local_accord(conn) or {}
+            return {"profils": analysis.garmin_zone_profiles(conn),
+                    "foulee": {"methode": hrp["methode"], "profil_garmin": config.get("profil_garmin"),
+                               "max": hrp["max"], "repos": hrp["rest"], "source_max": hrp["source_max"],
+                               "planchers": hrp["floors"], "bornes": hrp["bornes"]},
+                    "partage": {"coach": bool(coach.role(conn) == "eleve"), "zones": bool(accord.get("zones"))}}
+
     # ----------------------------------------------------------- objectifs
     @app.get("/api/objectifs")
     def get_goals() -> dict:

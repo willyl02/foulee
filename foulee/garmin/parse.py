@@ -541,13 +541,13 @@ def parse_activity(item: dict) -> dict | None:
     }
 
 
-def heart_rate_zones(payload: Any) -> dict | None:
-    """Zones FC Garmin (profil « DEFAULT » ou course) → bornes basses et FC max."""
+def heart_rate_zones(payload: Any, prefer: str | None = None) -> dict | None:
+    """Zones FC Garmin (le profil choisi, sinon course, sinon « DEFAULT ») → bornes basses et FC max."""
     items = items_of(payload)
     if not items:
         return None
     chosen = None
-    for preferred in ("RUNNING", "DEFAULT"):
+    for preferred in tuple(p for p in (prefer, "RUNNING", "DEFAULT") if p):
         for item in items:
             if str(item.get("sport", "")).upper() == preferred:
                 chosen = item

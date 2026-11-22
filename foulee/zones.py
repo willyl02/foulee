@@ -87,7 +87,10 @@ def clean_hr(data: Any) -> dict:
     method = data.get("methode") or "auto"
     if method not in HR_METHODS and method != "auto":
         raise ZoneError(f"Méthode de zones FC inconnue : {method}.")
-    clean: dict[str, Any] = {"methode": method, "pct": None, "seuil": None, "bornes": None}
+    clean: dict[str, Any] = {"methode": method, "pct": None, "seuil": None, "bornes": None, "profil_garmin": None}
+    profile = str(data.get("profil_garmin") or "").upper()
+    if method == "garmin" and re.fullmatch(r"[A-Z_]{2,20}", profile):
+        clean["profil_garmin"] = profile  # le profil de la montre suivi (course à pied, général, trail…)
     if data.get("pct") is not None:
         clean["pct"] = _numbers(data["pct"], 5, 20, 130, "Zones FC en %")
     if data.get("seuil") not in (None, ""):

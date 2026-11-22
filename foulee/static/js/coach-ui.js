@@ -178,7 +178,8 @@ export function tabs(role, active, { unread = 0 } = {}) {
   const items = role === "coach"
     ? [["eleves", "#/coach", "club", "Mes élèves"], ["messages", "#/coach/messages", "chat", "Messages"], ["proposer", "#/coach/proposer", "plus", "Proposer une séance"],
       ["reglages", "#/coach/reglages", "settings", "Groupes et séances types"]]
-    : [["coach", "#/coach", "user", "Mon coach"], ["messages", "#/coach/messages", "chat", "Messages"], ["partage", "#/coach/partage", "lock", "Mon partage"]];
+    : [["coach", "#/coach", "user", "Mon coach"], ["messages", "#/coach/messages", "chat", "Messages"], ["partage", "#/coach/partage", "lock", "Mon partage"],
+      ["zones", "#/coach/zones", "heart", "Mes zones FC"]];
   return `<nav class="co-tabs" aria-label="Coach et élèves">${items.map(([id, href, ic, label]) => `<a href="${href}" class="co-tab" ${id === active ? 'aria-current="page"' : ""}>
     ${icon(ic)}<span>${label}</span>${id === "messages" && unread ? `<span class="co-badge" data-coach-unread>${unread}</span>` : ""}</a>`).join("")}</nav>`;
 }
@@ -303,4 +304,70 @@ export function mountThread(box, { fil, role, style = "bubbles", placeholder = "
   function stop() { alive = false; clearInterval(timer); window.removeEventListener("coach:news", onNews); }
   const ready = load();
   return { refresh, stop, ready, focus: () => area.focus() };
+}
+
+// ------------------------------------------------------------------ zones cardio (réglages Garmin)
+// Le même tableau chez le coach (fiche de l'élève), chez l'élève (« Mes zones FC ») et dans les Réglages
+export const ZONE_SPORTS = { DEFAULT: "Général", RUNNING: "Course à pied", TRAIL_RUNNING: "Trail", CYCLING: "Vélo", SWIMMING: "Natation" };
+export const ZONE_METHODS = {
+  HR_MAX_BASED: ["% de la FC max", "fc_max", "FC max"],
+  HRR_BASED: ["% de la FC de réserve", "reserve", "FC de réserve"],
+  LACTATE_THRESHOLD: ["% de la FC au seuil", "fc_seuil", "Seuil lactique"],
+};
+export const zoneSport = (sport) => ZONE_SPORTS[sport] || String(sport || "").toLowerCase().replace(/_/g, " ");
+
+export function zonePct(bpm, z) {
+  const [, ref] = ZONE_METHODS[z.methode] || [];
+  if (ref === "fc_max" && z.fc_max) return Math.round((bpm / z.fc_max) * 100);
+  if (ref === "fc_seuil" && z.fc_seuil) return Math.round((bpm / z.fc_seuil) * 100);
+  if (ref === "reserve" && z.fc_max && z.fc_repos) return Math.round(((bpm - z.fc_repos) / (z.fc_max - z.fc_repos)) * 100);
+  return null;
+}
+
+/** Les profils dans l'ordre utile : course à pied, trail, général, puis les autres. */
+export function orderZoneProfiles(list) {
+  const order = ["RUNNING", "TRAIL_RUNNING", "DEFAULT"];
+  return [...(list || [])].sort((a, b) => ((order.indexOf(a.sport) + 1) || 9) - ((order.indexOf(b.sport) + 1) || 9));
+}
+
+/** Ce qui saute aux yeux : pas de zones propres à la course, les mêmes partout, un écart avec Foulée. */
+export function zoneNotes(list, { fcMax = null } = {}) {
+  const notes = [];
+  const run = list.find((z) => z.sport === "RUNNING");
+  const base = list.find((z) => z.sport === "DEFAULT");
+  const same = (a, b) => a && b && a.methode === b.methode && a.bornes.join() === b.bornes.join();
+  if (!run) notes.push("Pas de zones propres à la course : la montre prend les zones générales en course à pied.");
+  else if (same(run, base)) notes.push("La course utilise exactement les mêmes zones que le profil général.");
+  const ref = run || base;
+  if (ref && fcMax && ref.fc_max && Math.abs(fcMax - ref.fc_max) >= 3) {
+    notes.push(`FC max dans Foulée : ${F.int(fcMax)}, dans Garmin : ${F.int(ref.fc_max)}.`);
+  }
+  if (ref && !ref.repos_auto && ref.methode === "HRR_BASED") notes.push("FC au repos fixée à la main (pas mise à jour par la montre).");
+  return notes;
+}
+
+export function zoneRange(z, i) {
+  const low = z.bornes[i];
+  const high = i < 4 ? z.bornes[i + 1] - 1 : z.fc_max;
+  return `${F.int(low)}${high ? `–${F.int(high)}` : "+"}`;
+}
+
+/** Le tableau des profils de zones (une colonne par profil) et les remarques. */
+export function zoneProfilesHTML(list, { fcMax = null } = {}) {
+  const profiles = orderZoneProfiles(list);
+  const cols = profiles.map((z) => `<th>${F.escape(zoneSport(z.sport))}</th>`).join("");
+  const cell = (z, i) => {
+    const pct = zonePct(z.bornes[i], z);
+    return `<td><b>${zoneRange(z, i)}</b>${pct != null ? `<small>${pct} %</small>` : ""}</td>`;
+  };
+  const row = (label, fn) => `<tr><th scope="row">${label}</th>${profiles.map((z) => `<td>${fn(z)}</td>`).join("")}</tr>`;
+  const notes = zoneNotes(list, { fcMax });
+  return `<div class="co-zones-scroll"><table class="co-zones-table"><thead><tr><th></th>${cols}</tr></thead><tbody>
+      ${row("Méthode", (z) => (ZONE_METHODS[z.methode] ? `<span title="Les % des zones : ${F.escape(ZONE_METHODS[z.methode][0])}">${F.escape(ZONE_METHODS[z.methode][2])}</span>` : "–"))}
+      ${row("FC max", (z) => (z.fc_max ? F.int(z.fc_max) : "–"))}
+      ${row("FC au repos", (z) => (z.fc_repos ? `${F.int(z.fc_repos)}${z.repos_auto ? " <small>auto</small>" : ""}` : "–"))}
+      ${row("FC au seuil", (z) => (z.fc_seuil ? F.int(z.fc_seuil) : "–"))}
+      ${[0, 1, 2, 3, 4].map((i) => `<tr class="co-zone-row"><th scope="row"><span class="co-zone-dot z${i + 1}"></span>Zone ${i + 1}</th>${profiles.map((z) => cell(z, i)).join("")}</tr>`).join("")}
+    </tbody></table></div>
+    ${notes.length ? `<ul class="co-zone-notes">${notes.map((n) => `<li>${icon("info")}<span>${F.escape(n)}</span></li>`).join("")}</ul>` : ""}`;
 }

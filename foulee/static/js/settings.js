@@ -84,13 +84,13 @@ export function renderSettings(page, boot, { onSaved, onProfile, refreshBoot, to
 
       <section data-section="zones-fc">
         <h2>Zones de fréquence cardiaque</h2>
-        <p class="intro">Elles comptent ton temps par zone dans chaque séance. Tire les séparations de la barre pour les ajuster.</p>
+        <p class="intro">Elles comptent ton temps par zone dans chaque séance : soit celles de ta montre, soit les tiennes, réglées ici.</p>
         <div data-hr-zones></div>
       </section>
 
       <section data-section="zones">
         <h2>Zones d'allure et fractions</h2>
-        <p class="intro">Cinq zones d'allure pour la course à pied. Le seuil des fractions décide quels tours comptent comme rapides.</p>
+        <p class="intro">Cinq zones d'allure pour la course à pied. Garmin ne donne pas à Foulée les zones d'allure de ta montre : elles se règlent ici, depuis ta VMA (les allures du club), ta vitesse au seuil ou à la main. Le seuil des fractions décide quels tours comptent comme rapides.</p>
         <div data-pace-zones></div>
         <div class="form-grid" style="margin-top:12px">
           <label class="field"><span>Fractions rapides (% VMA)</span><input type="number" min="60" max="120" step="1" name="fractions" value="${F.escape(s.fractions_seuil_pct_vma)}"></label>

@@ -4,7 +4,9 @@ import * as api from "./api.js";
 import * as F from "./format.js";
 import { calendarCard, wireCalendar } from "./coach-cal.js";
 import { icon } from "./icons.js";
-import { avatar, blocksHtml, dayLabel, fail, loading, mountThread, statusChip, sportIcon } from "./coach-ui.js";
+import {
+  avatar, blocksHtml, dayLabel, fail, loading, mountThread, statusChip, sportIcon, ZONE_METHODS, zoneProfilesHTML, zoneSport,
+} from "./coach-ui.js";
 import { clubLogoURL } from "./settings-club.js";
 
 const CHOICES = [
@@ -296,4 +298,54 @@ export async function renderAccord(ctx) {
       btn.disabled = false;
     }
   });
+}
+
+
+// ------------------------------------------------------------------ mes zones FC
+const FOULEE_METHODS = { garmin: "les zones de ta montre", pct_max: "% de ta FC max", pct_reserve: "% de ta FC de réserve",
+  pct_seuil: "% de ta FC au seuil", bornes: "des bornes réglées à la main" };
+
+/** « Mes zones FC » : les réglages de la montre, ceux que Foulée applique, et ce que voit le coach. */
+export async function renderMyZones(ctx) {
+  const { page, me } = ctx;
+  page.innerHTML = `${ctx.head(`<h1>Mes zones FC</h1>`)}${ctx.tabs("zones")}<div class="co-page wide">${loading()}</div>`;
+  let data;
+  try {
+    data = await api.get("/api/zones/montre", null, { fresh: true });
+  } catch (err) {
+    page.querySelector(".co-page").innerHTML = fail(err.message);
+    return;
+  }
+  const coachName = me.coach?.nom || "ton coach";
+  const first = coachName.split(" ")[0];
+  const f = data.foulee;
+  const floors = (f.planchers || []).map(Number);
+  const range = (i) => (i === 0 ? (floors[0] > 0 ? `${floors[0]}–${floors[1] - 1}` : `< ${floors[1]}`) : i === 4 ? `≥ ${floors[4]}` : `${floors[i]}–${floors[i + 1] - 1}`);
+  const usedProfile = f.methode === "garmin" ? (data.profils.find((z) => z.sport === f.profil_garmin)
+    || data.profils.find((z) => z.sport === "RUNNING") || data.profils.find((z) => z.sport === "DEFAULT")) : null;
+  page.innerHTML = `${ctx.head(`<h1>Mes zones FC</h1>`, `<span>Telles que réglées sur ta montre (Garmin Connect), et telles que Foulée les applique.</span>`)}
+    ${ctx.tabs("zones")}
+    <div class="co-grid2">
+      <div class="co-page">
+        <section class="coach-card co-zones"><h2>${icon("watch")}Sur ta montre <span class="co-sub">réglages Garmin Connect, relus à chaque synchro</span></h2>
+          ${data.profils.length ? zoneProfilesHTML(data.profils, { fcMax: f.methode === "garmin" ? null : f.max })
+            : `<p class="co-empty">Garmin n'a pas encore donné tes zones : lance une synchro.</p>`}
+          <p class="hint" style="margin:10px 0 0">Pour les changer : dans Garmin Connect (réglages de l'utilisateur, zones de fréquence cardiaque) ou sur la montre. Foulée les relit à la synchro suivante.</p>
+        </section>
+      </div>
+      <div class="co-page">
+        <section class="coach-card"><h2>${icon("activity")}Dans Foulée</h2>
+          <p>Foulée compte ton temps par zone avec <b>${F.escape(FOULEE_METHODS[f.methode] || f.methode)}</b>${usedProfile ? ` (profil <b>${F.escape(zoneSport(usedProfile.sport))}</b>, ${F.escape((ZONE_METHODS[usedProfile.methode] || ["", "", "méthode Garmin"])[2].toLowerCase())})` : ""}.</p>
+          <dl class="co-dl">${[0, 1, 2, 3, 4].map((i) => `<dt><span class="co-zone-dot z${i + 1}"></span>Zone ${i + 1}</dt><dd>${range(i)} bpm</dd>`).join("")}
+            <dt>FC max</dt><dd>${F.int(f.max)}${f.source_max ? ` <small class="muted">(${F.escape(f.source_max)})</small>` : ""}</dd></dl>
+          ${f.methode !== "garmin" && data.profils.length ? `<p class="hint">Ce ne sont pas celles de ta montre : tes séances n'ont donc pas tout à fait les mêmes temps par zone que dans Garmin Connect.</p>` : ""}
+          <div class="inline-actions" style="margin:10px 0 0"><a class="btn btn-small" href="#/reglages?section=zones-fc">${icon("settings")}Changer dans les Réglages</a></div>
+        </section>
+        <section class="coach-card"><h2>${icon("lock")}Avec ${F.escape(first)}</h2>
+          ${data.partage.zones ? `<p><span class="co-chip good">${icon("check")}partagées</span> ${F.escape(first)} voit ce tableau sur ta fiche, avec les mêmes remarques.</p>`
+            : `<p><span class="co-chip">non partagées</span> ${F.escape(first)} ne voit pas tes zones.</p>`}
+          <div class="inline-actions" style="margin:10px 0 0"><a class="btn btn-small" href="#/coach/partage">${icon("lock")}${data.partage.zones ? "Ne plus les partager" : "Les partager"}</a></div>
+        </section>
+      </div>
+    </div>`;
 }

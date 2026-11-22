@@ -42,3 +42,31 @@ def test_zones_reach_the_coach_only_when_shared(relay):
     with db.session() as conn:  # décoché : effacé tout de suite chez le coach
         coach.set_accord(conn, {"seances": True, "objectif": True, "zones": False})
     assert relay.get(f"/api/v1/eleves/{sid}/fiche", headers=sophie).json()["zones_fc"] == []
+
+
+def test_the_watch_profile_chosen_drives_zones_max_and_rest():
+    from fastapi.testclient import TestClient
+
+    from foulee import analysis
+    from foulee.web import create_app
+
+    trail = {**GARMIN[1], "sport": "TRAIL_RUNNING", "trainingMethod": "HR_MAX_BASED", "maxHeartRateUsed": 192,
+             "restingHeartRateUsed": 44, "zone1Floor": 96, "zone2Floor": 115, "zone3Floor": 134, "zone4Floor": 154,
+             "zone5Floor": 173}
+    with db.session() as conn:
+        db.put_raw(conn, "garmin", "hr_zones", "latest", [*GARMIN, trail])
+        db.set_setting(conn, "fc_max", 200)  # réglée dans Foulée : la montre l'emporte quand on suit la montre
+        db.set_setting(conn, "zones_fc", {"methode": "garmin", "profil_garmin": "TRAIL_RUNNING"})
+        hrp = analysis.hr_profile(conn, db.get_settings(conn))
+        assert hrp["floors"] == [96, 115, 134, 154, 173] and hrp["max"] == 192 and hrp["rest"] == 44
+        assert hrp["source_max"] == "montre"
+        db.set_setting(conn, "zones_fc", {"methode": "pct_max"})  # réglées dans Foulée : sa FC max à elle
+        assert analysis.hr_profile(conn, db.get_settings(conn))["max"] == 200
+    http = TestClient(create_app())
+    saved = http.put("/api/settings", headers={"X-Foulee": "1"},
+                     json={"zones_fc": {"methode": "garmin", "profil_garmin": "running"}})
+    assert saved.status_code == 200 and saved.json()["reglages"]["zones_fc"]["profil_garmin"] == "RUNNING"
+    data = http.get("/api/zones/montre").json()
+    assert [p["sport"] for p in data["profils"]] == ["DEFAULT", "RUNNING", "TRAIL_RUNNING"]
+    assert data["foulee"]["methode"] == "garmin" and data["foulee"]["profil_garmin"] == "RUNNING"
+    assert data["foulee"]["planchers"] == [110, 144, 152, 161, 169] and data["partage"]["zones"] is False

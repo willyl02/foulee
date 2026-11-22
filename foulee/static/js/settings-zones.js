@@ -3,6 +3,7 @@
 import * as C from "./charts.js";
 import * as F from "./format.js";
 import { icon } from "./icons.js";
+import { orderZoneProfiles, ZONE_METHODS, zoneNotes, zoneSport } from "./coach-ui.js";
 
 const HR_METHODS = [
   ["garmin", "Zones Garmin (celles de ta montre)"],
@@ -60,23 +61,33 @@ function zoneBar(box, { lo, hi, bounds, start, label, onDrag, editable, step = 1
 }
 
 // =================================================================== FC
+// Deux sources, l'une OU l'autre : les zones de la montre (un profil Garmin : course à pied, trail, général…,
+// en lecture seule, avec sa FC max et sa FC au repos), ou des zones réglées dans Foulée (une méthode, une barre
+// dont on tire les séparations). Jamais un mélange des deux.
+const FOULEE_HR_METHODS = HR_METHODS.filter(([k]) => k !== "garmin");
+
 export function hrZonesEditor(box, boot, profile) {
-  const garmin = boot.garmin_profil?.zones_fc || null;
+  const profiles = orderZoneProfiles(boot.garmin_profil?.profils || []);
+  const legacy = boot.garmin_profil?.zones_fc || null;  // ancien format : un seul profil, sans le détail
   const saved = boot.reglages.zones_fc || {};
+  const start = !saved.methode || saved.methode === "auto" ? (boot.profil_fc?.methode || "pct_max") : saved.methode;
   const z = {
-    methode: !saved.methode || saved.methode === "auto" ? (boot.profil_fc?.methode || "pct_max") : saved.methode,
+    methode: start,
+    last: start === "garmin" ? "pct_max" : start,  // la méthode Foulée à retrouver en revenant de la montre
+    profil: saved.profil_garmin || (profiles.find((p) => p.sport === "RUNNING") || profiles[0])?.sport || null,
     pct: saved.pct ? [...saved.pct] : null,
     seuil: saved.seuil || null,
     bornes: saved.bornes ? [...saved.bornes] : null,
   };
   let focusHandle = null;
 
-  const lthr = () => z.seuil || garmin?.lthr || boot.garmin_profil?.profil?.seuil_fc || null;
+  const watch = () => profiles.find((p) => p.sport === z.profil) || profiles[0] || null;
+  const lthr = () => z.seuil || watch()?.fc_seuil || legacy?.lthr || boot.garmin_profil?.profil?.seuil_fc || null;
   const pctOf = () => z.pct || HR_DEFAULT[z.methode] || HR_DEFAULT.pct_max;
 
   function floors() {
     const { max, rest } = profile();
-    if (z.methode === "garmin") return garmin?.floors?.map(Number) || null;
+    if (z.methode === "garmin") return watch()?.bornes?.map(Number) || legacy?.floors?.map(Number) || null;
     if (z.methode === "bornes") return [0, ...(z.bornes || current().slice(1))];
     const pct = pctOf();
     if (z.methode === "pct_reserve") return pct.map((p) => Math.round(rest + ((max - rest) * p) / 100));
@@ -88,39 +99,64 @@ export function hrZonesEditor(box, boot, profile) {
     return (boot.profil_fc?.floors || [0, 120, 140, 155, 170]).map(Number);
   }
 
-  function render() {
+  function watchPart() {
+    if (!profiles.length && !legacy) {
+      return `<p class="computed warn">${icon("warning")}<span>Garmin n'a pas encore donné tes zones : lance une synchro, ou règle-les dans Foulée.</span></p>`;
+    }
+    const w = watch();
+    const facts = w ? [ZONE_METHODS[w.methode]?.[2], w.fc_max && `FC max ${F.int(w.fc_max)}`,
+      w.fc_repos && `au repos ${F.int(w.fc_repos)}${w.repos_auto ? " (mise à jour par la montre)" : ""}`, w.fc_seuil && `au seuil ${F.int(w.fc_seuil)}`].filter(Boolean) : [];
+    const notes = profiles.length ? zoneNotes(profiles) : [];
+    return `${profiles.length > 1 ? `<div class="hz-profiles" role="radiogroup" aria-label="Profil de la montre"><span>Profil de la montre</span>
+        <div class="segmented small">${profiles.map((p) => `<button type="button" role="radio" data-profile="${F.escape(p.sport)}" aria-checked="${p.sport === z.profil}" aria-pressed="${p.sport === z.profil}">${F.escape(zoneSport(p.sport))}</button>`).join("")}</div></div>` : ""}
+      ${facts.length ? `<p class="hz-facts">${facts.map((t) => `<span>${F.escape(t)}</span>`).join("")}</p>` : ""}
+      ${notes.length ? `<ul class="co-zone-notes">${notes.map((n) => `<li>${icon("info")}<span>${F.escape(n)}</span></li>`).join("")}</ul>` : ""}
+      <p class="hint">Foulée suit ta montre : zones, FC max et FC au repos viennent d'elle, relues à chaque synchro. Pour les changer : Garmin Connect (zones de fréquence cardiaque) ou la montre.</p>`;
+  }
+
+  function fouleePart() {
     const { max, rest } = profile();
-    const f = floors();
     const pct = pctOf();
-    let inputs = "";
-    if (z.methode === "garmin") {
-      inputs = garmin ? `<p class="computed">Zones de ta montre (méthode Garmin « ${F.escape(garmin.method || "?")} »${garmin.lthr ? `, seuil ${garmin.lthr} bpm` : ""}) : relues à chaque synchro. Pour les changer, passe par Garmin Connect, ou pars d'elles pour les ajuster ici.</p>
-        <button class="btn btn-ghost" type="button" data-adjust>${icon("edit")}Ajuster ces zones à la main</button>`
-        : `<p class="computed warn">${icon("warning")}<span>Garmin n'a pas encore donné tes zones : lance une synchro, ou choisis une autre méthode.</span></p>`;
-    } else if (z.methode === "bornes") {
+    let inputs;
+    if (z.methode === "bornes") {
+      const f = floors();
       inputs = `<div class="zone-inputs">${[1, 2, 3, 4].map((i) => `<label class="field"><span>Z${i + 1} dès (bpm)</span>
         <input type="number" min="60" max="230" data-bound="${i - 1}" value="${f[i]}"></label>`).join("")}</div>
         <p class="hint">Comme sur Strava : la zone 1 compte tout ce qui est sous la zone 2.</p>`;
     } else {
-      inputs = `${z.methode === "pct_seuil" ? `<label class="field narrow"><span>FC au seuil lactique (bpm)</span><input type="number" min="100" max="220" data-lthr value="${F.escape(z.seuil ?? "")}" placeholder="${F.escape(garmin?.lthr || boot.garmin_profil?.profil?.seuil_fc || "")}"></label>` : ""}
+      inputs = `${z.methode === "pct_seuil" ? `<label class="field narrow"><span>FC au seuil lactique (bpm)</span><input type="number" min="100" max="220" data-lthr value="${F.escape(z.seuil ?? "")}" placeholder="${F.escape(lthr() || "")}"></label>` : ""}
         <div class="zone-inputs">${pct.map((p, i) => `<label class="field"><span>Z${i + 1} dès (%)</span>
         <input type="number" min="20" max="130" step="1" data-pct="${i}" value="${p}"></label>`).join("")}</div>
-        <p class="hint">${z.methode === "pct_max" ? `De ta FC max (${Math.round(max)} bpm).` : z.methode === "pct_reserve" ? `FC de repos + % × (FC max − FC de repos) : ${Math.round(rest)} + % × ${Math.round(max - rest)} bpm.` : lthr() ? `De ta FC au seuil (${lthr()} bpm${z.seuil ? "" : ", lue chez Garmin"}).` : "Renseigne ta FC au seuil (Garmin la donne si ta montre l'a mesurée)."}</p>`;
+        <p class="hint">${z.methode === "pct_max" ? `De ta FC max (${Math.round(max)} bpm, réglée dans « Coureur »).` : z.methode === "pct_reserve" ? `FC de repos + % × (FC max − FC de repos) : ${Math.round(rest)} + % × ${Math.round(max - rest)} bpm.` : lthr() ? `De ta FC au seuil (${lthr()} bpm${z.seuil ? "" : ", lue chez Garmin"}).` : "Renseigne ta FC au seuil (Garmin la donne si ta montre l'a mesurée)."}</p>`;
     }
-    box.innerHTML = `<div class="form-grid method-row"><label class="field"><span>Méthode</span><select data-method>${HR_METHODS.map(([k, l]) => `<option value="${k}" ${k === z.methode ? "selected" : ""}>${l}</option>`).join("")}</select></label></div>
+    return `<div class="form-grid method-row"><label class="field"><span>Méthode</span><select data-method>${FOULEE_HR_METHODS.map(([k, l]) => `<option value="${k}" ${k === z.methode ? "selected" : ""}>${l}</option>`).join("")}</select></label></div>
       ${inputs}
+      ${profiles.length || legacy ? `<p class="hint">Ta montre a ses propres zones : réglées ici, tes temps par zone peuvent différer de ceux de Garmin Connect.</p>` : ""}`;
+  }
+
+  function render() {
+    const onWatch = z.methode === "garmin";
+    const w = onWatch ? watch() : null;
+    const { max, rest } = profile();
+    const top = w?.fc_max || max;
+    box.innerHTML = `<div class="hz-source" role="radiogroup" aria-label="D'où viennent tes zones FC">
+        <button type="button" role="radio" class="hz-choice" data-source="montre" aria-checked="${onWatch}">${icon("watch")}<span><b>Celles de ma montre</b><small>réglées dans Garmin Connect</small></span></button>
+        <button type="button" role="radio" class="hz-choice" data-source="foulee" aria-checked="${!onWatch}">${icon("settings")}<span><b>Réglées dans Foulée</b><small>% de la FC max, de réserve, du seuil ou à la main</small></span></button>
+      </div>
+      ${onWatch ? watchPart() : fouleePart()}
       <div class="zone-bar" data-bar></div>
-      <p class="computed" data-text></p>`;
+      <p class="computed" data-text></p>
+      ${onWatch && (w || legacy) ? `<button class="btn btn-ghost btn-small" type="button" data-adjust>${icon("edit")}Les reprendre dans Foulée pour les ajuster</button>` : ""}`;
+    const f = floors();
     if (!f) {
-      box.querySelector("[data-text]").textContent = "Zones indisponibles pour l'instant avec cette méthode.";
+      box.querySelector("[data-text]").textContent = onWatch ? "" : "Zones indisponibles pour l'instant avec cette méthode.";
       return;
     }
     const lo = f[0] > 0 ? Math.max(30, f[0] - 4) : Math.max(30, Math.min(f[1] - 25, rest - 5));
-    const hi = Math.max(max + 4, f[4] + 10);
-    const start = f[0] > 0 ? f[0] : lo;
+    const hi = Math.max(top + 4, f[4] + 10);
     const label = (i) => (i === 0 ? (f[0] > 0 ? `${f[0]}–${f[1] - 1}` : `< ${f[1]}`) : i === 4 ? `≥ ${f[4]}` : `${f[i]}–${f[i + 1] - 1}`);
     zoneBar(box.querySelector("[data-bar]"), {
-      lo, hi, start, bounds: f.slice(1), label, editable: z.methode !== "garmin",
+      lo, hi, start: f[0] > 0 ? f[0] : lo, bounds: f.slice(1), label, editable: !onWatch,
       onDrag: (i, value, keyboard) => {
         const bpm = Math.round(value);
         if (z.methode === "bornes") {
@@ -143,6 +179,7 @@ export function hrZonesEditor(box, boot, profile) {
     const t = e.target;
     if ("method" in t.dataset) {
       z.methode = t.value;
+      z.last = t.value;
       z.pct = null;
       if (z.methode === "bornes" && !z.bornes) z.bornes = (floors() || current()).slice(1);
     } else if (t.dataset.pct !== undefined) {
@@ -157,17 +194,30 @@ export function hrZonesEditor(box, boot, profile) {
     render();
   });
   box.addEventListener("click", (e) => {
-    if (!e.target.closest("[data-adjust]")) return;
-    z.bornes = (floors() || current()).slice(1).map(Math.round);
-    z.methode = "bornes";
+    const source = e.target.closest("[data-source]");
+    const prof = e.target.closest("[data-profile]");
+    if (source) {
+      const want = source.dataset.source === "montre" ? "garmin" : z.last;
+      if (want === z.methode) return;
+      z.methode = want;
+      if (want === "bornes" && !z.bornes) z.bornes = current().slice(1);
+    } else if (prof) {
+      z.profil = prof.dataset.profile;
+    } else if (e.target.closest("[data-adjust]")) {
+      z.bornes = (floors() || current()).slice(1).map(Math.round);
+      z.methode = "bornes";
+      z.last = "bornes";
+    } else return;
     render();
   });
 
   render();
   return {
     refresh: render,
-    value: () => ({ methode: z.methode, pct: z.methode.startsWith("pct") ? pctOf() : null, seuil: z.seuil || null,
-      bornes: z.methode === "bornes" ? (z.bornes || floors().slice(1)) : null }),
+    value: () => (z.methode === "garmin"
+      ? { methode: "garmin", profil_garmin: watch()?.sport || null, pct: null, seuil: null, bornes: null }
+      : { methode: z.methode, pct: z.methode.startsWith("pct") ? pctOf() : null, seuil: z.seuil || null,
+        bornes: z.methode === "bornes" ? (z.bornes || floors().slice(1)) : null }),
   };
 }
 
