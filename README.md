@@ -686,7 +686,7 @@ Les données vivent dans `/var/lib/foulee`, la clé et l'empreinte du mot de pas
 Un coach et ses élèves se relient par un **relais** : un petit serveur sur Internet, en HTTPS, que leurs
 Foulée appellent. Chacun garde Foulée et tout son historique chez lui ; le relais ne garde que les comptes,
 les codes d'invitation, les messages, les séances proposées et l'extrait que chaque élève choisit de partager
-(séances des 4 dernières semaines en résumé, objectif, VMA ; GPS, sommeil, VFC et poids en option, jamais
+(séances des 4 dernières semaines en résumé, objectif, VMA ; GPS, sommeil, VFC, poids et zones cardio en option, jamais
 Strava). Le relais, c'est Foulée lui-même, en « mode relais » : il ne lit rien chez Garmin (il peut seulement, si
 l'élève le relie, déposer les séances du coach dans son calendrier Garmin : voir « Sur la montre » plus bas).
 
@@ -725,6 +725,9 @@ ton adresse, par exemple `https://relais.mon-club.com`.
   objectifs secondaires, l'équilibre avant / arrière de son renfo (rapport, tendance, paire par paire, ce
   que tu peux lui dire, et « Lui en parler » avec un message tout prêt), ses séances proposées, sa forme
   (sommeil, VFC, FC au repos, poids) s'il la partage ;
+- ses **zones cardio** telles que réglées dans Garmin Connect (méthode, FC max, au repos, au seuil, bornes des 5
+  zones, en général et pour la course) s'il les partage, avec ce qui cloche : pas de zones propres à la course,
+  un écart de FC max avec Foulée ;
 - son **calendrier**, à la semaine, au mois ou à l'année (des pastilles), avec des flèches pour passer d'une
   période à l'autre : son plan et tes séances avec leur esquisse, ses séances faites (un clic les ouvre ; elles ne
   sont partagées que sur quatre semaines), ses courses visées ;

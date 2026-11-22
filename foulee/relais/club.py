@@ -28,7 +28,8 @@ KEEP_DAYS = 28                 # le relais ne garde que 4 semaines de séances
 MAX_TEXT = 4000                # longueur d'un message
 ALERT_DAYS = 5                 # « N jours sans séance » à partir de 5 jours
 
-ACCORD_DEFAULT = {"seances": True, "objectif": True, "gps": False, "masquer": True, "sante": False, "poids": False}
+ACCORD_DEFAULT = {"seances": True, "objectif": True, "gps": False, "masquer": True, "sante": False, "poids": False,
+                  "zones": False}
 ACCORD_KEYS = tuple(ACCORD_DEFAULT)
 
 FIL_RE = re.compile(r"^(groupe|eleve-\d{1,9}|seance-\d{1,9}-[A-Za-z0-9:_.-]{1,80})$")
@@ -240,12 +241,35 @@ def clean_share(payload: Any) -> dict:
                 item["blocs"] = blocks
                 item["esquisse_approchee"] = bool(raw.get("esquisse_approchee"))
             plan.append(item)
-    return {"seances": sessions, "jours": sorted(days, key=lambda d: d["date"]), "profil": profile, "plan": plan}
+    return {"seances": sessions, "jours": sorted(days, key=lambda d: d["date"]), "profil": profile, "plan": plan,
+            "zones_fc": clean_zones(payload.get("zones_fc"))}
+
+
+ZONE_METHODS = ("HR_MAX_BASED", "HRR_BASED", "LACTATE_THRESHOLD")
+
+
+def clean_zones(raw: Any) -> list[dict]:
+    """Les réglages des zones FC de Garmin Connect partagés par l'élève : un profil par sport, bornes croissantes."""
+    out = []
+    for item in (raw if isinstance(raw, list) else [])[:8]:
+        if not isinstance(item, dict):
+            continue
+        floors = [_num(v, 30, 240, 0) for v in (item.get("bornes") or [])[:5]] if isinstance(item.get("bornes"), list) else []
+        if len(floors) != 5 or None in floors or floors != sorted(floors):
+            continue
+        sport = re.sub(r"[^A-Z_]", "", str(item.get("sport") or "DEFAULT").upper())[:20] or "DEFAULT"
+        zone = {"sport": sport, "methode": item.get("methode") if item.get("methode") in ZONE_METHODS else None,
+                "bornes": floors, "repos_auto": bool(item.get("repos_auto"))}
+        for key in ("fc_max", "fc_repos", "fc_seuil"):
+            if (value := _num(item.get(key), 30, 240, 0)) is not None:
+                zone[key] = value
+        out.append(zone)
+    return out
 
 
 def filter_share(content: dict, accord: dict) -> dict:
     """Ce que le coach a le droit de voir, selon l'accord en vigueur (même si l'extrait est plus ancien)."""
-    out = {"seances": [], "jours": [], "profil": {}, "plan": []}
+    out = {"seances": [], "jours": [], "profil": {}, "plan": [], "zones_fc": []}
     if accord.get("seances"):
         out["plan"] = content.get("plan", [])
         sessions = []
@@ -257,6 +281,7 @@ def filter_share(content: dict, accord: dict) -> dict:
         out["seances"] = sessions
     if accord.get("objectif"):
         out["profil"] = content.get("profil", {})
+    out["zones_fc"] = content.get("zones_fc", []) if accord.get("zones") else []
     for day in content.get("jours", []):
         item = {"date": day["date"]}
         if accord.get("sante"):
@@ -970,7 +995,7 @@ def student_page(conn: sqlite3.Connection, coach: sqlite3.Row, student_id: int, 
     return {"eleve": {"id": row["id"], "nom": row["nom"], "identifiant": row["identifiant"],
                       "inscrit_le": row["cree_le"], "derniere_connexion": row["derniere_connexion"]},
             "accord": get_accord(conn, student_id), "partage_recu_le": received, "profil": content["profil"],
-            "objectif": goal, "objectifs": _upcoming_goals(content["profil"], today),
+            "zones_fc": content.get("zones_fc") or [], "objectif": goal, "objectifs": _upcoming_goals(content["profil"], today),
             "semaine": {"lundi": monday.isoformat(), "jours": days, "bilan": tally(days)},
             "seances": briefs, "jours": content["jours"], "total_28j": total, "propositions": upcoming,
             "mois": month(conn, student_id, content, today),
@@ -1021,7 +1046,8 @@ def my_page(conn: sqlite3.Connection, student: sqlite3.Row) -> dict:
     return {"coach": {"nom": coach["nom"], "derniere_connexion": coach["derniere_connexion"]} if coach else None,
             "accord": get_accord(conn, student["id"]), "partage_recu_le": received,
             "partage": {"seances": len(content["seances"]), "jours": len(content["jours"]),
-                        "traces": sum("trace" in s for s in content["seances"])},
+                        "traces": sum("trace" in s for s in content["seances"]),
+                        "zones": len(content.get("zones_fc") or [])},
             "propositions": proposals(conn, student["id"], today - timedelta(days=14), today + timedelta(days=90),
                                       content),
             "mois": month(conn, student["id"], content, today),

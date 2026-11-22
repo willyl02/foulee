@@ -14,6 +14,7 @@ const CHOICES = [
   ["masquer", "… en masquant le départ et l'arrivée", "Les 500 premiers et derniers mètres restent cachés : ta maison n'apparaît pas.", "sub"],
   ["sante", "Ton sommeil, ta VFC et ta FC au repos", "Une valeur par jour, pour que ton coach adapte la charge."],
   ["poids", "Ton poids", "Si une balance est reliée à Foulée (Withings)."],
+  ["zones", "Tes zones cardio (réglages Garmin)", "La méthode (FC max, FC de réserve ou seuil lactique), tes FC max, au repos et au seuil, et les bornes de tes 5 zones, en général et pour la course : ton coach vérifie qu'elles sont bien réglées."],
 ];
 
 function shareList(accord) {
@@ -21,7 +22,8 @@ function shareList(accord) {
   const yes = (v, extra = "") => (v ? `<span class="co-chip good">${icon("check")}oui${extra}</span>` : `<span class="co-chip">non</span>`);
   return `<dl class="co-dl wide"><dt>Séances (4 semaines)</dt><dd>${yes(accord.seances)}</dd><dt>Objectif, VMA</dt><dd>${yes(accord.objectif)}</dd>
     <dt>Tracés GPS</dt><dd>${yes(accord.gps, accord.gps && accord.masquer ? ", départ et arrivée masqués" : "")}</dd>
-    <dt>Sommeil, VFC</dt><dd>${yes(accord.sante)}</dd><dt>Poids</dt><dd>${yes(accord.poids)}</dd></dl>`;
+    <dt>Sommeil, VFC</dt><dd>${yes(accord.sante)}</dd><dt>Poids</dt><dd>${yes(accord.poids)}</dd>
+    <dt>Zones cardio</dt><dd>${yes(accord.zones)}</dd></dl>`;
 }
 
 /** L'envoi sur la montre d'une séance : « sur ta montre », « à renvoyer » (le coach l'a modifiée), ou rien. */

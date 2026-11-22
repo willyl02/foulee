@@ -4,6 +4,15 @@ Les versions « bêta » (par exemple 0.4.0b1) sont des avant-premières : elles
 sur le canal bêta (Réglages → Application → Mises à jour → « Recevoir les versions bêta »), puis sortent en
 version stable une fois éprouvées.
 
+## 0.8.3b10 — 22 novembre 2026 (bêta)
+
+- **Les zones cardio de l'élève chez son coach.** Une nouvelle case dans « Ce que je partage » : *Tes zones cardio
+  (réglages Garmin)*, non cochée par défaut. Cochée, la fiche de l'élève chez le coach montre ses réglages de
+  Garmin Connect, profil par profil (course à pied, général…) : la méthode (seuil lactique, FC max ou FC de
+  réserve), FC max, FC au repos (et si la montre la met à jour toute seule), FC au seuil, et les bornes des 5
+  zones avec leur pourcentage. Avec ce qui saute aux yeux : pas de zones propres à la course, les mêmes partout, un
+  écart de FC max avec Foulée. Décochée, le relais les efface aussitôt. Le relais doit être à jour.
+
 ## 0.8.3b9 — 22 novembre 2026 (bêta)
 
 - **Les séances faites dessinées telles qu'elles ont été suivies.** Garmin ne donne pas le contenu des séances à

@@ -2221,6 +2221,20 @@ a.co-pl:hover { box-shadow: inset 3px 0 0 var(--good), 0 0 0 1px var(--base); }
 .co-prop b { display: block; color: var(--ink); font-size: 14.5px; }
 .co-prop span:not(.co-chip):not(.co-prop-tools) { display: block; color: var(--muted); font-size: 13px; }
 .co-prop-tools { display: flex; }
+/* Zones cardio de l'élève (réglages Garmin) */
+.co-zones-scroll { overflow-x: auto; }
+.co-zones-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.co-zones-table th, .co-zones-table td { padding: 5px 8px; text-align: left; border-bottom: 1px solid var(--hair); vertical-align: baseline; }
+.co-zones-table thead th { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
+.co-zones-table tbody th { font-weight: 500; color: var(--ink-2); white-space: nowrap; }
+.co-zones-table td b { font: 600 14px var(--font-figures); color: var(--ink); }
+.co-zones-table td small { margin-left: 6px; color: var(--muted); font-size: 12px; }
+.co-zone-dot { display: inline-block; width: 9px; height: 9px; margin-right: 7px; border-radius: 50%; vertical-align: 0; }
+.co-zone-dot.z1 { background: var(--z1); } .co-zone-dot.z2 { background: var(--z2); } .co-zone-dot.z3 { background: var(--z3); }
+.co-zone-dot.z4 { background: var(--z4); } .co-zone-dot.z5 { background: var(--z5); }
+.co-zone-notes { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 4px; }
+.co-zone-notes li { display: flex; gap: 6px; font-size: 13px; color: var(--ink-2); }
+.co-zone-notes svg { width: 14px; height: 14px; flex: none; margin-top: 2px; color: var(--muted); }
 .co-health { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .co-health small { display: block; color: var(--muted); font-size: 12.5px; }
 .co-health b { font: 600 20px var(--font-figures); color: var(--ink); }

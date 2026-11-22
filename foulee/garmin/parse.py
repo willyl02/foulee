@@ -569,6 +569,31 @@ def heart_rate_zones(payload: Any) -> dict | None:
     }
 
 
+METHODS = ("HR_MAX_BASED", "HRR_BASED", "LACTATE_THRESHOLD")
+
+
+def heart_rate_zone_profiles(payload: Any) -> list[dict]:
+    """Les réglages des zones FC de Garmin Connect, profil par profil (général, course, vélo…), tels quels :
+    méthode, FC max, au repos, au seuil, bornes basses des 5 zones. Pour le coach (« ses zones sont-elles bien
+    réglées ? »)."""
+    out = []
+    for item in items_of(payload)[:8]:
+        floors = [positive(item.get(f"zone{i}Floor")) for i in range(1, 6)]
+        if not all(floors):
+            continue
+        method = item.get("trainingMethod")
+        out.append({
+            "sport": str(item.get("sport") or "DEFAULT").upper()[:20],
+            "methode": method if method in METHODS else None,
+            "fc_max": positive(item.get("maxHeartRateUsed")),
+            "fc_repos": positive(item.get("restingHeartRateUsed")),
+            "fc_seuil": positive(item.get("lactateThresholdHeartRateUsed")),
+            "repos_auto": bool(item.get("restingHrAutoUpdateUsed")),
+            "bornes": [round(f) for f in floors],
+        })
+    return out
+
+
 def profile_settings(payload: Any) -> dict:
     """Réglages du profil Garmin utiles à Foulée (seuil lactique, VO2max, mensurations)."""
     if not isinstance(payload, dict):

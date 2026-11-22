@@ -282,7 +282,8 @@ META_PROPOSALS = "relais_propositions"
 SHARE_DAYS = 28
 TRACE_POINTS = 400
 MASK_RADIUS_M = 500
-ACCORD_DEFAULT = {"seances": True, "objectif": True, "gps": False, "masquer": True, "sante": False, "poids": False}
+ACCORD_DEFAULT = {"seances": True, "objectif": True, "gps": False, "masquer": True, "sante": False, "poids": False,
+                  "zones": False}
 KEEP_META = ("relais_adresse", "relais_compte", "relais_relie_le", "relais_accord")
 
 
@@ -408,6 +409,17 @@ def _shared_session(conn: sqlite3.Connection, row: sqlite3.Row, accord: dict, fl
     return {k: v for k, v in item.items() if v is not None}
 
 
+def garmin_zone_profiles(conn: sqlite3.Connection) -> list[dict]:
+    """Les zones FC réglées dans Garmin Connect, lues à la dernière synchro (raw hr_zones)."""
+    from .garmin import parse
+
+    row = conn.execute("SELECT payload FROM raw WHERE source = 'garmin' AND kind = 'hr_zones' AND key = 'latest'").fetchone()
+    try:
+        return parse.heart_rate_zone_profiles(json.loads(row["payload"])) if row else []
+    except (TypeError, ValueError):
+        return []
+
+
 def snapshot(conn: sqlite3.Connection, accord: dict, today: date | None = None) -> dict:
     """L'extrait des 4 dernières semaines, selon l'accord. Jamais les séances venues de Strava (ses règles
     l'interdisent), jamais de clé ni de jeton."""
@@ -433,6 +445,8 @@ def snapshot(conn: sqlite3.Connection, accord: dict, today: date | None = None) 
                          "objectif": {k: goal.get(k) for k in ("nom", "date", "distance_km", "temps_cible", "d_plus_m")}
                          if goal and goal.get("nom") else None,
                          "objectifs": objectifs.shared(settings, today)}
+    if accord.get("zones"):  # les réglages des zones FC de Garmin Connect (général, course…)
+        out["zones_fc"] = garmin_zone_profiles(conn)
     wanted = (["sleep_s", "sleep_score", "hrv_night", "resting_hr"] if accord.get("sante") else []) + \
         (["weight_kg"] if accord.get("poids") else [])
     if wanted:
