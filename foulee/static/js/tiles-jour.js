@@ -6,6 +6,7 @@ import * as F from "./format.js";
 import { analysisHTML, wireAnalysis } from "./fractions.js";
 import { icon } from "./icons.js";
 import { sketchSVG } from "./sketch.js";
+import { zoneTableHTML } from "./zone-table.js";
 
 const LEVEL_ICON = { feu: "check", doucement: "flat", repos: "warning" };
 const RPE = ["", "Très facile", "Facile", "Facile", "Modéré", "Modéré", "Soutenu", "Difficile", "Difficile", "Très difficile", "Maximal"];
@@ -88,14 +89,21 @@ export const jour = {
     const poste = d.poste;
     ctx.sub([poste?.nom && poste.actif ? `${poste.nom}${poste.debut ? ` ${poste.debut}–${poste.fin}` : ""}` : "", F.dateLong(d.date)].filter(Boolean).join(" · "));
     const c = d.conseil;
+    const zoned = d.faites.filter((a) => a.zones_fc);  // séances faites aujourd'hui avec leur temps par zone FC
     body.innerHTML = `<div class="sj">
       <p class="sj-verdict ${c.niveau || ""}">${icon(LEVEL_ICON[c.niveau] || "info")}<span><b>${F.escape(c.titre)}</b> ${F.escape(c.texte)}${d.forme?.resume && c.niveau ? `<small>${F.escape(d.forme.resume)}</small>` : ""}</span></p>
       <div class="sj-cols">
         <section class="sj-col"><h3>${todo.length ? "Prévu aujourd'hui" : d.faites.length ? "Prévu aujourd'hui" : "Rien de prévu aujourd'hui"}</h3>
           ${d.prevues.length ? d.prevues.map((x) => plannedCard(x, d.vma)).join("")
-            : `<p class="hint">${c.niveau === "repos" ? "Profite d'une journée de repos." : "Envie de bouger ? Un footing facile de 40 min en endurance, ou du renfo (vue Renfo : « En faire une séance pour ma montre »)."}</p>`}
+            : `<p class="hint">${c.niveau === "repos" ? "Profite d'une journée de repos." : "Envie de bouger ? Un footing facile de 40 min en endurance, ou une séance de renfo : compose-la dans l'Atelier (colonne de gauche)."}</p>`}
         </section>
-        ${p.meteo !== false ? `<section class="sj-col"><h3>Quand courir</h3><div data-weather><p class="hint">Lecture de la météo…</p></div></section>` : ""}
+        ${p.meteo !== false || zoned.length ? `<div class="sj-col sj-side">
+          ${p.meteo !== false ? `<section><h3>Quand courir</h3><div data-weather><p class="hint">Lecture de la météo…</p></div></section>` : ""}
+          ${zoned.length ? `<section class="sj-zones"><h3>Temps par zone FC</h3>${zoned.map((a) => zoneTableHTML(a.zones_fc, "fc", {
+            title: zoned.length > 1 ? (a.nom || a.sport_label || "Séance") : "Séance du jour",
+            sub: `${[a.heure ? `à ${a.heure}` : "", F.duration(a.zones_fc.total)].filter(Boolean).join(" · ")}`,
+          })).join("")}</section>` : ""}
+        </div>` : ""}
       </div>
       ${d.faites.length ? `<section class="sj-after"><h3>Après la séance</h3>${d.faites.map((a) => doneCard(a, d.prevues, linked)).join("")}</section>` : ""}
     </div>`;
@@ -121,7 +129,7 @@ export const jour = {
         const box = body.querySelector("[data-weather]");
         if (!box) return;
         const slot = m.creneau;
-        if (!slot) box.closest(".sj-col").querySelector("h3").textContent = "La météo du jour";
+        if (!slot) box.closest("section").querySelector("h3").textContent = "La météo du jour";
         box.innerHTML = `${slot ? `<p class="sj-slot">${icon("clock")}<span><b>Ton créneau : ${F.escape(slot.debut.replace(":00", " h"))} – ${F.escape(slot.fin.replace(":00", " h"))}</b>${slot.raison ? ` · ${F.escape(slot.raison)}` : ""}</span></p>` : ""}${weatherHTML(m.meteo, slot, poste)}`;
       }).catch(() => {
         const box = body.querySelector("[data-weather]");

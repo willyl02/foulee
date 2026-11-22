@@ -579,8 +579,9 @@ def student_send(conn: sqlite3.Connection, student: sqlite3.Row, proposal_id: in
 
 
 def personal_send(conn: sqlite3.Connection, account: sqlite3.Row, payload: dict) -> dict:
-    """Une séance que l'élève s'est composée lui-même (son renfo, par exemple) : dans son calendrier Garmin, à sa
-    date. Elle n'est pas gardée sur le relais ; chaque envoi en ajoute une."""
+    """Une séance que l'élève s'est composée lui-même (dans l'Atelier : son renfo, son fractionné…) : dans son
+    calendrier Garmin, à sa date, les % de VMA en allures calculées sur la VMA qu'il envoie (« vma_kmh »). Elle n'est
+    pas gardée sur le relais ; chaque envoi en ajoute une."""
     from . import club
 
     if not isinstance(payload, dict):
@@ -599,7 +600,11 @@ def personal_send(conn: sqlite3.Connection, account: sqlite3.Row, payload: dict)
     if link_row(conn, account["id"]) is None:
         return {"a_relier": True, "adresse": authorize_url(conn, account["id"])}
     try:
-        workout = garmin_training.build(item, None)
+        vma = float(payload.get("vma_kmh") or 0)
+    except (TypeError, ValueError):
+        vma = 0.0
+    try:
+        workout = garmin_training.build(item, vma if 8 <= vma <= 30 else None)
     except WorkoutError as exc:
         raise GarminError(str(exc)) from None
     try:

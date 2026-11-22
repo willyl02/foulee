@@ -13,7 +13,7 @@ import copy
 import sqlite3
 from typing import Any
 
-from . import __version__, analysis, club, db, logotheque, objectifs, partenaire, profile, schedule, views, zones
+from . import __version__, analysis, club, db, logotheque, objectifs, partenaire, profile, renfo, schedule, views, zones
 
 # Réglages dont dépendent TRIMP, zones et charge : les changer relance le recalcul des séances
 DERIVED = {"vma_kmh", "fc_max", "fc_repos", "sexe", "zones_allure_pct_vma", "charge_source", "zones_fc",
@@ -49,6 +49,8 @@ def clean(key: str, value: Any) -> Any:
             return zones.clean_pace(value)
         if key == "couleurs_zones":
             return zones.clean_colors(value)
+        if key == "renfo":
+            return renfo.clean_settings(value)
     except ValueError as exc:
         raise SettingsError(str(exc)) from None
     if key == "profil":
@@ -139,7 +141,10 @@ def apply(conn: sqlite3.Connection, changes: dict, *, merge: bool = False) -> tu
     if "club" in cleaned:  # la vue « Mon club » suit la case « Je fais partie d'un club »
         views.sync_club_view(conn, bool((cleaned["club"] or {}).get("actif")))
     conn.commit()
-    return db.get_settings(conn), bool(DERIVED & set(cleaned))
+    # Recalcul (zones, charge de toutes les séances) seulement si un réglage qui les touche a vraiment changé : la
+    # page des réglages renvoie tout son formulaire à chaque modification (couleurs, renfo…)
+    changed = {k for k, v in cleaned.items() if v != current.get(k)}
+    return db.get_settings(conn), bool(DERIVED & changed)
 
 
 # ------------------------------------------------------------- export / import

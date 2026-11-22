@@ -12,6 +12,7 @@ import { profilePanel, transferPanel } from "./settings-profile.js";
 import { scheduleEditor } from "./settings-schedule.js";
 import { settingsShell } from "./settings-shell.js";
 import { hrZonesEditor, paceZonesEditor, zoneColorsEditor } from "./settings-zones.js";
+import { renfoEditor } from "./settings-renfo.js";
 import { systemSections, wireSystem } from "./system.js";
 import { accessPanel, usersPanel } from "./users.js";
 
@@ -101,6 +102,12 @@ export function renderSettings(page, boot, { onSaved, onProfile, refreshBoot, to
         <p class="computed" data-fractions></p>
       </section>
 
+      <section data-section="renfo">
+        <h2>Renfo</h2>
+        <p class="intro">Ce qui guide les tuiles Renfo et l'Atelier : ton objectif de la semaine, l'équilibre avant / arrière que tu vises, ton niveau et ce que tu as sous la main.</p>
+        <div data-renfo></div>
+      </section>
+
       <section data-section="synchro">
         <h2>Synchro et calculs</h2>
         <div class="form-grid">
@@ -161,6 +168,7 @@ export function renderSettings(page, boot, { onSaved, onProfile, refreshBoot, to
   const schedule = scheduleEditor(page.querySelector("[data-schedule]"), s.horaires);
   const hrZones = hrZonesEditor(page.querySelector("[data-hr-zones]"), boot, profile);
   const paceZones = paceZonesEditor(page.querySelector("[data-pace-zones]"), boot, vma);
+  const renfoSettings = renfoEditor(page.querySelector("[data-renfo]"), boot);
   const zoneColors = zoneColorsEditor(page.querySelector("[data-zone-colors]"), boot, {
     onApply: () => { hrZones.refresh(); paceZones.refresh(); },
   });
@@ -207,6 +215,7 @@ export function renderSettings(page, boot, { onSaved, onProfile, refreshBoot, to
       zones_fc: hrZones.value(),
       zones_allure: pace,
       couleurs_zones: zoneColors.value(),
+      renfo: renfoSettings.value(),
       fractions_seuil_pct_vma: num("fractions") || 85,
       fit_auto_jours: Number(val("fit_auto_jours")),
       synchro_auto: syncRhythmValue(form, s),

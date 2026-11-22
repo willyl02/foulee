@@ -5,7 +5,7 @@ import * as api from "./api.js";
 import { bodyMap, legend } from "./bodymap.js";
 import * as F from "./format.js";
 import { icon } from "./icons.js";
-import { openRenfoSession, presetFrom } from "./renfo-seance.js";
+import { openInAtelier, presetFrom } from "./renfo-seance.js";
 import { message } from "./tiles-data.js";
 
 const NO_SESSION = "Pas encore de séance de renfo. Sur ta montre, lance une activité « Musculation » et choisis "
@@ -99,7 +99,7 @@ export const renfo = {
     const d = await ctx.get("/api/renfo", { start, end });
     ctx.sub(`${days} derniers jours`);
     if (!d.nb_seances && !d.semaines.some((w) => w.seances)) return message(body, NO_SESSION);
-    const goal = Number(p.objectif) || 0;
+    const goal = Number(d.objectif_semaine ?? p.objectif) || 0;  // Réglages → Renfo
     const perWeek = d.nb_seances / Math.max(1, days / 7);
     body.classList.add("scroll");
     body.innerHTML = `<div class="rf">
@@ -126,17 +126,28 @@ export const renfo = {
 
 // ------------------------------------------------------------- équilibre avant / arrière
 // Échelle : la part des séries faites « derrière » (rapport 1:x ↔ x / (1 + x)), de tout à l'avant à tout à
-// l'arrière. Cible du coureur : de 1:1 (50 %) à 1:2 (67 %).
-const ZONES = [["avant", 0, 4 / 9], ["proche", 4 / 9, 0.5], ["cible", 0.5, 2 / 3], ["arriere", 2 / 3, 0.8],
-  ["arriere_fort", 0.8, 1]];
+// l'arrière. La cible vient de Réglages → Renfo (celle du coureur par défaut : de 1:1, 50 %, à 1:2, 67 %).
+const part = (x) => x / (1 + x);
+const RUNNER = { bas: 1, haut: 2, vise: 1.5, profil: "coureur" };
+function zonesFor(t = RUNNER) {
+  const lo = t.bas;
+  const hi = t.haut;
+  return [["avant", 0, part(lo * 0.8)], ["proche", part(lo * 0.8), part(lo)], ["cible", part(lo), part(hi)],
+    ["arriere", part(hi), part(hi * 2)], ["arriere_fort", part(hi * 2), 1]];
+}
 const TICKS = [[1 / 3, "1:0,5"], [0.5, "1:1"], [2 / 3, "1:2"], [0.8, "1:4"]];
+const ratioShort = (x) => `1:${String(Math.round(x * 100) / 100).replace(".", ",")}`;
+/** « cible du coureur : 1:1 à 1:2 », « cible : 1:1,5 à 1:3 » (Réglages → Renfo). */
+export function targetLabel(t = RUNNER) {
+  return `${t.profil === "coureur" ? "cible du coureur" : "cible"} : ${ratioShort(t.bas)} à ${ratioShort(t.haut)}`;
+}
 
-export function beam(b, { compact = false } = {}) {
+export function beam(b, { compact = false, target = RUNNER } = {}) {
   const share = b.part_arriere;
-  const zones = ZONES.map(([z, from, to]) => `<span class="eq-z z-${z}" style="left:${(from * 100).toFixed(2)}%;width:${((to - from) * 100).toFixed(2)}%">${z === "cible" && !compact ? "<em>cible</em>" : ""}</span>`).join("");
+  const zones = zonesFor(target || RUNNER).map(([z, from, to]) => `<span class="eq-z z-${z}" style="left:${(from * 100).toFixed(2)}%;width:${((to - from) * 100).toFixed(2)}%">${z === "cible" && !compact ? "<em>cible</em>" : ""}</span>`).join("");
   const ticks = TICKS.map(([v, label]) => `<span class="eq-tick" style="left:${(v * 100).toFixed(2)}%"><b>${label}</b></span>`).join("");
   const knob = F.isNum(share) ? `<i class="eq-knob z-${b.zone}" style="left:${(share * 100).toFixed(2)}%"></i>` : "";
-  const aria = `Équilibre ${b.ratio_texte} : ${num(b.avant)} séries devant, ${num(b.arriere)} derrière, ${b.verdict.toLowerCase()}. Cible du coureur : de 1:1 à 1:2.`;
+  const aria = `Équilibre ${b.ratio_texte} : ${num(b.avant)} séries devant, ${num(b.arriere)} derrière, ${b.verdict.toLowerCase()}. ${targetLabel(target || RUNNER)}.`;
   return `<div class="eq-beam${compact ? " compact" : ""}" role="img" aria-label="${F.escape(aria)}">
       <div class="eq-track">${zones}<span class="eq-ticklines">${ticks}</span>${knob}</div>
       <div class="eq-ends"><span>‹ plus d'avant</span><span>plus d'arrière ›</span></div>
@@ -189,8 +200,8 @@ function balanceNotes(b, exercises = []) {
   return out.length ? `<p class="eq-notes">${out.join(" ")}</p>` : "";
 }
 
-/** Semaine après semaine : la part des séries faites derrière, face à la bande de la cible (1:1 à 1:2). */
-function weeksBalance(weeks) {
+/** Semaine après semaine : la part des séries faites derrière, face à la bande de la cible (1:1 à 1:2 par défaut). */
+function weeksBalance(weeks, target = RUNNER) {
   const lo = 0.2;
   const hi = 0.9;  // de 1:0,25 à 1:9 ; au-delà, le point reste au bord
   const y = (v) => ((hi - Math.max(lo, Math.min(hi, v))) / (hi - lo)) * 100;
@@ -208,20 +219,20 @@ function weeksBalance(weeks) {
     <div class="eq-weeks">
       <div class="eq-wlabels" aria-hidden="true">${labels}</div>
       <div class="eq-wplot" role="img" aria-label="${F.escape(`Équilibre avant / arrière par semaine, ${weeks.length} dernières semaines : ${weeks.map((w) => w.equilibre?.ratio_texte || "pas de série comptée").join(", ")}`)}">
-        <span class="eq-wband" style="top:${y(2 / 3).toFixed(2)}%;height:${(y(0.5) - y(2 / 3)).toFixed(2)}%"></span>
-        <span class="eq-wline" style="top:${y(0.5).toFixed(2)}%"></span>
+        <span class="eq-wband" style="top:${y(part(target.haut)).toFixed(2)}%;height:${(y(part(target.bas)) - y(part(target.haut))).toFixed(2)}%"></span>
+        <span class="eq-wline" style="top:${y(part(target.bas)).toFixed(2)}%"></span>
         ${dots}
       </div>
     </div>
     <div class="rf-weeks-axis eq-waxis"><span>${F.escape(F.dateShort(weeks[0].debut))}</span><span>cette semaine</span></div>`;
 }
 
-function balanceBlock(b) {
+function balanceBlock(b, target) {
   if (!b || b.zone === "vide") return "";
   return `<div class="rf-block eq-mini">
       <h3 class="rf-h">Équilibre avant / arrière de la séance</h3>
       ${headline(b, { compact: true })}
-      ${beam(b, { compact: true })}
+      ${beam(b, { compact: true, target })}
       ${b.conseil ? `<p class="eq-advice">${F.escape(b.conseil)}</p>` : ""}
     </div>`;
 }
@@ -231,17 +242,17 @@ export const renfo_equilibre = {
   async render(body, p, ctx) {
     const { start, end, days } = ctx.period(p);
     const d = await ctx.get("/api/renfo", { start, end });
-    ctx.sub(`${days} derniers jours · cible du coureur : 1:1 à 1:2`);
+    ctx.sub(`${days} derniers jours · ${targetLabel(d.cible)}`);
     if (!d.nb_seances && !d.semaines.some((w) => w.seances)) return message(body, NO_SESSION);
     const b = d.equilibre;
     body.classList.add("scroll", "eq-body");
     const main = b.zone === "vide"
       ? `<p class="eq-empty">${F.escape(d.exercices.length ? "Aucune série à ranger devant ou derrière sur la période : seulement de l'échauffement, du cardio, du latéral ou des exercices non précisés." : NO_DETAIL)}</p>`
-      : `${headline(b)}${beam(b)}${b.conseil_court ? `<p class="eq-advice">${F.escape(b.conseil_court)}</p>` : ""}`;
+      : `${headline(b)}${beam(b, { target: d.cible })}${b.conseil_court ? `<p class="eq-advice">${F.escape(b.conseil_court)}</p>` : ""}`;
     body.innerHTML = `<div class="eq">
         <section class="eq-main">${main}</section>
         <section class="eq-detail">${b.zone === "vide" ? "" : pairs(b)}${balanceNotes(b, d.exercices)}</section>
-        <section class="eq-trend">${weeksBalance(d.semaines)}</section>
+        <section class="eq-trend">${weeksBalance(d.semaines, d.cible || RUNNER)}</section>
       </div>`;
   },
 };
@@ -268,7 +279,7 @@ export const renfo_conseils = {
   async render(body, p, ctx) {
     const { start, end, days } = ctx.period(p);
     const d = await ctx.get("/api/renfo", { start, end });
-    ctx.sub(`${days} derniers jours · cible 1:1,5`);
+    ctx.sub(`${days} derniers jours · cible ${ratioShort(d.cible?.vise ?? 1.5)}`);
     if (!d.nb_seances && !d.semaines.some((w) => w.seances)) return message(body, NO_SESSION);
     const c = d.compenser;
     if (!c) return message(body, d.exercices.length ? "Rien à rééquilibrer : aucune série rangée devant ou derrière sur la période." : NO_DETAIL);
@@ -285,8 +296,8 @@ export const renfo_conseils = {
       ${c.familles.length ? `<div class="cp-cards">${c.familles.map((f) => compensateCard(f, c.familles.length === 1)).join("")}</div>` : ""}
       ${c.cote ? `<p class="cp-foot">Ajoute-les à tes séances habituelles, à la place d'une partie des séries ${c.cote === "arriere" ? "devant" : "derrière"} si tu manques de temps. Sur la montre, choisis l'exercice à chaque série (ou écris-le dans la description Strava) : il comptera du bon côté.</p>` : ""}
     </div>`;
-    body.querySelector("[data-compose]").addEventListener("click", () => openRenfoSession({ toast: ctx.toast, preset: presetFrom(c) }));
-    body.querySelector("[data-mine]").addEventListener("click", () => openRenfoSession({ toast: ctx.toast }));
+    body.querySelector("[data-compose]").addEventListener("click", () => openInAtelier(presetFrom(c)));
+    body.querySelector("[data-mine]").addEventListener("click", () => openInAtelier());
   },
 };
 
@@ -385,7 +396,7 @@ export const seance_renfo = {
             ${r.tonnage_kg ? figure("Tonnage", F.int(r.tonnage_kg), "kg") : ""}
             ${r.effort_s ? figure("Temps d'effort", F.escape(F.duration(r.effort_s))) : ""}
           </div>
-          ${balanceBlock(r.equilibre)}
+          ${balanceBlock(r.equilibre, r.cible)}
           <table class="table rf-table rf-cards"><thead><tr><th>Exercice</th><th class="num">Séries</th><th class="num">Charge</th>
             <th class="num">Tonnage</th><th class="num">Effort</th></tr></thead><tbody>${rows}</tbody></table>
         </div>

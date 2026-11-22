@@ -4,6 +4,25 @@ Les versions « bêta » (par exemple 0.4.0b1) sont des avant-premières : elles
 sur le canal bêta (Réglages → Application → Mises à jour → « Recevoir les versions bêta »), puis sortent en
 version stable une fois éprouvées.
 
+## 0.8.3b15 — 22 novembre 2026 (bêta)
+
+- **L'Atelier**, nouvelle entrée de la colonne de gauche : on y compose ses séances soi-même, avec ou sans coach.
+  *Course et endurance* : la séance en blocs comme un coach la propose (échauffement, corps de séance répété avec
+  sa récup, retour au calme ; % de VMA, zone de FC ou sans intensité), avec l'aperçu de la montre et les allures
+  calculées sur sa VMA. *Renfo* : les exercices un par un, avec l'équilibre avant / arrière et les muscles
+  travaillés de la séance. Sept séances de renfo toutes faites (coureur express, chaîne postérieure, gainage,
+  pieds et mollets, trail, haut du corps, haltères), les séances de course d'exemple, et ses propres séances de
+  renfo faites à reprendre telles quelles. *Enregistrer*, *Enregistrer sous…*, *Supprimer* ; *Envoyer sur ma montre*
+  au jour choisi (calendrier Garmin Connect, par le relais du club avec un compte élève relié, allures comprises)
+  ou *Fichier .fit*.
+- **Temps par zone** : nouvelle tuile de la vue « Séance » (zones FC et, en course à pied, zones d'allure, de la
+  zone 5 à la zone 1, temps et part de la séance), ajoutée une fois aux vues en place ; dans « Aujourd'hui », le
+  temps par zone FC de la séance du jour sous la météo.
+- **Réglages → Renfo** : objectif de séances par semaine, équilibre avant / arrière visé (Coureur, Équilibré,
+  Priorité à l'arrière ou à sa façon, avec ses conseils), niveau, matériel à disposition, récup, échauffement et
+  étirements des séances composées, jours de renfo. Les tuiles Renfo suivent la cible choisie.
+- Les réglages ne relancent plus le recalcul de toutes les séances quand rien de ce qui le touche n'a changé.
+
 ## 0.8.3b14 — 22 novembre 2026 (bêta)
 
 - **Zones aux couleurs de Garmin.** Les zones FC et d'allure passent en gris, bleu, vert, orange et rouge, comme

@@ -198,8 +198,6 @@ TILE_TYPES: list[dict[str, Any]] = [
         "taille": {"w": 12, "h": 4},
         "params": [
             {"key": "periode", "label": "Période (jours)", "kind": "periode", "default": "herite"},
-            {"key": "objectif", "label": "Objectif : séances de renfo par semaine (0 = aucun)", "kind": "number",
-             "default": 2},
         ],
     },
     {
@@ -241,6 +239,16 @@ TILE_TYPES: list[dict[str, Any]] = [
                        "sport des 4 semaines précédentes. La tuile s'efface pour les séances sans effet "
                        "d'entraînement.",
         "taille": {"w": 12, "h": 2}, "params": [],
+    },
+    {
+        "type": "seance_zones", "label": "Séance : temps par zone", "icone": "layers", "categorie": "Séances",
+        "description": "Le temps passé dans chaque zone de fréquence cardiaque et, pour la course à pied, dans chaque "
+                       "zone d'allure, avec les bornes de tes zones (Réglages → Zones). La tuile s'efface pour une "
+                       "séance sans FC ni allure.",
+        "taille": {"w": 12, "h": 2},
+        "params": [
+            {"key": "zones", "label": "Zones", "kind": "multi", "options": ["fc", "allure"], "default": ["fc", "allure"]},
+        ],
     },
     {
         "type": "seance_resume", "label": "Séance : résumé", "icone": "info", "categorie": "Séances",
@@ -409,6 +417,7 @@ def default_views() -> list[dict]:
                 _tile("seance_resume", 12, 1),
                 _tile("seance_renfo", 12, 3),
                 _tile("seance_effet", 12, 2),
+                _tile("seance_zones", 12, 2),
                 _tile("seance_analyse", 12, 3),
                 _tile("seance_carte", 6, 3),
                 _tile("seance_courbes", 6, 3),
@@ -545,6 +554,7 @@ def ensure_default_views(conn: sqlite3.Connection) -> None:
         db.set_meta(conn, "vue_seance_analyse", "1")
         db.set_meta(conn, "vue_agenda_grand", "1")
         db.set_meta(conn, "vue_seance_jour", "1")
+        db.set_meta(conn, "vue_seance_zones", "1")
         conn.commit()
         return
     if db.get_meta(conn, "vue_seance_renfo") is None:
@@ -637,6 +647,12 @@ def ensure_default_views(conn: sqlite3.Connection) -> None:
             conn.execute("UPDATE views SET spec = ?, updated_at = ? WHERE id = 'aujourdhui'",
                          (json.dumps(today_view()["spec"], ensure_ascii=False), db.now_iso()))
         db.set_meta(conn, "vue_seance_jour", "1")
+        conn.commit()
+    if db.get_meta(conn, "vue_seance_zones") is None:
+        # 0.8.3 : le temps par zone FC et d'allure de la séance, sous l'effet d'entraînement, une seule fois
+        _insert_tile(conn, "seance", "seance_zones", 12, 2,
+                     after=("seance_effet", "seance_renfo", "seance_resume"))
+        db.set_meta(conn, "vue_seance_zones", "1")
         conn.commit()
     if db.get_meta(conn, "renfo_vue") is None and sync_renfo_view(conn):
         # 0.6 : exercices retrouvés par la mise à niveau de la base, la vue « Renfo » sans attendre une synchro

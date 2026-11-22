@@ -7,6 +7,7 @@ import { analysisHTML, wireAnalysis } from "./fractions.js";
 import { icon } from "./icons.js";
 import { sourceText } from "./sources.js";
 import { message } from "./tiles-data.js";
+import { zoneTableHTML } from "./zone-table.js";
 
 const FOOT_SPORTS = ["course", "trail", "marche", "rando"];
 const INTENSITY = { warmup: "Échauffement", active: "Effort", rest: "Récup", recovery: "Récup", cooldown: "Retour au calme", interval: "Effort" };
@@ -187,6 +188,24 @@ export const seance_resume = {
       </div>
       <div class="figures">${keyFigures(a, { extra: true })}</div>
     </div>`;
+  },
+};
+
+// ------------------------------------------------------------- séance : temps par zone
+export const seance_zones = {
+  title: () => "Temps par zone",
+  async render(body, p, ctx) {
+    const a = await ctx.activityDetail();
+    if (!a) return message(body, "Choisis une séance en haut de la vue.");
+    const wanted = Array.isArray(p.zones) && p.zones.length ? p.zones : ["fc", "allure"];
+    const tables = wanted.filter((k) => a.temps_zones?.[k]);
+    if (!tables.length) {
+      ctx.hide?.();  // ni FC ni allure (séance sans cardio, renfo sans montre…) : la tuile s'efface
+      return message(body, "Pas de temps par zone pour cette séance : il faut la fréquence cardiaque (ou, pour l'allure, une course à pied avec sa courbe de vitesse).");
+    }
+    ctx.sub(tables.length > 1 ? "FC et allure" : tables[0] === "fc" ? "Fréquence cardiaque" : "Allure");
+    body.classList.add("zt-body");
+    body.innerHTML = `<div class="zt-grid n${tables.length}">${tables.map((k) => zoneTableHTML(a.temps_zones[k], k)).join("")}</div>`;
   },
 };
 

@@ -1,5 +1,6 @@
 // Foulée : chef d'orchestre de l'interface (navigation, vues, tuiles, édition, synchro, thème).
 import * as api from "./api.js";
+import { renderAtelier } from "./atelier.js";
 import { renderPartnerPage, siteIcon } from "./appli-externe.js";
 import * as C from "./charts.js";
 import * as E from "./editor.js";
@@ -31,7 +32,7 @@ const RENDERERS = {
   postes: D.postes, objectif: O.objectif, objectifs: O.objectifs, fractions: D.fractions, note: D.note,
   activites: A.activites, derniere_seance: A.derniere_seance, seance_resume: A.seance_resume,
   seance_carte: A.seance_carte, seance_courbes: A.seance_courbes, seance_tours: A.seance_tours, seance_analyse: A.seance_analyse,
-  seance_mesures: A.seance_mesures,
+  seance_mesures: A.seance_mesures, seance_zones: A.seance_zones,
   renfo: R.renfo, renfo_exercices: R.renfo_exercices, seance_renfo: R.seance_renfo, renfo_equilibre: R.renfo_equilibre, renfo_conseils: R.renfo_conseils,
   seance_effet: T.seance_effet,
   profil: H.profil, forme: H.forme, allures: H.allures, semaine: H.semaine, records: H.records, journee: H.journee,
@@ -319,7 +320,9 @@ function renderNav() {
     + (partner || sites.length ? `<div class="nav-sep" role="separator"></div>` : "")
     + (partner ? `<a class="nav-item nav-partner" href="#/partenaire" ${location.hash.startsWith("#/partenaire") ? 'aria-current="page"' : ""}>${siteIcon(partner, "partenaire")}<span>${F.escape(partner.nom)}</span></a>` : "")
     + sites.map((x) => `<a class="nav-item nav-site" href="#/site/${encodeURIComponent(x.id)}" ${location.hash === `#/site/${x.id}` ? 'aria-current="page"' : ""}>${siteIcon(x)}<span>${F.escape(x.nom)}</span></a>`).join("")
-    + (coach ? `<div class="nav-sep" role="separator"></div><a class="nav-item nav-coach" href="#/coach" ${location.hash.startsWith("#/coach") ? 'aria-current="page"' : ""}>${icon(coach.role === "coach" ? "club" : "user")}<span>${coachPageLabel(coach)}</span><span class="co-badge nav-badge" data-coach-unread ${coachUnread() ? "" : "hidden"}>${coachUnread()}</span></a>` : "");
+    // L'Atelier (composer ses séances) et le coach : ce qu'on prépare, ensemble
+    + `<div class="nav-sep" role="separator"></div><a class="nav-item nav-atelier" href="#/atelier" ${location.hash.startsWith("#/atelier") ? 'aria-current="page"' : ""}>${icon("atelier")}<span>Atelier</span></a>`
+    + (coach ? `<a class="nav-item nav-coach" href="#/coach" ${location.hash.startsWith("#/coach") ? 'aria-current="page"' : ""}>${icon(coach.role === "coach" ? "club" : "user")}<span>${coachPageLabel(coach)}</span><span class="co-badge nav-badge" data-coach-unread ${coachUnread() ? "" : "hidden"}>${coachUnread()}</span></a>` : "");
   nav.querySelectorAll("[data-id]").forEach((b) => {
     b.addEventListener("click", () => { location.hash = `#/vue/${encodeURIComponent(b.dataset.id)}`; closeMenu(); });
     wireNavDrag(b);
@@ -383,7 +386,7 @@ function wireNavDrag(item) {
 
 function isSettings() { return location.hash.startsWith("#/reglages"); }
 /** Une page qui n'est pas une vue : réglages, bienvenue, aide, retours. */
-function isOtherPage() { return /^#\/(reglages|bienvenue|aide|retours|coach|partenaire|site\/)/.test(location.hash); }
+function isOtherPage() { return /^#\/(reglages|bienvenue|aide|retours|coach|atelier|partenaire|site\/)/.test(location.hash); }
 
 function markRailLinks(path) {
   [["#help-link", "/aide"], ["#feedback-link", "/retours"]].forEach(([selector, page]) => {
@@ -404,6 +407,7 @@ function route() {
   if (path === "/retours") { showFeedback(params); return; }
   if (path === "/coach" || path.startsWith("/coach/")) { showCoach(path, params); return; }
   if (path === "/partenaire") { showPartner(); return; }
+  if (path === "/atelier") { showAtelier(params); return; }
   const siteMatch = path.match(/^\/site\/([^/]+)/);
   if (siteMatch) { showPartner(decodeURIComponent(siteMatch[1])); return; }
   const match = path.match(/^\/vue\/([^/]+)/);
@@ -420,7 +424,7 @@ function currentView() { return state.views.find((v) => v.id === state.viewId); 
 
 function rerender() {
   // Formulaires en cours (bienvenue, retours) ou texte sans graphique (aide) : on ne redessine pas
-  if (/^#\/(bienvenue|aide|retours|coach|partenaire|site\/)/.test(location.hash)) return;
+  if (/^#\/(bienvenue|aide|retours|coach|atelier|partenaire|site\/)/.test(location.hash)) return;
   if (isSettings()) showSettings(); else renderView();
 }
 
@@ -875,6 +879,15 @@ function showPartner(siteId = null) {
   renderNav();
   window.scrollTo(0, 0);
   renderPartnerPage($("#page"), state.boot, { siteId, keep: (disposable) => state.pass.disposers.push(disposable) });
+}
+
+function showAtelier(params) {
+  disposePass();
+  state.editing = false;
+  closeMenu();
+  renderNav();
+  window.scrollTo(0, 0);
+  renderAtelier($("#page"), state.boot, { toast, params });
 }
 
 function showFeedback(params) {

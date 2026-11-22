@@ -60,6 +60,7 @@ def day_page(conn: sqlite3.Connection, settings: dict, day: date | None = None) 
     for p in planned:
         p["minutes"] = round(appariement.estimated_minutes(p.get("blocs"), vma)) if p.get("blocs") else None
     form = analysis.day_form(conn, day, settings)
+    hrp = analysis.hr_profile(conn, settings) if rows else None
     done = []
     for r in rows:
         done.append({"id": r["id"], "nom": r["name"], "sport": r["sport"], "sport_label": metrics.SPORTS.get(r["sport"], r["sport"]),
@@ -70,6 +71,7 @@ def day_page(conn: sqlite3.Connection, settings: dict, day: date | None = None) 
                      "fc_moy": round(r["avg_hr"]) if r["avg_hr"] else None,
                      "allure": metrics.fmt_pace(r["avg_speed"]) if r["avg_speed"] and r["sport"] in FOOT else None,
                      "prevue": next((p["id"] for p in planned if p.get("seance_id") == r["id"]), None),
+                     "zones_fc": analysis.zone_tables(hrp, r).get("fc"),  # temps par zone FC (ou None)
                      "ressenti": _feel(conn, r["id"])})
     plan = schedule.Schedule.of(settings).day(day)
     return {"date": day.isoformat(), "poste": plan, "vma": vma,

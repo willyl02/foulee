@@ -7,8 +7,8 @@ import { icon } from "./icons.js";
 export const THEMES = [
   { id: "moi", label: "Moi", icon: "user", hint: "Profil, VMA et FC, objectifs, horaires",
     sections: ["profil", "coureur", "objectif", "horaires"] },
-  { id: "entrainement", label: "Entraînement", icon: "activity", hint: "Zones, allures, synchro, vues",
-    sections: ["zones-fc", "zones", "synchro", "vues"] },
+  { id: "entrainement", label: "Entraînement", icon: "activity", hint: "Zones, allures, renfo, synchro, vues",
+    sections: ["zones-fc", "zones", "renfo", "synchro", "vues"] },
   { id: "connexions", label: "Connexions", icon: "sync", hint: "Garmin, Withings, Strava, calendrier",
     sections: ["cle", "withings", "strava", "calendrier"] },
   { id: "club", label: "Club et coach", icon: "club", hint: "Mon club, application partenaire, sites externes, coach, notifications",

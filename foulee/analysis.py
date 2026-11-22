@@ -1188,6 +1188,30 @@ def lap_analysis(laps: list[dict], streams: dict | None, floors: list[float]) ->
     return out
 
 
+def zone_tables(hrp: dict, row: sqlite3.Row | dict) -> dict:
+    """Le temps passé dans chaque zone d'une séance : FC (toutes les séances avec FC) et allure (course à pied),
+    avec les noms et les bornes des zones en vigueur ; une zone absente n'a pas de clé."""
+    out: dict[str, dict] = {}
+
+    def seconds(raw: Any) -> list[int] | None:
+        values = json.loads(raw) if isinstance(raw, str) else raw
+        if not isinstance(values, list) or len(values) < 5:
+            return None
+        values = [round(float(v or 0)) for v in values[:5]]
+        return values if sum(values) > 0 else None
+
+    hr = seconds(row["hr_zones"])
+    if hr:
+        out["fc"] = {"noms": list(hrp["noms"]), "bornes": list(hrp["bornes"]), "secondes": hr, "total": sum(hr),
+                     "methode": hrp["methode"]}
+    pace = seconds(row["pace_zones"]) if row["sport"] in metrics.RUNNING_SPORTS else None
+    if pace:
+        allure = hrp["allure"]
+        out["allure"] = {"noms": list(allure["noms"]), "bornes": list(allure["bornes"]), "secondes": pace,
+                         "total": sum(pace), "methode": allure["methode"]}
+    return out
+
+
 def activity_detail(conn: sqlite3.Connection, activity_id: str, settings: dict) -> dict | None:
     row = conn.execute("SELECT * FROM activities WHERE id = ?", (activity_id,)).fetchone()
     if not row:
@@ -1202,10 +1226,11 @@ def activity_detail(conn: sqlite3.Connection, activity_id: str, settings: dict) 
     data["zones_fc_bornes"] = hrp["floors"]
     data["zones_fc_noms"] = hrp["bornes"]
     data["zones_allure_noms"] = hrp["allure"]["bornes"]
+    data["temps_zones"] = zone_tables(hrp, row)  # temps par zone FC et d'allure, avec noms et bornes
     data["analyse"] = lap_analysis(data["tours"], streams, hrp["floors"]) if len(data["tours"]) > 1 else []
     data["mesures"] = activity_measures(row, data["extra"])
     data["effet"] = training_effect(conn, row, data["extra"])  # effet aérobie et anaérobie de Garmin (ou None)
-    data["renfo"] = renfo.session(conn, activity_id)  # exercices de renfo, muscles travaillés (ou None)
+    data["renfo"] = renfo.session(conn, activity_id, settings)  # exercices de renfo, muscles (ou None)
     if row["sport"] in metrics.RUNNING_SPORTS:
         vma = float(settings.get("vma_kmh") or 16)
         if row["avg_speed"]:

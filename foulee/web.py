@@ -46,6 +46,7 @@ from . import (
     __version__,
     access,
     analysis,
+    atelier,
     calendrier,
     claude_desktop,
     club,
@@ -293,6 +294,7 @@ def create_app() -> FastAPI:
                 "club": club.summary(settings.get("club")), "club_licences": club.LICENCE_TYPES,
                 "club_logo": club.logo_version(),  # repère du logo (pour l'adresse de l'image), ou None
                 "logotheque": logotheque.listing(),  # logos au choix (club, application partenaire), case de l'Accueil
+                "renfo_options": renfo.options(),  # Réglages → Renfo : cibles, niveaux, matériel, jours
                 "partenaire": partenaire.resolve(settings.get("partenaire")),
                 "sites_externes": partenaire.resolve_sites(settings.get("sites_externes")),
                 "garmin_profil": analysis.garmin_profile(conn),
@@ -565,7 +567,7 @@ def create_app() -> FastAPI:
         """Bilan du renfo sur la période : séances, muscles travaillés, exercices et leur progression."""
         a, b = _period(start, end, 30)
         with db.session(readonly=True, strava=True) as conn:
-            data = renfo.period(conn, a, b, max(4, min(int(semaines), 52)))
+            data = renfo.period(conn, a, b, max(4, min(int(semaines), 52)), db.get_settings(conn))
             data["sources"] = analysis.sources_for(conn, [], a, b, ",".join(renfo.SPORTS), activities=True)
             return data
 
@@ -1791,6 +1793,56 @@ def create_app() -> FastAPI:
         except renfo_seances.SessionError as exc:
             raise HTTPException(400, str(exc)) from None
         return coach_call(lambda conn: coach.garmin_personal(conn, item))
+
+    # L'Atelier : mes séances en blocs (course…) et de renfo, les séances toutes faites, l'envoi sur la montre
+    @app.get("/api/atelier")
+    def atelier_page() -> dict:
+        with db.session(readonly=True) as conn:
+            settings = db.get_settings(conn)
+            link = coach.status(conn)
+            role = (link.get("compte") or {}).get("role") if link.get("relie") else None
+            conf = renfo.settings_of(settings)
+            return {"seances": atelier.saved(conn), "renfo": renfo_seances.saved(conn),
+                    "modeles_renfo": renfo_seances.templates(settings), "faites": renfo_seances.done_sessions(conn),
+                    "bibliotheque": [{**f, "exercices": [{**e, "materiel_ok": renfo.has_gear(e["nom"], conf["materiel"])}
+                                                         for e in f["exercices"]]} for f in renfo_seances.library()],
+                    "montre": role == "eleve", "relie": bool(link.get("relie")),
+                    "vma": settings.get("vma_kmh"), "renfo_reglages": conf,
+                    "date_renfo": atelier.next_day(conf["jours"]), "niveaux": renfo.options()["niveaux"]}
+
+    @app.put("/api/atelier/seances")
+    def atelier_save(payload: dict = Body(...)) -> dict:
+        try:
+            with db.session() as conn:
+                return {"seances": atelier.save(conn, payload.get("seances"))}
+        except atelier.SessionError as exc:
+            raise HTTPException(400, str(exc)) from None
+
+    @app.post("/api/atelier/seance.fit")
+    def atelier_fit(payload: dict = Body(...)) -> Response:
+        from . import workout_fit
+
+        with db.session(readonly=True) as conn:
+            vma = db.get_settings(conn).get("vma_kmh")
+        try:
+            item = atelier.to_item(payload.get("seance"))
+            return fit_response(workout_fit.file_name(item), workout_fit.build(item, vma))
+        except (atelier.SessionError, workout_fit.WorkoutError) as exc:
+            raise HTTPException(400, str(exc)) from None
+
+    @app.post("/api/atelier/seance/montre")
+    def atelier_watch(payload: dict = Body(...)) -> dict:
+        try:
+            item = atelier.to_item(payload.get("seance"), payload.get("date"))
+        except atelier.SessionError as exc:
+            raise HTTPException(400, str(exc)) from None
+        return coach_call(lambda conn: coach.garmin_personal(conn, {**item, "vma_kmh": db.get_settings(conn).get("vma_kmh")}))
+
+    @app.post("/api/atelier/renfo/bilan")
+    def atelier_renfo_balance(payload: dict = Body(...)) -> dict:
+        """L'équilibre avant / arrière et les muscles de la séance de renfo en cours de composition."""
+        with db.session(readonly=True) as conn:
+            return renfo_seances.composed_balance(payload.get("seance"), db.get_settings(conn))
 
     @app.get("/api/coach/seances/{proposal_id}.fit")
     def coach_workout_fit(proposal_id: int) -> Response:

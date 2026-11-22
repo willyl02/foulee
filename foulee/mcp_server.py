@@ -442,7 +442,7 @@ def renfo_period(debut: str | None = None, fin: str | None = None) -> dict[str, 
     muscles peu ou pas travaillés, et séances de renfo par semaine sur les 12 dernières semaines."""
     a, b = _period(debut, fin, 30)
     with db.session(readonly=True) as conn:
-        data = renfo.period(conn, a, b)
+        data = renfo.period(conn, a, b, settings=db.get_settings(conn))
     exercises = []
     for e in data["exercices"]:
         exercises.append({
@@ -734,6 +734,9 @@ def modifier_reglages(changements: dict[str, Any]) -> dict[str, Any]:
     pct_reserve, pct_seuil, bornes) ; {"zones_allure": {"methode": "pct_vma", "pct": [70, 80, 88, 95]}}.
     Couleurs des zones : {"couleurs_zones": {"style": "garmin"}} (gris, bleu, vert, orange, rouge : par défaut),
     « bleus », ou {"style": "perso", "perso": ["#9ea8a3", "#2a78d6", "#13a06e", "#f08a1c", "#d3263a"]}.
+    Renfo : {"renfo": {"objectif_semaine": 2, "cible": "coureur" (ou "equilibre", "arriere", "perso" avec
+    "cible_bas" et "cible_haut"), "niveau": "intermediaire", "materiel": ["elastique", "halteres"], "recup_s": 45,
+    "jours": [2, 5]}} (Réglages → Renfo).
     Club FFA : {"club": {"actif": true, "numero": "012345", "nom": "…"}} ajoute la vue « Mon club » (numéro de
     club de la licence, 6 chiffres) ; {"club": {"actif": false}} la retire en gardant les informations.
     Synchro automatique : {"synchro_auto": {"garmin": 180, "withings": 180}}, un délai par source en minutes, de 30 à

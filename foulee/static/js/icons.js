@@ -76,6 +76,7 @@ const P = {
   dumbbell: '<path d="M8 12h8"/><rect x="4.5" y="7" width="3.5" height="10" rx="1.2"/><rect x="16" y="7" width="3.5" height="10" rx="1.2"/><path d="M2.5 10v4M21.5 10v4"/>',
   lock: '<rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5M12 14.6v2.3"/>',
   chevron: '<path d="m6 9 6 6 6-6"/>',
+  atelier: '<path d="M3.5 20.5h17"/><path d="M6.5 20.5v-4M10.5 20.5v-6.5"/><path d="m16.5 3.5 4 4-7.5 7.5-4.5.5.5-4.5z"/>',
   feedback: '<path d="M4.5 5.5h15a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H10l-4.5 3.5v-3.5h-1a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1z"/><path d="M12 8.3v3.6M12 14.3v.2"/>',
   image: '<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><circle cx="9" cy="10" r="1.8"/><path d="m4 18 5-5 3.5 3.5L15 14l5 4.5"/>',
   watch: '<rect x="6" y="6.5" width="12" height="11" rx="3"/><path d="M8.5 6.5 9.3 3h5.4l.8 3.5M8.5 17.5l.8 3.5h5.4l.8-3.5M12 9.5V12l1.8 1.2"/>',

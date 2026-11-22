@@ -700,43 +700,85 @@ def ratio_text(ratio: float | None) -> str:
     return "1 : " + shown.replace(".", ",")
 
 
-BALANCE_ZONES: dict[str, tuple[str, str]] = {  # zone → (verdict, explication)
-    "avant": ("Trop d'avant", "Plus de séries devant que derrière : la chaîne postérieure (fessiers, ischios, "
-                              "dos, mollets) est en retard."),
-    "proche": ("Presque à l'équilibre", "Un peu plus de séries devant que derrière : encore quelques séries "
-                                        "côté arrière pour atteindre 1:1."),
-    "cible": ("Dans la cible", "Entre 1:1 et 1:2 : l'équilibre conseillé pour un coureur, un peu plus de travail "
-                               "derrière que devant."),
-    "arriere": ("Très orienté arrière", "Au-delà de 1:2 : ne laisse pas tomber l'avant (quadriceps, gainage), utile "
-                                        "en descente et pour tenir le bassin."),
-    "arriere_fort": ("Presque tout à l'arrière", "Presque rien devant : quadriceps et gainage ont aussi leur place, "
-                                                 "même pour un coureur."),
-    "vide": ("Rien à comparer", "Aucune série rangée devant ou derrière : échauffement, cardio, latéral ou exercice "
-                                "non précisé."),
+# ------------------------------------------------------------------ cible avant / arrière (Réglages → Renfo)
+# profil → (libellé, bas, haut, visé, pour qui, ce que dit la cible). Le rapport se lit « 1 : x » : x séries derrière
+# pour 1 devant. Le coureur (par défaut) vise 1:1 à 1:2 ; on peut viser l'équilibre strict, ou davantage l'arrière.
+TARGETS: dict[str, tuple[str, float, float, float, str, str]] = {
+    "coureur": ("Coureur (conseillé)", 1.0, 2.0, 1.5,
+                "Fessiers, ischios, mollets et dos propulsent la foulée et protègent les genoux : un peu plus de travail "
+                "derrière que devant, sans négliger quadriceps et gainage.",
+                "l'équilibre conseillé pour un coureur, un peu plus de travail derrière que devant"),
+    "equilibre": ("Équilibré", 0.8, 1.25, 1.0,
+                  "Un renfo général, ou un sport qui sollicite autant l'avant que l'arrière (vélo, ski, sports "
+                  "collectifs) : autant de séries devant que derrière.",
+                  "autant de travail devant que derrière"),
+    "arriere": ("Priorité à l'arrière", 1.5, 3.0, 2.0,
+                "Dos voûté (bureau, conduite), genoux sensibles, ou retour de blessure : on renforce surtout la chaîne "
+                "postérieure, en gardant un peu d'avant. À voir avec ton kiné ou ton coach.",
+                "nettement plus de travail derrière que devant, comme tu l'as choisi"),
 }
+DEFAULT_TARGET = "coureur"
 
 
-def balance_zone(front: float, back: float) -> tuple[str, float | None]:
-    """Zone du rapport arrière / avant (arrondi comme il s'affiche, pour que l'affichage et la zone concordent)."""
+def target_of(settings: dict | None = None) -> dict:
+    """La cible avant / arrière des réglages : {profil, libelle, bas, haut, vise, texte, conseil}."""
+    conf = settings_of(settings)
+    key = conf["cible"]
+    if key == "perso" and conf.get("cible_bas") and conf.get("cible_haut"):
+        low, high = float(conf["cible_bas"]), float(conf["cible_haut"])
+        return {"profil": "perso", "libelle": "À ma façon", "bas": low, "haut": high,
+                "vise": round((low + high) / 2, 2), "conseil": "Ta cible à toi, réglée à la main.",
+                "texte": "la cible que tu as réglée"}
+    label, low, high, aim, advice, text = TARGETS.get(key, TARGETS[DEFAULT_TARGET])
+    return {"profil": key if key in TARGETS else DEFAULT_TARGET, "libelle": label, "bas": low, "haut": high,
+            "vise": aim, "conseil": advice, "texte": text}
+
+
+def _zone_texts(zone: str, target: dict) -> tuple[str, str]:
+    low, high = ratio_text(target["bas"]), ratio_text(target["haut"])
+    return {
+        "avant": ("Trop d'avant", "Plus de séries devant que derrière : la chaîne postérieure (fessiers, ischios, "
+                                  "dos, mollets) est en retard."),
+        "proche": ("Presque dans la cible", f"Un peu trop de séries devant : encore quelques séries côté arrière pour "
+                                            f"atteindre {low}."),
+        "cible": ("Dans la cible", f"Entre {low} et {high} : {target['texte']}."),
+        "arriere": ("Très orienté arrière", f"Au-delà de {high} : ne laisse pas tomber l'avant (quadriceps, gainage), "
+                                            "utile en descente et pour tenir le bassin."),
+        "arriere_fort": ("Presque tout à l'arrière", "Presque rien devant : quadriceps et gainage ont aussi leur place, "
+                                                     "même pour un coureur."),
+        "vide": ("Rien à comparer", "Aucune série rangée devant ou derrière : échauffement, cardio, latéral ou exercice "
+                                    "non précisé."),
+    }[zone]
+
+
+BALANCE_ZONES: dict[str, tuple[str, str]] = {  # zone → (verdict, explication), pour la cible du coureur
+    z: _zone_texts(z, {"bas": 1.0, "haut": 2.0, "texte": TARGETS[DEFAULT_TARGET][5]})
+    for z in ("avant", "proche", "cible", "arriere", "arriere_fort", "vide")}
+
+
+def balance_zone(front: float, back: float, target: dict | None = None) -> tuple[str, float | None]:
+    """Zone du rapport arrière / avant (arrondi comme il s'affiche, pour que l'affichage et la zone concordent),
+    selon la cible (celle du coureur, 1:1 à 1:2, par défaut)."""
+    low, high = (target["bas"], target["haut"]) if target else (1.0, 2.0)
     if front <= 0:
         return ("arriere_fort" if back > 0 else "vide"), None
     ratio = back / front
     ratio = round(ratio, 2) if ratio < 1 else round(ratio, 1)
-    if ratio < 0.8:
+    if ratio < low * 0.8:
         return "avant", ratio
-    if ratio < 1:
+    if ratio < low:
         return "proche", ratio
-    if ratio <= 2:
+    if ratio <= high:
         return "cible", ratio
-    return ("arriere" if ratio <= 4 else "arriere_fort"), ratio
+    return ("arriere" if ratio <= high * 2 else "arriere_fort"), ratio
 
 
-def _lean(front: float, back: float) -> str:
-    zone, _ = balance_zone(front, back)
+def _lean(front: float, back: float, target: dict | None = None) -> str:
+    zone, _ = balance_zone(front, back, target)
     return {"avant": "avant", "proche": "equilibre", "cible": "equilibre", "vide": "equilibre"}.get(zone, "arriere")
 
 
-def balance(rows: list[dict]) -> dict:
+def balance(rows: list[dict], target: dict | None = None) -> dict:
     """Équilibre avant / arrière d'un ensemble d'exercices, en séries (« corps entier » : ½ de chaque côté ;
     latéral et rotation : à part, ni devant ni derrière)."""
     per_family: dict[str, float] = defaultdict(float)
@@ -747,10 +789,10 @@ def balance(rows: list[dict]) -> dict:
             skipped += e["sets"]
         else:
             per_family[family] += e["sets"]
-    return balance_from_families(per_family, skipped)
+    return balance_from_families(per_family, skipped, target)
 
 
-def balance_from_families(per_family: dict[str, float], skipped: float = 0.0) -> dict:
+def balance_from_families(per_family: dict[str, float], skipped: float = 0.0, target: dict | None = None) -> dict:
     """Le même bilan à partir des séries déjà rangées par famille (le relais du club le refait ainsi à partir de
     ce que l'élève partage)."""
     per_family = defaultdict(float, {f: float(v) for f, v in per_family.items() if f in CHAIN_FAMILIES and v})
@@ -760,15 +802,15 @@ def balance_from_families(per_family: dict[str, float], skipped: float = 0.0) ->
         return sum(v for f, v in per_family.items() if CHAIN_FAMILIES[f][1] == chain) + mixed / 2
 
     front, back = side("avant"), side("arriere")
-    zone, ratio = balance_zone(front, back)
-    verdict, explanation = BALANCE_ZONES[zone]
+    zone, ratio = balance_zone(front, back, target)
+    verdict, explanation = _zone_texts(zone, target) if target else BALANCE_ZONES[zone]
     total = front + back
     pairs = []
     for key, label, fam_front, fam_back, add_back, add_front in CHAIN_PAIRS:
         a, b = per_family.get(fam_front, 0.0), per_family.get(fam_back, 0.0)
         if not a and not b:
             continue
-        pair_zone, pair_ratio = balance_zone(a, b)
+        pair_zone, pair_ratio = balance_zone(a, b)  # les paires gardent le repère 1:1 à 1:2
         enough = a + b >= max(3.0, 0.1 * total)  # assez de séries pour juger de la paire
         pairs.append({
             "cle": key, "nom": label,
@@ -932,19 +974,23 @@ def _round_up(value: float) -> int:
     return max(0, math.ceil(value - 1e-9))
 
 
-def compensation(bal: dict, days: int, sessions: int = 0) -> dict | None:
-    """Ce qu'il faut ajouter pour viser 1:1,5 : de quel côté, combien de séries (sur la période, par semaine, par
-    séance), et quels exercices, famille par famille (la paire la plus en retard d'abord, le bas du corps en tête).
-    None s'il n'y a rien à comparer."""
+def compensation(bal: dict, days: int, sessions: int = 0, target: dict | None = None,
+                 gear: list[str] | None = None) -> dict | None:
+    """Ce qu'il faut ajouter pour viser le milieu de la cible (1:1,5 pour un coureur) : de quel côté, combien de
+    séries (sur la période, par semaine, par séance), et quels exercices, famille par famille (la paire la plus en
+    retard d'abord, le bas du corps en tête ; avec le matériel des réglages en premier). None s'il n'y a rien à
+    comparer."""
     if bal.get("zone") in (None, "vide"):
         return None
+    aim = target["vise"] if target else COMPENSATE_TARGET
+    low, high = (target["bas"], target["haut"]) if target else (1.0, 2.0)
     front, back = bal["avant"], bal["arriere"]
     pairs = bal.get("paires", [])
     weeks = max(days / 7, 1)
     forward = [p for p in pairs if p.get("penche") == "avant"]
     if bal["zone"] in ("avant", "proche") or forward:
         side = "arriere"
-        missing = _round_up(COMPENSATE_TARGET * front - back) if bal["zone"] in ("avant", "proche") else 0
+        missing = _round_up(aim * front - back) if bal["zone"] in ("avant", "proche") else 0
         families = [p["arriere"]["famille"] for p in forward]
         if not families:
             ranked = sorted(pairs, key=lambda p: p["arriere"]["series"] - p["avant"]["series"])
@@ -952,7 +998,7 @@ def compensation(bal: dict, days: int, sessions: int = 0) -> dict | None:
         families = families or ["hanche", "tirage", "lombaires"]
     elif bal["zone"] in ("arriere", "arriere_fort"):
         side = "avant"
-        missing = _round_up(back / COMPENSATE_TARGET - front)
+        missing = _round_up(back / aim - front)
         light = [p for p in pairs if p["cle"] in ("bas", "tronc", "jambe") and p["avant"]["series"] < p["arriere"]["series"]]
         families = [p["avant"]["famille"] for p in light] or ["genou", "abdos"]
     else:
@@ -970,7 +1016,8 @@ def compensation(bal: dict, days: int, sessions: int = 0) -> dict | None:
         blocks.append({
             "famille": fam, "nom": CHAIN_FAMILIES[fam][0], "chaine": CHAIN_FAMILIES[fam][1],
             "pourquoi": FAMILY_WHY.get(fam), "constat": _pair_phrase(pair) if pair else None,
-            "exercices": [{"nom": n, "materiel": m, "dosage": d, "consigne": c} for n, m, d, c in EXERCISE_LIBRARY[fam]],
+            "exercices": _with_gear([{"nom": n, "materiel": m, "dosage": d, "consigne": c}
+                                     for n, m, d, c in EXERCISE_LIBRARY[fam]], gear),
         })
     per_week = missing / weeks
     per_session = per_week / (sessions / weeks) if sessions and missing else None
@@ -979,10 +1026,10 @@ def compensation(bal: dict, days: int, sessions: int = 0) -> dict | None:
         shown = max(1.0, round(value)) if value >= 2.5 else max(0.5, round(value * 2) / 2)
         return f"{_number(shown)} série{'s' if shown >= 2 else ''}"
 
-    target = ratio_text(COMPENSATE_TARGET)
+    target_text = ratio_text(aim)
     if side == "arriere" and missing:
         title = f"Ajoute environ {about(per_week)} par semaine côté arrière"
-        summary = (f"Sur {days} jours, tu es à {bal['ratio_texte']} : pour viser {target}, il manque environ "
+        summary = (f"Sur {days} jours, tu es à {bal['ratio_texte']} : pour viser {target_text}, il manque environ "
                    f"{missing} série{'s' if missing > 1 else ''} derrière"
                    + (f", soit {about(per_session)} de plus par séance de renfo." if per_session else "."))
     elif side == "arriere":
@@ -991,13 +1038,15 @@ def compensation(bal: dict, days: int, sessions: int = 0) -> dict | None:
         summary = "Remplace ou complète une partie des séries devant par celles-ci, à volume égal."
     elif side == "avant":
         title = f"Garde aussi un peu d'avant : environ {about(per_week)} par semaine"
-        summary = (f"Sur {days} jours, tu es à {bal['ratio_texte']}, au-delà de 1 : 2 : pour revenir vers {target}, "
+        summary = (f"Sur {days} jours, tu es à {bal['ratio_texte']}, au-delà de {ratio_text(high)} : pour revenir vers "
+                   f"{target_text}, "
                    f"il manque environ {missing} série{'s' if missing > 1 else ''} devant"
                    + (f", soit {about(per_session)} de plus par séance de renfo." if per_session else "."))
     else:
         title = "Dans la cible : garde le cap"
-        summary = f"Ton renfo est à {bal['ratio_texte']}, entre 1 : 1 et 1 : 2. Rien à compenser : continue comme ça."
-    return {"cote": side, "cible": target, "ratio_texte": bal["ratio_texte"], "zone": bal["zone"],
+        summary = (f"Ton renfo est à {bal['ratio_texte']}, entre {ratio_text(low)} et {ratio_text(high)}. Rien à "
+                   "compenser : continue comme ça.")
+    return {"cote": side, "cible": target_text, "ratio_texte": bal["ratio_texte"], "zone": bal["zone"],
             "manque_series": missing, "par_semaine": round(per_week, 1), "par_seance": round(per_session, 1)
             if per_session else None, "titre": title, "resume": summary, "familles": blocks, "jours": days}
 
@@ -1158,7 +1207,7 @@ def _rows(conn: sqlite3.Connection, where: str, params: list[Any]) -> list[dict]
         f"JOIN activities a ON a.id = e.activity_id WHERE {where} ORDER BY a.start_local, e.idx", params)]
 
 
-def session(conn: sqlite3.Connection, activity_id: str) -> dict | None:
+def session(conn: sqlite3.Connection, activity_id: str, settings: dict | None = None) -> dict | None:
     """Exercices d'une séance, muscles travaillés et totaux ; None si ce n'est pas une séance de renfo."""
     row = conn.execute("SELECT sport FROM activities WHERE id = ?", (activity_id,)).fetchone()
     if not row or row["sport"] not in SPORTS:
@@ -1173,7 +1222,8 @@ def session(conn: sqlite3.Connection, activity_id: str) -> dict | None:
         "repetitions": sum(e["reps"] for e in rows),
         "tonnage_kg": round(sum(e["volume_kg"] for e in rows), 1) or None,
         "effort_s": round(sum(e["duration_s"] for e in rows)) or None,
-        "equilibre": balance(rows),
+        "equilibre": balance(rows, target_of(settings)),
+        "cible": target_of(settings),
         "noms_muscles": MUSCLE_LABELS,
     }
 
@@ -1182,7 +1232,7 @@ def _week_start(day: date) -> date:
     return day - timedelta(days=day.weekday())
 
 
-def period(conn: sqlite3.Connection, start: date, end: date, weeks: int = 12) -> dict:
+def period(conn: sqlite3.Connection, start: date, end: date, weeks: int = 12, settings: dict | None = None) -> dict:
     """Bilan du renfo sur une période : séances, muscles, exercices (avec leur progression), et la
     régularité des dernières semaines (quelle que soit la période)."""
     rows = _rows(conn, "a.date BETWEEN ? AND ?", [start.isoformat(), end.isoformat()])
@@ -1230,6 +1280,8 @@ def period(conn: sqlite3.Connection, start: date, end: date, weeks: int = 12) ->
         exercises.append(info)
     exercises.sort(key=lambda x: (x["inconnu"], -x["seances"], -x["series"], x["nom"]))  # non précisés en dernier
 
+    conf = settings_of(settings)
+    target = target_of(settings)
     # Régularité : séances de renfo par semaine (lundi → dimanche), les dernières semaines jusqu'à « end »
     last = _week_start(end)
     first_week = last - timedelta(weeks=weeks - 1)
@@ -1253,7 +1305,7 @@ def period(conn: sqlite3.Connection, start: date, end: date, weeks: int = 12) ->
     def week_balance(week: date) -> dict | None:
         if not by_week.get(week):
             return None
-        b = balance(by_week[week])
+        b = balance(by_week[week], target)
         return {k: b[k] for k in ("avant", "arriere", "ratio", "ratio_texte", "part_arriere", "zone", "verdict")}
 
     return {
@@ -1266,8 +1318,10 @@ def period(conn: sqlite3.Connection, start: date, end: date, weeks: int = 12) ->
         "effort_s": round(sum(e["duration_s"] for e in rows)) or None,
         "muscles": _muscle_load(rows),
         "exercices": exercises,
-        "equilibre": (bal := balance(rows)),
-        "compenser": compensation(bal, (end - start).days + 1, len(listed)),
+        "equilibre": (bal := balance(rows, target)),
+        "compenser": compensation(bal, (end - start).days + 1, len(listed), target, conf["materiel"]),
+        "cible": target,
+        "objectif_semaine": conf["objectif_semaine"],
         "semaines": [{"debut": k.isoformat(), "seances": int(v["seances"]), "series": int(v["series"]),
                       "equilibre": week_balance(k)} for k, v in sorted(counts.items())],
         "noms_muscles": MUSCLE_LABELS,
@@ -1276,3 +1330,125 @@ def period(conn: sqlite3.Connection, start: date, end: date, weeks: int = 12) ->
 
 def has_any(conn: sqlite3.Connection) -> bool:
     return conn.execute("SELECT 1 FROM exercises LIMIT 1").fetchone() is not None
+
+
+# ======================================================================
+#  Réglages du renfo (Réglages → Renfo)
+# ======================================================================
+LEVELS = {  # niveau → (libellé, séries par exercice, ce que ça veut dire)
+    "debutant": ("Débutant", 2, "2 séries par exercice, mouvements simples, le plus souvent sans matériel."),
+    "intermediaire": ("Intermédiaire", 3, "3 séries par exercice : le dosage habituel des exercices conseillés."),
+    "confirme": ("Confirmé", 4, "4 séries par exercice, des variantes plus exigeantes (une jambe, lesté)."),
+}
+GEAR: list[tuple[str, str]] = [
+    ("elastique", "Élastiques"), ("halteres", "Haltères"), ("kettlebell", "Kettlebell"), ("banc", "Banc"),
+    ("barre", "Barre et disques"), ("traction", "Barre de traction"), ("salle", "Salle de sport (machines, poulies)"),
+]
+GEAR_KEYS = {k for k, _ in GEAR}
+# Le matériel qu'il faut pour chaque exercice conseillé : une liste de possibilités (l'une suffit) ; rien = au poids
+# du corps, avec ce qu'on trouve chez soi (un mur, une chaise, une marche, une table solide).
+EXERCISE_GEAR: dict[str, list[set[str]]] = {
+    "Soulevé de terre roumain": [{"halteres"}, {"barre"}, {"kettlebell"}, {"salle"}],
+    "Hip thrust": [{"banc"}, {"salle"}],
+    "Kettlebell swing": [{"kettlebell"}, {"salle"}],
+    "Tirage horizontal à l'élastique": [{"elastique"}, {"salle"}],
+    "Rowing haltère un bras": [{"halteres"}, {"kettlebell"}, {"salle"}],
+    "Oiseau": [{"halteres"}, {"elastique"}, {"salle"}],
+    "Face pull": [{"elastique"}, {"salle"}],
+    "Tractions": [{"traction"}, {"salle"}],
+    "Extension des triceps à l'élastique": [{"elastique"}, {"salle"}],
+    "Développé militaire": [{"halteres"}, {"kettlebell"}, {"barre"}, {"salle"}],
+    "Curl biceps": [{"halteres"}, {"elastique"}, {"kettlebell"}, {"barre"}, {"salle"}],
+}
+WEEKDAYS = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"]
+SETTINGS_DEFAULT: dict[str, Any] = {
+    "objectif_semaine": 2,      # séances de renfo par semaine (0 : pas d'objectif)
+    "cible": DEFAULT_TARGET,    # coureur, equilibre, arriere, perso
+    "cible_bas": None, "cible_haut": None,  # « perso » : la cible à la main (rapport arrière / avant)
+    "niveau": "intermediaire",
+    "materiel": None,           # None : pas réglé (tous les exercices) ; [] : rien, au poids du corps
+    "recup_s": 45,              # récupération entre deux séries, par défaut
+    "echauffement": True, "etirements": True,  # 5 min au début, 5 min à la fin des séances composées
+    "jours": [],                # jours préférés (1 = lundi … 7 = dimanche) : la date proposée pour l'envoi
+}
+
+
+def settings_of(settings: dict | None) -> dict:
+    """Les réglages du renfo, complétés par les valeurs par défaut."""
+    saved = (settings or {}).get("renfo")
+    return {**SETTINGS_DEFAULT, **(saved if isinstance(saved, dict) else {})}
+
+
+def clean_settings(value: Any) -> dict | None:
+    """Contrôle les réglages du renfo envoyés par l'interface ; ValueError en français s'ils sont faux."""
+    if value in (None, ""):
+        return None
+    if not isinstance(value, dict):
+        raise ValueError("Renfo : réglages illisibles.")
+    out = dict(SETTINGS_DEFAULT)
+    try:
+        out["objectif_semaine"] = max(0, min(7, int(value.get("objectif_semaine", 2))))
+    except (TypeError, ValueError):
+        raise ValueError("Renfo : l'objectif est un nombre de séances par semaine, de 0 à 7.") from None
+    target = value.get("cible") or DEFAULT_TARGET
+    if target not in (*TARGETS, "perso"):
+        raise ValueError("Renfo : cible inconnue.")
+    out["cible"] = target
+    if target == "perso":
+        try:
+            low, high = float(value.get("cible_bas")), float(value.get("cible_haut"))
+        except (TypeError, ValueError):
+            raise ValueError("Renfo : donne les deux bornes de ta cible (par exemple 1 et 2).") from None
+        if not (0.5 <= low < high <= 4):
+            raise ValueError("Renfo : la cible va de 1 : 0,5 à 1 : 4, la borne basse avant la haute.")
+        out["cible_bas"], out["cible_haut"] = round(low, 2), round(high, 2)
+    level = value.get("niveau") or "intermediaire"
+    if level not in LEVELS:
+        raise ValueError("Renfo : niveau inconnu.")
+    out["niveau"] = level
+    gear = value.get("materiel")
+    if gear is not None:
+        if not isinstance(gear, list) or any(g not in GEAR_KEYS for g in gear):
+            raise ValueError("Renfo : matériel inconnu.")
+        gear = [k for k, _ in GEAR if k in gear]
+    out["materiel"] = gear
+    try:
+        out["recup_s"] = max(0, min(300, int(value.get("recup_s", 45))))
+    except (TypeError, ValueError):
+        raise ValueError("Renfo : la récupération se donne en secondes.") from None
+    out["echauffement"] = value.get("echauffement") is not False
+    out["etirements"] = value.get("etirements") is not False
+    days = value.get("jours") or []
+    if not isinstance(days, list) or any(not isinstance(d, int) or not 1 <= d <= 7 for d in days):
+        raise ValueError("Renfo : jours de 1 (lundi) à 7 (dimanche).")
+    out["jours"] = sorted(set(days))
+    return out
+
+
+def has_gear(name: str, gear: list[str] | None) -> bool:
+    """L'exercice se fait-il avec le matériel des réglages ? (pas de réglage : oui)."""
+    if gear is None:
+        return True
+    needs = EXERCISE_GEAR.get(name)
+    return not needs or any(option <= set(gear) for option in needs)
+
+
+def _with_gear(exercises: list[dict], gear: list[str] | None) -> list[dict]:
+    """Les exercices faisables avec son matériel d'abord ; les autres, marqués, s'il en reste moins de deux."""
+    if gear is None:
+        return exercises
+    ok = [e for e in exercises if has_gear(e["nom"], gear)]
+    other = [{**e, "materiel_manquant": True} for e in exercises if not has_gear(e["nom"], gear)]
+    return ok + (other if len(ok) < 2 else [])
+
+
+def options() -> dict:
+    """Les choix de Réglages → Renfo (profils de cible, niveaux, matériel, jours)."""
+    return {
+        "cibles": [{"cle": k, "libelle": v[0], "bas": v[1], "haut": v[2], "vise": v[3], "conseil": v[4],
+                    "bas_texte": ratio_text(v[1]), "haut_texte": ratio_text(v[2]), "vise_texte": ratio_text(v[3])}
+                   for k, v in TARGETS.items()],
+        "niveaux": [{"cle": k, "libelle": v[0], "series": v[1], "texte": v[2]} for k, v in LEVELS.items()],
+        "materiel": [{"cle": k, "libelle": v} for k, v in GEAR],
+        "jours": WEEKDAYS,
+    }
