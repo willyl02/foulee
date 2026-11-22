@@ -117,19 +117,6 @@ def test_the_other_path_is_tried_and_remembered():
         assert db.get_meta(conn, seances.ROUTE_KEY) == "séance"
 
 
-def test_done_sessions_are_found_through_their_activity():
-    with db.session() as conn:
-        db.set_setting(conn, "vma_kmh", 16)
-        calendrier.store(conn, calendrier.parse(_feed(), day(-1)), today=day(-1))
-        conn.execute("INSERT INTO activities(id, source, source_id, start_local, date, sport, name, distance_m, duration_s) "
-                     "VALUES ('garmin:25150833128', 'garmin', '25150833128', ?, ?, 'course', 'Chartèves', 8500, 3300)",
-                     (f"{day(-1).isoformat()} 10:00:00", day(-1).isoformat()))
-        session = FakeSession({("activité", "25150833128"): [TEMPETE]})  # les chemins des séances : 404
-        assert seances.sync(conn, session) == {"lues": 1}
-        plan = {p["titre"][:10]: p for p in calendrier.plan(conn, day(-3), day(3))}
-    assert plan["21KM-S3-6-"]["esquisse_approchee"] is False and plan["21KM-S3-6-"]["statut"] == "fait"
-
-
 def test_a_key_without_access_to_workouts_is_left_alone_for_a_week(caplog):
     caplog.set_level("INFO", logger="foulee.garmin")
     with db.session() as conn:
@@ -141,3 +128,58 @@ def test_a_key_without_access_to_workouts_is_left_alone_for_a_week(caplog):
         assert seances.sync(conn, refused) == {"lues": 0, "refus": True} and len(refused.asked) == 4
         assert "rien de lisible (planifiée HTTP 403, séance HTTP 403)" in caplog.text
         assert "planifiée" in json.loads(db.get_meta(conn, seances.REFUSAL_KEY))["chemins"]
+
+
+# ------------------------------------------------------------------ séances suivies (dans l'activité)
+CHARTEVES = {"activityId": 25150833128, "activityName": "Chartèves - 21KM-S3-6-Endurance de Force",
+             "activityType": {"typeKey": "running"}, "splitSummaries": [
+                 {"noOfSplits": 1, "duration": 1200.0, "splitType": "INTERVAL_WARMUP", "averageSpeed": 3.023},
+                 {"noOfSplits": 1, "duration": 637.9, "splitType": "INTERVAL_COOLDOWN", "averageSpeed": 3.087},
+                 {"noOfSplits": 7, "duration": 1260.0, "splitType": "INTERVAL_REST", "averageSpeed": 1.44},
+                 {"noOfSplits": 7, "duration": 210.0, "splitType": "INTERVAL_ACTIVE", "averageSpeed": 5.41},
+                 {"noOfSplits": 8, "duration": 1182.0, "splitType": "RWD_WALK"}]}
+
+
+def test_the_followed_workout_comes_from_the_fit_file():
+    from garmin_fit_sdk import Decoder, Stream
+
+    from foulee import workout_fit
+
+    item = {"titre": "Avis de tempête", "sport": "course", "blocs": [
+        {"genre": "echauffement", "duree_min": 20, "pct_vma": 68},
+        {"genre": "corps", "duree_min": 0.5, "pct_vma": 112, "repetitions": 7, "recup_min": 3},
+        {"genre": "calme", "duree_min": 10, "zone_fc": 1}]}
+    messages, _ = Decoder(Stream.from_byte_array(bytearray(workout_fit.build(item, 16)))).read()
+    workout = seances.workout_from_fit(messages)
+    assert workout["workoutName"] == "Avis de tempête"
+    assert seances.blocks_of(workout, 16) == [
+        {"genre": "echauffement", "duree_min": 20.0, "pct_vma": 68},
+        {"genre": "corps", "duree_min": 0.5, "pct_vma": 112, "repetitions": 7, "recup_min": 3.0},
+        {"genre": "calme", "duree_min": 10.0, "zone_fc": 1}]
+    assert seances.workout_from_fit({"record_mesgs": [{}]}) is None
+
+
+def test_without_fit_the_intervals_of_the_activity_are_enough():
+    blocks = seances.blocks_of(seances.workout_from_intervals(CHARTEVES), 16)
+    assert blocks == [{"genre": "echauffement", "duree_min": 20.0, "pct_vma": 68},
+                      {"genre": "corps", "duree_min": 0.5, "pct_vma": 122, "repetitions": 7, "recup_min": 3.0},
+                      {"genre": "calme", "duree_min": 10.63, "pct_vma": 69}]
+    assert seances.workout_from_intervals({"splitSummaries": [{"splitType": "RWD_RUN", "duration": 600}]}) is None
+
+
+def test_a_done_session_is_drawn_as_it_was_followed():
+    with db.session() as conn:
+        db.set_setting(conn, "vma_kmh", 16)
+        calendrier.store(conn, calendrier.parse(_feed(), day(-1)), today=day(-1))
+        conn.execute("INSERT INTO activities(id, source, source_id, start_local, date, sport, name, distance_m, duration_s) "
+                     "VALUES ('garmin:25150833128', 'garmin', '25150833128', ?, ?, 'course', ?, 8548, 3308)",
+                     (f"{day(-1).isoformat()} 11:54:30", day(-1).isoformat(), CHARTEVES["activityName"]))
+        db.put_raw(conn, "garmin", "activity", "25150833128", CHARTEVES)
+        refused = FakeSession({})  # Garmin ne donne pas les séances prévues
+        result = seances.sync(conn, refused)
+        assert result["suivies"] == 1 and result["refus"] is True
+        plan = {p["titre"][:10]: p for p in calendrier.plan(conn, day(-3), day(3))}
+        assert seances.sync(conn, refused).get("suivies") is None  # déjà lue
+    tempete = plan["21KM-S3-6-"]
+    assert tempete["statut"] == "fait" and tempete["esquisse_approchee"] is False
+    assert tempete["blocs"][1]["repetitions"] == 7

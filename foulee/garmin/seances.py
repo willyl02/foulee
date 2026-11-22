@@ -232,44 +232,17 @@ def _ask(session: Any, path: str) -> tuple[Any, int]:
     return payload, 200 if payload is not None else 404
 
 
-def _from_activities(conn: sqlite3.Connection, session: Any, events: list, statuses: dict) -> int:
-    """Les séances déjà faites : Garmin rattache la séance suivie à l'activité (chemin documenté de l'API)."""
-    found = 0
-    by_day: dict[str, list] = {}
-    for row in events:
-        by_day.setdefault(row["date"], []).append(row)
-    days = sorted(by_day, reverse=True)
-    calls = 0
-    for day in days:
-        acts = conn.execute("SELECT source_id FROM activities WHERE source = 'garmin' AND date = ?", (day,)).fetchall()
-        for act in acts:
-            if calls >= 20 or not str(act["source_id"] or "").isdigit():
-                continue
-            calls += 1
-            try:
-                payload = session.call("get_activity_workouts", act["source_id"])
-            except GarminError as exc:
-                statuses["activité"] = exc.status or 0
-                return found
-            except Exception:  # noqa: BLE001
-                return found
-            statuses["activité"] = 200 if payload is not None else 404
-            items = payload if isinstance(payload, list) else (payload.get("workouts") if isinstance(payload, dict)
-                                                               and isinstance(payload.get("workouts"), list) else [payload])
-            for item in items or []:
-                workout = _workout_in(item)
-                if not workout:
-                    continue
-                name = _norm(workout.get("workoutName"))
-                for row in by_day[day]:
-                    title = _norm(row["title"])
-                    if name and title and (name == title or name in title or title in name):
-                        _store(conn, workout_id(row["uid"]), 200, workout)
-                        found += 1
-    return found
-
-
 def sync(conn: sqlite3.Connection, session: Any, today: date | None = None) -> dict:
+    """Les séances suivies (lues dans les activités du mois, sans appel à Garmin), puis les séances prévues."""
+    ensure_table(conn)
+    followed = followed_sync(conn, today)
+    result = planned_sync(conn, session, today)
+    if followed:
+        result["suivies"] = followed
+    return result
+
+
+def planned_sync(conn: sqlite3.Connection, session: Any, today: date | None = None) -> dict:
     """Lit les séances prévues du calendrier Garmin qui manquent (ou à rafraîchir). Ne lève jamais : un souci ici
     ne doit pas faire échouer la synchro ; il est résumé et écrit dans le journal (statut HTTP de chaque chemin)."""
     ensure_table(conn)
@@ -319,10 +292,7 @@ def sync(conn: sqlite3.Connection, session: Any, today: date | None = None) -> d
             break  # aucun chemin ne répond : inutile d'insister séance par séance
         if read:
             _store(conn, wid, 404, None)  # le chemin marche : cette séance-là a été supprimée de Garmin Connect
-    # les séances passées : par l'activité qui les a suivies, si les chemins des séances ne répondent pas
-    past = [r for r in rows if r["date"] < today.isoformat()
-            and workout_id(r["uid"]) in todo and not _done(conn, workout_id(r["uid"]))]
-    from_acts = _from_activities(conn, session, past, statuses) if past and not read else 0
+    from_acts = 0
     summary = ", ".join(f"{name} HTTP {status}" for name, status in statuses.items())
     if not read and not from_acts:
         db.set_meta(conn, ROUTE_KEY, "")
@@ -332,9 +302,153 @@ def sync(conn: sqlite3.Connection, session: Any, today: date | None = None) -> d
         return {"lues": 0, "refus": True, "statut": next(iter(statuses.values()), None)}
     db.set_meta(conn, REFUSAL_KEY, "")
     conn.commit()
-    LOG.info("Séances prévues Garmin : %s lue(s), %s par leur activité (%s)", read, from_acts, summary)
+    LOG.info("Séances prévues Garmin : %s lue(s) (%s)", read, summary)
     return {"lues": read + from_acts}
 
 
 def _done(conn: sqlite3.Connection, wid: str | None) -> bool:
     return bool(wid) and conn.execute("SELECT 1 FROM garmin_workouts WHERE id = ? AND status = 200", (wid,)).fetchone() is not None
+
+
+# ------------------------------------------------------------------ les séances suivies
+# Une séance structurée faite avec la montre laisse sa trace dans l'activité : les étapes de la séance dans le
+# fichier FIT (messages workout_step : durées, allures ou zones visées, boucles), et à défaut le résumé des
+# intervalles que Garmin donne avec l'activité (échauffement, N efforts, N récups, retour au calme). Garmin ne
+# donne pas les séances à venir à une clé API personnelle : celles-là gardent leur profil deviné du nom.
+FIT_INTENSITY = {"warmup": "warmup", "cooldown": "cooldown", "active": "interval", "interval": "interval",
+                 "rest": "rest", "recovery": "recovery"}
+FIT_SPORTS = {"running": "running", "trail_running": "trail_running", "cycling": "cycling", "training": "strength_training",
+              "walking": "walking", "hiking": "hiking", "swimming": "lap_swimming"}
+
+
+def _fit_step(m: dict) -> dict:
+    kind = FIT_INTENSITY.get(str(m.get("intensity") or "active"), "interval")
+    duration = str(m.get("duration_type") or "")
+    if duration == "time" and m.get("duration_time"):
+        cond, value = "time", float(m["duration_time"])
+    elif duration == "distance" and m.get("duration_distance"):
+        cond, value = "distance", float(m["duration_distance"])
+    else:
+        cond, value = "lap.button", None
+    step = {"type": "ExecutableStepDTO", "stepType": {"stepTypeKey": kind}, "endCondition": {"conditionTypeKey": cond},
+            "endConditionValue": value, "targetType": {"workoutTargetTypeKey": "no.target"}}
+    target = str(m.get("target_type") or "")
+    if target == "speed" and m.get("custom_target_speed_low") and m.get("custom_target_speed_high"):
+        step.update(targetType={"workoutTargetTypeKey": "pace.zone"}, targetValueOne=m["custom_target_speed_low"],
+                    targetValueTwo=m["custom_target_speed_high"])
+    elif target == "heart_rate" and isinstance(m.get("target_hr_zone"), int) and 1 <= m["target_hr_zone"] <= 5:
+        step.update(targetType={"workoutTargetTypeKey": "heart.rate.zone"}, zoneNumber=m["target_hr_zone"])
+    return step
+
+
+def workout_from_fit(messages: dict) -> dict | None:
+    """La séance suivie, telle que la montre l'a enregistrée dans le FIT, au format des séances de Garmin Connect."""
+    steps = sorted((m for m in messages.get("workout_step_mesgs") or [] if isinstance(m, dict)),
+                   key=lambda m: m.get("message_index") or 0)
+    if not steps:
+        return None
+    out: list[tuple[int, dict]] = []
+    for m in steps:
+        index = int(m.get("message_index") or 0)
+        if str(m.get("duration_type") or "").startswith("repeat"):
+            first = int(m.get("duration_step") or 0)
+            reps = int(m.get("repeat_steps") or m.get("target_value") or 1)
+            inner = [item for i, item in out if i >= first]
+            out = [(i, item) for i, item in out if i < first]
+            if inner:
+                out.append((first, {"type": "RepeatGroupDTO", "stepType": {"stepTypeKey": "repeat"},
+                                    "numberOfIterations": reps, "workoutSteps": [
+                                        dict(step, stepOrder=k) for k, step in enumerate(inner, 1)]}))
+            continue
+        out.append((index, dict(_fit_step(m), stepOrder=index + 1)))
+    head = (messages.get("workout_mesgs") or [{}])[0] or {}
+    return {"workoutName": head.get("wkt_name"), "sportType": {"sportTypeKey": FIT_SPORTS.get(str(head.get("sport")), "running")},
+            "workoutSegments": [{"segmentOrder": 1, "workoutSteps": [dict(item, stepOrder=k) for k, (_, item) in enumerate(out, 1)]}],
+            "_source": "fit"}
+
+
+def workout_from_intervals(activity: dict) -> dict | None:
+    """À défaut du FIT : le résumé des intervalles de l'activité (durées et vitesses réellement courues)."""
+    parts = {str(s.get("splitType")): s for s in activity.get("splitSummaries") or [] if isinstance(s, dict)}
+    active = parts.get("INTERVAL_ACTIVE")
+    if not active or not active.get("noOfSplits") or not active.get("duration"):
+        return None
+
+    def step(kind: str, seconds: float, speed: float | None) -> dict:
+        out = {"type": "ExecutableStepDTO", "stepType": {"stepTypeKey": kind}, "endCondition": {"conditionTypeKey": "time"},
+               "endConditionValue": round(seconds), "targetType": {"workoutTargetTypeKey": "no.target"}}
+        if speed and kind not in RESTS:
+            out.update(targetType={"workoutTargetTypeKey": "pace.zone"}, targetValueOne=speed, targetValueTwo=speed)
+        return out
+
+    reps = int(active["noOfSplits"])
+    effort = step("interval", float(active["duration"]) / reps, active.get("averageSpeed"))
+    rest_seconds = sum(float(parts[k].get("duration") or 0) for k in ("INTERVAL_REST", "INTERVAL_RECOVERY") if k in parts)
+    inner = [effort] + ([step("recovery", rest_seconds / reps, None)] if rest_seconds else [])
+    steps = []
+    for key, kind in (("INTERVAL_WARMUP", "warmup"),):
+        if key in parts and parts[key].get("duration"):
+            steps.append(step(kind, float(parts[key]["duration"]), parts[key].get("averageSpeed")))
+    steps.append({"type": "RepeatGroupDTO", "numberOfIterations": reps, "workoutSteps": inner} if reps > 1 else effort)
+    if "INTERVAL_COOLDOWN" in parts and parts["INTERVAL_COOLDOWN"].get("duration"):
+        steps.append(step("cooldown", float(parts["INTERVAL_COOLDOWN"]["duration"]), parts["INTERVAL_COOLDOWN"].get("averageSpeed")))
+    for k, item in enumerate(steps, 1):
+        item["stepOrder"] = k
+    sport = (activity.get("activityType") or {}).get("typeKey") or "running"
+    return {"workoutName": activity.get("activityName"), "sportType": {"sportTypeKey": sport},
+            "workoutSegments": [{"segmentOrder": 1, "workoutSteps": steps}], "_source": "intervalles"}
+
+
+def followed_key(activity_id: str) -> str:
+    return f"activite:{activity_id}"
+
+
+def followed_sync(conn: sqlite3.Connection, today: date | None = None, limit: int = 40) -> int:
+    """Lit la séance suivie des activités Garmin du mois (FIT déjà sur le disque, sinon résumé des intervalles)."""
+    from pathlib import Path
+
+    today = today or date.today()
+    acts = conn.execute("SELECT id, source_id, fit_path FROM activities WHERE source = 'garmin' AND date >= ? "
+                        "ORDER BY date DESC", ((today - timedelta(days=PAST_DAYS)).isoformat(),)).fetchall()
+    if not acts:
+        return 0
+    keys = [followed_key(a["id"]) for a in acts]
+    seen = {r["id"]: r for r in conn.execute(
+        f"SELECT id, status, json FROM garmin_workouts WHERE id IN ({','.join('?' * len(keys))})", keys).fetchall()}
+    found = done = 0
+    for act in acts:
+        key = followed_key(act["id"])
+        old = seen.get(key)
+        has_fit = bool(act["fit_path"]) and Path(act["fit_path"]).exists()
+        if old and not (has_fit and old["json"] and '"_source": "intervalles"' in old["json"]):
+            continue  # déjà lue (ou rien à lire) ; seul un FIT arrivé depuis peut l'améliorer
+        if done >= limit:
+            break
+        done += 1
+        workout = None
+        if has_fit:
+            try:
+                from garmin_fit_sdk import Decoder, Stream
+                messages, _errors = Decoder(Stream.from_byte_array(bytearray(Path(act["fit_path"]).read_bytes()))).read()
+                workout = workout_from_fit(messages)
+            except Exception as exc:  # noqa: BLE001
+                LOG.info("Séance suivie illisible dans le FIT de %s (%s)", act["id"], type(exc).__name__)
+        if workout is None:
+            raw = conn.execute("SELECT payload FROM raw WHERE source = 'garmin' AND kind = 'activity' AND key = ?",
+                               (str(act["source_id"]),)).fetchone()
+            try:
+                workout = workout_from_intervals(json.loads(raw["payload"])) if raw else None
+            except (TypeError, ValueError):
+                workout = None
+        _store(conn, key, 200 if workout else 204, workout)
+        found += bool(workout)
+    if done:
+        conn.commit()
+        LOG.info("Séances suivies : %s lue(s) dans %s activité(s) Garmin", found, done)
+    return found
+
+
+def followed(conn: sqlite3.Connection, activity_ids: list[str]) -> dict[str, dict]:
+    """La séance suivie de chaque activité qui en a une, par identifiant d'activité."""
+    out = stored(conn, [followed_key(a) for a in activity_ids])
+    return {k.split(":", 1)[1]: v for k, v in out.items()}

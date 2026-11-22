@@ -865,6 +865,17 @@ def plan(conn: sqlite3.Connection, start: date, end: date, today: date | None = 
     done = [{"cle": a["id"], "date": a["date"], "sport": a["sport"], "nom": a["name"], "duree_s": seconds(a), "row": a}
             for a in activities]
     matched = {key: d["row"] for key, d in appariement.assign(candidates, done, _fits, vma).items()}
+    # une séance faite : la séance suivie, lue dans son activité (étapes du FIT ou intervalles), plutôt que le
+    # profil deviné du nom (Garmin ne donne pas le contenu des séances à venir)
+    followed = garmin_seances.followed(conn, [a["id"] for a in matched.values()])
+    for row in events:
+        act = matched.get(row["id"])
+        blocks, approx = sketches.get(row["id"], ([], False))
+        if act is not None and act["id"] in followed and (approx or not blocks) and row["kind"] == "seance" \
+                and row["sport"] not in ("renfo", "souplesse"):
+            real = garmin_seances.blocks_of(followed[act["id"]], vma)
+            if real:
+                sketches[row["id"]] = (real, False)
     out = []
     for row in events:
         day = date.fromisoformat(row["date"])

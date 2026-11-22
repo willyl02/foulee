@@ -4,6 +4,16 @@ Les versions « bêta » (par exemple 0.4.0b1) sont des avant-premières : elles
 sur le canal bêta (Réglages → Application → Mises à jour → « Recevoir les versions bêta »), puis sortent en
 version stable une fois éprouvées.
 
+## 0.8.3b9 — 22 novembre 2026 (bêta)
+
+- **Les séances faites dessinées telles qu'elles ont été suivies.** Garmin ne donne pas le contenu des séances à
+  venir à une clé API personnelle (chemins des séances : 404). Mais une séance structurée faite avec la montre
+  laisse sa trace dans l'activité : Foulée lit ses étapes dans le fichier FIT (durées, allures ou zones visées,
+  répétitions), ou à défaut le résumé des intervalles de l'activité (échauffement, 7 × 30 s, 7 × 3 min de récup,
+  retour au calme), et dessine la séance faite ainsi dans le calendrier, sur Aujourd'hui et dans les pages coach
+  et élève. Les séances à venir gardent leur profil deviné du nom ; celles du coach, créées dans Foulée, restent
+  dessinées exactement.
+
 ## 0.8.3b8 — 22 novembre 2026 (bêta)
 
 - **Séances prévues de Garmin, deuxième essai.** Chez William, Garmin a répondu « introuvable » au chemin des
