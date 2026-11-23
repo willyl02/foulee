@@ -4,6 +4,28 @@ Les versions « bêta » (par exemple 0.4.0b1) sont des avant-premières : elles
 sur le canal bêta (Réglages → Application → Mises à jour → « Recevoir les versions bêta »), puis sortent en
 version stable une fois éprouvées.
 
+## 0.8.3 — 23 novembre 2026
+
+La version stable qui réunit les bêtas 0.8.3 ; le détail de chacune est dans l'historique des versions (CHANGELOG.md sur GitHub).
+
+- **L'Atelier** (colonne de gauche) : composer ses séances soi-même, en blocs pour la course et l'endurance, exercice
+  par exercice pour le renfo ; des séances toutes faites, ses séances gardées (enregistrer sous un autre nom), ses
+  séances de renfo faites à reprendre ; **envoi sur la montre** au jour choisi (calendrier Garmin Connect) ou en .fit.
+- **Même sans coach** : un compte « Sans coach » sur le relais Foulée sert à envoyer ses séances sur sa montre ; le
+  code d'invitation d'un coach en fait plus tard un compte élève.
+- **Temps par zone** de chaque séance (FC et allure) dans la vue « Séance », et celui de la séance du jour dans
+  « Aujourd'hui ».
+- **Réglages → Renfo** : objectif de la semaine, cible avant / arrière avec ses conseils, niveau, matériel, récup,
+  jours de renfo.
+- **Zones** : aux couleurs de Garmin (ou bleus, ou à son goût) ; les zones FC de la montre **ou** de Foulée, avec le
+  profil de la montre ; les zones cardio partagées au coach (« Mes zones FC »).
+- **Séances dessinées** : celles faites, telles qu'elles ont été suivies (étapes de la montre).
+- **Calendrier** à la semaine, au mois ou à l'année, partout ; **zoom et déplacement** dans les graphiques ; tailles
+  des tuiles en chiffres (hauteur jusqu'à 8 rangées).
+- **Logos de club en liste** (ceux de l'ACCT livrés, import nommé), le logo du club sur l'Accueil ; **sites
+  externes** dans la colonne de gauche ; page de retour Withings sur le relais Foulée.
+- Les réglages ne relancent plus le recalcul de toutes les séances quand rien ne le demande.
+
 ## 0.8.3b16 — 22 novembre 2026 (bêta)
 
 - **Envoyer ses séances sur sa montre, même sans coach.** Réglages → Coach et élèves → *Sans coach* : un compte

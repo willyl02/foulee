@@ -371,7 +371,7 @@ wheels = [
 
 [[package]]
 name = "foulee"
-version = "0.8.3b16"
+version = "0.8.3"
 source = { editable = "." }
 dependencies = [
     { name = "cryptography" },
