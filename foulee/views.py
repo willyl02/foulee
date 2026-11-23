@@ -198,8 +198,6 @@ TILE_TYPES: list[dict[str, Any]] = [
         "taille": {"w": 12, "h": 4},
         "params": [
             {"key": "periode", "label": "Période (jours)", "kind": "periode", "default": "herite"},
-            {"key": "objectif", "label": "Objectif : séances de renfo par semaine (0 = aucun)", "kind": "number",
-             "default": 2},
         ],
     },
     {
@@ -241,6 +239,16 @@ TILE_TYPES: list[dict[str, Any]] = [
                        "sport des 4 semaines précédentes. La tuile s'efface pour les séances sans effet "
                        "d'entraînement.",
         "taille": {"w": 12, "h": 2}, "params": [],
+    },
+    {
+        "type": "seance_zones", "label": "Séance : temps par zone", "icone": "layers", "categorie": "Séances",
+        "description": "Le temps passé dans chaque zone de fréquence cardiaque et, pour la course à pied, dans chaque "
+                       "zone d'allure, avec les bornes de tes zones (Réglages → Zones). La tuile s'efface pour une "
+                       "séance sans FC ni allure.",
+        "taille": {"w": 12, "h": 2},
+        "params": [
+            {"key": "zones", "label": "Zones", "kind": "multi", "options": ["fc", "allure"], "default": ["fc", "allure"]},
+        ],
     },
     {
         "type": "seance_resume", "label": "Séance : résumé", "icone": "info", "categorie": "Séances",
@@ -332,6 +340,7 @@ TILE_TYPES: list[dict[str, Any]] = [
 ]
 TILE_INDEX = {t["type"]: t for t in TILE_TYPES}
 WIDTHS = (3, 4, 6, 8, 9, 12)
+MAX_H = 8  # hauteur d'une tuile : de 1 à 8 rangées (0.8.3 ; 3 au plus avant, ce qui rabotait les grandes tuiles)
 VIEW_PERIODS = (7, 30, 90, 180, 365, 730)
 ICONS = ["home", "sun", "activity", "map", "moon", "flag", "heart", "chart", "calendar", "star", "bolt", "layers",
          "run", "trophy", "clock", "user", "club", "scale", "dumbbell"]
@@ -408,6 +417,7 @@ def default_views() -> list[dict]:
                 _tile("seance_resume", 12, 1),
                 _tile("seance_renfo", 12, 3),
                 _tile("seance_effet", 12, 2),
+                _tile("seance_zones", 12, 2),
                 _tile("seance_analyse", 12, 3),
                 _tile("seance_carte", 6, 3),
                 _tile("seance_courbes", 6, 3),
@@ -486,7 +496,7 @@ def clean_spec(spec: dict) -> dict:
             continue
         w = int(tile.get("w") or TILE_INDEX[kind]["taille"]["w"])
         w = min(WIDTHS, key=lambda candidate: abs(candidate - w))
-        h = max(1, min(3, int(tile.get("h") or TILE_INDEX[kind]["taille"]["h"])))
+        h = max(1, min(MAX_H, int(tile.get("h") or TILE_INDEX[kind]["taille"]["h"])))
         clean = {"id": str(tile.get("id") or uuid.uuid4().hex[:8])[:16], "type": kind, "w": w, "h": h,
                  "params": _clean_params(kind, tile.get("params"))}
         if tile.get("titre"):
@@ -544,6 +554,7 @@ def ensure_default_views(conn: sqlite3.Connection) -> None:
         db.set_meta(conn, "vue_seance_analyse", "1")
         db.set_meta(conn, "vue_agenda_grand", "1")
         db.set_meta(conn, "vue_seance_jour", "1")
+        db.set_meta(conn, "vue_seance_zones", "1")
         conn.commit()
         return
     if db.get_meta(conn, "vue_seance_renfo") is None:
@@ -636,6 +647,12 @@ def ensure_default_views(conn: sqlite3.Connection) -> None:
             conn.execute("UPDATE views SET spec = ?, updated_at = ? WHERE id = 'aujourdhui'",
                          (json.dumps(today_view()["spec"], ensure_ascii=False), db.now_iso()))
         db.set_meta(conn, "vue_seance_jour", "1")
+        conn.commit()
+    if db.get_meta(conn, "vue_seance_zones") is None:
+        # 0.8.3 : le temps par zone FC et d'allure de la séance, sous l'effet d'entraînement, une seule fois
+        _insert_tile(conn, "seance", "seance_zones", 12, 2,
+                     after=("seance_effet", "seance_renfo", "seance_resume"))
+        db.set_meta(conn, "vue_seance_zones", "1")
         conn.commit()
     if db.get_meta(conn, "renfo_vue") is None and sync_renfo_view(conn):
         # 0.6 : exercices retrouvés par la mise à niveau de la base, la vue « Renfo » sans attendre une synchro

@@ -4,6 +4,198 @@ Les versions « bêta » (par exemple 0.4.0b1) sont des avant-premières : elles
 sur le canal bêta (Réglages → Application → Mises à jour → « Recevoir les versions bêta »), puis sortent en
 version stable une fois éprouvées.
 
+## 0.8.3 — 23 novembre 2026
+
+La version stable qui réunit les bêtas 0.8.3 ; le détail de chacune est dans l'historique des versions (CHANGELOG.md sur GitHub).
+
+- **L'Atelier** (colonne de gauche) : composer ses séances soi-même, en blocs pour la course et l'endurance, exercice
+  par exercice pour le renfo ; des séances toutes faites, ses séances gardées (enregistrer sous un autre nom), ses
+  séances de renfo faites à reprendre ; **envoi sur la montre** au jour choisi (calendrier Garmin Connect) ou en .fit.
+- **Même sans coach** : un compte « Sans coach » sur le relais Foulée sert à envoyer ses séances sur sa montre ; le
+  code d'invitation d'un coach en fait plus tard un compte élève.
+- **Temps par zone** de chaque séance (FC et allure) dans la vue « Séance », et celui de la séance du jour dans
+  « Aujourd'hui ».
+- **Réglages → Renfo** : objectif de la semaine, cible avant / arrière avec ses conseils, niveau, matériel, récup,
+  jours de renfo.
+- **Zones** : aux couleurs de Garmin (ou bleus, ou à son goût) ; les zones FC de la montre **ou** de Foulée, avec le
+  profil de la montre ; les zones cardio partagées au coach (« Mes zones FC »).
+- **Séances dessinées** : celles faites, telles qu'elles ont été suivies (étapes de la montre).
+- **Calendrier** à la semaine, au mois ou à l'année, partout ; **zoom et déplacement** dans les graphiques ; tailles
+  des tuiles en chiffres (hauteur jusqu'à 8 rangées).
+- **Logos de club en liste** (ceux de l'ACCT livrés, import nommé), le logo du club sur l'Accueil ; **sites
+  externes** dans la colonne de gauche ; page de retour Withings sur le relais Foulée.
+- Les réglages ne relancent plus le recalcul de toutes les séances quand rien ne le demande.
+
+## 0.8.3b16 — 22 novembre 2026 (bêta)
+
+- **Envoyer ses séances sur sa montre, même sans coach.** Réglages → Coach et élèves → *Sans coach* : un compte
+  sur le relais Foulée (adresse proposée : relais.foulee-coach.com) qui sert à une seule chose, envoyer les séances
+  de l'Atelier (course ou renfo) dans son calendrier Garmin Connect, au jour choisi. Il ne voit rien d'autre sur le
+  relais et ne partage rien ; pas de page « Mon coach ». On y relie ou délie sa montre Garmin, et *J'ai maintenant
+  un coach* en fait un compte élève avec le code d'invitation du coach (même identifiant, montre toujours reliée).
+- Relais : le rôle « solo » (la table des comptes se met à jour toute seule), l'inscription sans code limitée à
+  quelques comptes d'affilée par adresse, `FOULEE_RELAIS_SOLO=0` pour la fermer et `FOULEE_RELAIS_SOLO_MAX` pour
+  le plafond (500 par défaut) ; `foulee relais comptes` les montre « sans coach (montre) ».
+
+## 0.8.3b15 — 22 novembre 2026 (bêta)
+
+- **L'Atelier**, nouvelle entrée de la colonne de gauche : on y compose ses séances soi-même, avec ou sans coach.
+  *Course et endurance* : la séance en blocs comme un coach la propose (échauffement, corps de séance répété avec
+  sa récup, retour au calme ; % de VMA, zone de FC ou sans intensité), avec l'aperçu de la montre et les allures
+  calculées sur sa VMA. *Renfo* : les exercices un par un, avec l'équilibre avant / arrière et les muscles
+  travaillés de la séance. Sept séances de renfo toutes faites (coureur express, chaîne postérieure, gainage,
+  pieds et mollets, trail, haut du corps, haltères), les séances de course d'exemple, et ses propres séances de
+  renfo faites à reprendre telles quelles. *Enregistrer*, *Enregistrer sous…*, *Supprimer* ; *Envoyer sur ma montre*
+  au jour choisi (calendrier Garmin Connect, par le relais du club avec un compte élève relié, allures comprises)
+  ou *Fichier .fit*.
+- **Temps par zone** : nouvelle tuile de la vue « Séance » (zones FC et, en course à pied, zones d'allure, de la
+  zone 5 à la zone 1, temps et part de la séance), ajoutée une fois aux vues en place ; dans « Aujourd'hui », le
+  temps par zone FC de la séance du jour sous la météo.
+- **Réglages → Renfo** : objectif de séances par semaine, équilibre avant / arrière visé (Coureur, Équilibré,
+  Priorité à l'arrière ou à sa façon, avec ses conseils), niveau, matériel à disposition, récup, échauffement et
+  étirements des séances composées, jours de renfo. Les tuiles Renfo suivent la cible choisie.
+- Les réglages ne relancent plus le recalcul de toutes les séances quand rien de ce qui le touche n'a changé.
+
+## 0.8.3b14 — 22 novembre 2026 (bêta)
+
+- **Zones aux couleurs de Garmin.** Les zones FC et d'allure passent en gris, bleu, vert, orange et rouge, comme
+  sur la montre et dans Garmin Connect : graphiques « Temps par zone », barres des réglages, fiche du coach.
+  Réglable dans Réglages → Entraînement → Zones FC, rubrique *Couleurs des zones* : *Comme Garmin* (par défaut),
+  *Dégradé de bleus* (celui d'avant) ou *À mon goût*, une couleur par zone.
+- **Logos de club en liste.** « Fier de ton club ? » (Réglages → Mon club) et le logo de l'application partenaire
+  se choisissent dans un menu déroulant : les logos de l'ACCT sont livrés avec Foulée (le bandeau pour le club, le
+  rond 1904-2024 pour Club en ligne). Pour un autre club, *Importer un logo…* : on lui donne un nom, il s'ajoute à
+  la liste, pour le club comme pour l'application partenaire ; *Retirer de la liste* l'efface. Les logos déjà
+  importés y entrent tout seuls, et la sauvegarde des réglages les emporte.
+- **Le logo du club sur l'Accueil**, au milieu du bandeau « Bonjour » (un clic ouvre « Mon club ») ; une case le
+  retire. Les logos en largeur s'affichent aussi en entier dans « Mon club » et « Mon coach ».
+
+## 0.8.3b13 — 22 novembre 2026 (bêta)
+
+- **Taille des tuiles en chiffres.** En modifiant une vue, chaque tuile a deux petits compteurs (− valeur +) :
+  la **largeur** en % de la page (25, 33, 50, 67, 75, 100 %) et la **hauteur** en rangées, **de 1 à 8** (au lieu
+  de « basse, moyenne, haute »). Même chose dans la roue dentée de la tuile. Avant, la hauteur ne dépassait pas 3
+  rangées, et enregistrer une vue rabotait les tuiles plus grandes (le calendrier en a 5) : c'est fini.
+
+## 0.8.3b12 — 22 novembre 2026 (bêta)
+
+- **Zones FC : la montre OU Foulée, plus de mélange.** Dans Réglages → Entraînement → Zones FC, deux choix
+  clairs en tête : *Celles de ma montre* ou *Réglées dans Foulée*.
+  - **Ma montre** : on choisit le profil Garmin à suivre (course à pied, général, trail… selon ce que la montre a),
+    et Foulée prend tout de lui : bornes des zones, mais aussi FC max et FC au repos (pour la charge
+    d'entraînement), en lecture seule, avec la méthode et les remarques (mêmes zones partout, pas de zones course…).
+    « Les reprendre dans Foulée » les recopie pour les ajuster à la main.
+  - **Foulée** : % de la FC max, de la FC de réserve, du seuil, ou bornes à la main, comme avant.
+  - Les zones d'allure le disent maintenant : Garmin ne donne pas celles de la montre, elles se règlent dans
+    Foulée (VMA, seuil ou à la main).
+- **« Mes zones FC »**, un nouvel onglet dans Mon coach (à côté de « Mon partage ») : le même tableau que voit le
+  coach (tous les profils de la montre, méthode, FC max / repos / seuil, zones et %), les zones que Foulée
+  applique, et si le coach les voit, avec le bouton pour les partager ou non.
+
+## 0.8.3b11 — 22 novembre 2026 (bêta)
+
+- **Séances faites, dessin plus juste** : un effort sans allure visée dans la séance (« Allure rapide » d'un plan,
+  comme les 7 × 30 s d'*Avis de tempête*) prend l'allure réellement courue sur les intervalles de l'activité, au
+  lieu d'être dessiné au niveau d'un footing. Les séances faites déjà lues sont relues une fois.
+
+## 0.8.3b10 — 22 novembre 2026 (bêta)
+
+- **Les zones cardio de l'élève chez son coach.** Une nouvelle case dans « Ce que je partage » : *Tes zones cardio
+  (réglages Garmin)*, non cochée par défaut. Cochée, la fiche de l'élève chez le coach montre ses réglages de
+  Garmin Connect, profil par profil (course à pied, général…) : la méthode (seuil lactique, FC max ou FC de
+  réserve), FC max, FC au repos (et si la montre la met à jour toute seule), FC au seuil, et les bornes des 5
+  zones avec leur pourcentage. Avec ce qui saute aux yeux : pas de zones propres à la course, les mêmes partout, un
+  écart de FC max avec Foulée. Décochée, le relais les efface aussitôt. Le relais doit être à jour.
+
+## 0.8.3b9 — 22 novembre 2026 (bêta)
+
+- **Les séances faites dessinées telles qu'elles ont été suivies.** Garmin ne donne pas le contenu des séances à
+  venir à une clé API personnelle (chemins des séances : 404). Mais une séance structurée faite avec la montre
+  laisse sa trace dans l'activité : Foulée lit ses étapes dans le fichier FIT (durées, allures ou zones visées,
+  répétitions), ou à défaut le résumé des intervalles de l'activité (échauffement, 7 × 30 s, 7 × 3 min de récup,
+  retour au calme), et dessine la séance faite ainsi dans le calendrier, sur Aujourd'hui et dans les pages coach
+  et élève. Les séances à venir gardent leur profil deviné du nom ; celles du coach, créées dans Foulée, restent
+  dessinées exactement.
+
+## 0.8.3b8 — 22 novembre 2026 (bêta)
+
+- **Séances prévues de Garmin, deuxième essai.** Chez William, Garmin a répondu « introuvable » au chemin des
+  séances : le numéro du calendrier est sans doute celui de la séance *planifiée* (il change quand on la déplace).
+  Foulée essaie donc la planification, puis la séance, retient le chemin qui répond, et pour les séances déjà faites
+  passe par l'activité qui les a suivies (Garmin y rattache la séance). Le journal note le statut de chaque chemin.
+
+## 0.8.3b7 — 22 novembre 2026 (bêta)
+
+- **Les séances prévues du calendrier Garmin dessinées telles qu'elles sont.** Le calendrier de Garmin ne donne que
+  leur nom ; Foulée demande maintenant leur contenu à Garmin pendant la synchro (échauffement, répétitions et
+  récupérations, retour au calme, allures ou zones visées) et les dessine fidèlement, dans la vue Calendrier, sur
+  « Aujourd'hui », dans les pages coach et élève (ton coach voit donc la vraie séance), au lieu d'un profil deviné du
+  nom. Exemple : « Endurance de Force : Avis de tempête », 20 min d'échauffement, 7 × 30 s rapides et 3 min de
+  récup. Leur vrai sport aussi : une séance de renfo n'est plus prise pour une course. Si la clé API de Garmin ne
+  donne pas accès aux séances, Foulée le note dans son journal et garde le profil deviné (nouvel essai une semaine
+  plus tard).
+- Tests : la date d'une séance envoyée sur la montre se compare à la date du club (un test échouait entre minuit
+  et 1 h, heure de Paris).
+
+## 0.8.3b6 — 21 novembre 2026 (bêta)
+
+- **La vue « Calendrier »** (colonne de gauche) prend le même sélecteur que le calendrier des pages coach et élève :
+  **Semaine / Mois / Année** (retenu dans ce navigateur), avec les flèches pour passer d'une période à l'autre et
+  « Aujourd'hui » pour revenir. Le détail du jour choisi reste à droite. À la semaine, de grandes cases (un jour par
+  ligne sur téléphone) ; à l'année, douze petits mois avec une pastille par jour où il y a quelque chose : un clic
+  sur un jour montre son détail, un clic sur un mois ouvre ce mois. Tout vient de ta machine : rien à mettre à jour
+  sur le relais.
+
+## 0.8.3b5 — 21 novembre 2026 (bêta)
+
+- **Le calendrier des pages coach et élève**, plus léger : au choix **à la semaine**, **au mois** ou **à l'année**
+  (retenu dans ce navigateur), avec des **flèches** de chaque côté de la période pour avancer ou reculer, et
+  « Aujourd'hui » pour revenir. À la semaine, de grandes cases (un jour par ligne sur téléphone) ; au mois, le mois
+  seul ; à l'année, douze petits mois avec une **pastille** par jour où il y a quelque chose (séance du coach, plan,
+  faite, manquée, course) : un clic sur un jour ouvre sa semaine, sur un mois ouvre ce mois. Les séances faites ne
+  sont partagées que sur quatre semaines : avant, seules les séances prévues s'affichent (c'est indiqué).
+- **Relais** : le calendrier d'un élève sur n'importe quelle période (une année au plus). Un relais pas encore à
+  jour donne toujours les neuf semaines autour d'aujourd'hui ; Foulée le signale au-delà.
+
+## 0.8.3b4 — 21 novembre 2026 (bêta)
+
+- **Se déplacer dans un graphique zoomé** sans dézoomer : une fois zoomé en largeur, **la main** (glisser sur le
+  graphique fait défiler la vue, au doigt aussi sur l'analyse) et une **barre de défilement** sous l'analyse fraction
+  par fraction (posée sur le bas du tracé dans les tuiles) : fais glisser le curseur, clique dans la barre pour y
+  aller, ou au clavier (flèches, Pg préc. / Pg suiv., Début, Fin). Pour choisir une autre plage en restant zoomé :
+  la loupe, ou Maj + glisser.
+
+## 0.8.3b3 — 21 novembre 2026 (bêta)
+
+- **Zoom des graphiques** : en haut à droite de l'analyse fraction par fraction (vue détaillée d'une séance) et des
+  graphiques des tuiles (courbes d'une séance, forme et fatigue, kilomètres par semaine, zones…), une petite boîte à
+  outils qui apparaît au survol : zoomer ou dézoomer **en largeur** (↔) et **en hauteur** (↕), **zoomer sur une zone**
+  (loupe, puis trace-la sur le graphique ; sur l'analyse, glisser suffit), et **revenir au zoom initial** (aussi au
+  double-clic). Ctrl + molette zoome en largeur, Maj + molette déplace ; une fois zoomé, glisser déplace la vue. En
+  largeur, la hauteur s'ajuste à ce qu'on voit. Sur téléphone, touche le graphique pour faire apparaître la boîte.
+- **Club en ligne a son logo**, comme les sites externes : un PNG carré à gauche de son nom dans la colonne de gauche
+  et en tête de sa page (Réglages → Club et coach → Club en ligne).
+- **Ressenti envoyé au coach** : le message « Cannot set properties of null (setting 'innerHTML') » ne s'affiche plus
+  après « Envoyer à mon coach » (le ressenti partait bien, c'est le bouton qui se perdait en route). Même correction
+  pour le bouton d'essai des notifications (même message après un essai réussi) et trois autres boutons (premier
+  lancement, fiche d'un élève, profil) qui, en cas d'échec, montraient ce message au lieu du vrai motif.
+
+## 0.8.3b2 — 21 novembre 2026 (bêta)
+
+- **Withings : la page de retour passe sur le relais Foulée** (`https://relais.foulee-coach.com/withings/`) au lieu
+  de GitHub Pages. Foulée n'a plus besoin du site GitHub pour se connecter à Withings. Une appli Withings créée avant
+  garde son ancienne adresse et sa connexion continue de marcher ; pour pouvoir la refaire, ajoute la nouvelle
+  adresse dans « Registered URLs » (Réglages → Connexions → Withings l'explique, avec le bouton « Copier »).
+
+## 0.8.3b1 — 21 novembre 2026 (bêta)
+
+- **Sites externes** (Réglages → Club et coach → Sites externes), sur le modèle de Club en ligne, qui garde sa place
+  à part : d'autres sites (la FFA, ta ligue, un site de course…), jusqu'à huit, chacun avec son entrée dans la colonne
+  de gauche sous l'application partenaire, et la même page (précédent, suivant, recharger, ouvrir dans le
+  navigateur). Chaque site peut avoir **son logo** à gauche de son nom : un PNG carré (ou presque) de 64 à 512 pixels,
+  200 Ko au plus, gardé sur ta machine ; sans logo, le petit globe. Renommer, changer l'adresse, monter, retirer du
+  menu ou supprimer, tout s'enregistre tout seul.
+
 ## 0.8.2 — 21 novembre 2026
 
 La version stable qui réunit les bêtas 0.8.2 ; le détail de chacune est dans l'historique des versions (CHANGELOG.md sur GitHub).

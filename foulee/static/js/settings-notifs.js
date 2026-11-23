@@ -113,13 +113,14 @@ export async function notificationsPanel(box, { toast }) {
     });
     wireEmail($);
     $("[data-test]").addEventListener("click", async (e) => {
-      e.currentTarget.disabled = true;
+      const btn = e.currentTarget; // après un await, e.currentTarget ne vaut plus rien
+      btn.disabled = true;
       try {
         await api.post(R("notifications/essai"), {});
         toast("Essai envoyé : il arrive dans quelques secondes sur ton téléphone.");
         setTimeout(async () => { try { data = await api.get(R("notifications"), null, { fresh: true }); draw(); } catch (err) { /* plus tard */ } }, 3000);
       } catch (err) { toast(err.message, { error: true }); }
-      e.currentTarget.disabled = false;
+      btn.disabled = false;
     });
   };
   const refresh = () => setTimeout(async () => { try { data = await api.get(R("notifications"), null, { fresh: true }); draw(); } catch (err) { /* plus tard */ } }, 4000);

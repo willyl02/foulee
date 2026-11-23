@@ -157,7 +157,8 @@ pas à pas ; compte une dizaine de minutes, une seule fois, de préférence depu
    application** → **Public API integration**. Dans le formulaire : *Target
    environment* **Development**, un nom (« Foulée »), une description, et dans
    **Registered URLs** exactement cette adresse (bouton « Copier » dans Foulée) :
-   `https://willyl02.github.io/foulee/withings/`
+   `https://relais.foulee-coach.com/withings/` (avant la 0.8.3 :
+   `https://willyl02.github.io/foulee/withings/`, à garder ou à compléter par la nouvelle)
 2. **Colle le ClientID et le Secret** affichés par Withings dans Foulée, puis
    **Enregistrer**. Comme la clé Garmin, ils vont dans le Gestionnaire d'identification
    Windows (sur un serveur : dans un fichier que seul Foulée lit) et ne se règlent que
@@ -168,8 +169,9 @@ pas à pas ; compte une dizaine de minutes, une seule fois, de préférence depu
 
 **Pourquoi une page relais ?** Après « Allow », Withings renvoie ton navigateur vers
 une adresse publique en https, enregistrée dans ton appli : il refuse l'adresse de ton
-PC. Cette adresse est une petite page de ce dépôt (dossier `docs/withings`, publiée par
-GitHub Pages), la même pour tout le monde : elle renvoie aussitôt ton navigateur vers
+PC. Cette adresse est une petite page de Foulée servie par le relais Foulée
+(`foulee/relais/withings.html` ; avant la 0.8.3, la copie `docs/withings` publiée par GitHub Pages), la même
+pour tout le monde : elle renvoie aussitôt ton navigateur vers
 ton Foulée, et seulement vers une adresse de la maison (le PC, le réseau local,
 Tailscale). Elle ne garde rien. Elle voit seulement passer un code à usage unique,
 valable 30 secondes et inutilisable sans ton Secret, qui ne quitte jamais Foulée.
@@ -684,7 +686,7 @@ Les données vivent dans `/var/lib/foulee`, la clé et l'empreinte du mot de pas
 Un coach et ses élèves se relient par un **relais** : un petit serveur sur Internet, en HTTPS, que leurs
 Foulée appellent. Chacun garde Foulée et tout son historique chez lui ; le relais ne garde que les comptes,
 les codes d'invitation, les messages, les séances proposées et l'extrait que chaque élève choisit de partager
-(séances des 4 dernières semaines en résumé, objectif, VMA ; GPS, sommeil, VFC et poids en option, jamais
+(séances des 4 dernières semaines en résumé, objectif, VMA ; GPS, sommeil, VFC, poids et zones cardio en option, jamais
 Strava). Le relais, c'est Foulée lui-même, en « mode relais » : il ne lit rien chez Garmin (il peut seulement, si
 l'élève le relie, déposer les séances du coach dans son calendrier Garmin : voir « Sur la montre » plus bas).
 
@@ -712,7 +714,12 @@ ton adresse, par exemple `https://relais.mon-club.com`.
 - un élève rejoint son coach avec ce code (« J'ai un code d'invitation ») et choisit son identifiant et son
   mot de passe, puis **ce qu'il partage, case par case** (rien ne part avant) ; une page « Mon coach »
   s'ajoute à sa colonne. Il peut quitter le groupe à tout moment : son compte et tout ce qu'il a partagé sont
-  alors effacés du relais.
+  alors effacés du relais ;
+- sans coach (« Sans coach »), n'importe qui crée un compte qui sert à une seule chose : envoyer les séances de
+  son Atelier dans son calendrier Garmin Connect. Il ne voit rien d'autre sur le relais et ne partage rien ; le
+  code d'invitation d'un coach en fait plus tard un compte élève (« J'ai maintenant un coach »). L'administrateur
+  peut fermer ces inscriptions (`FOULEE_RELAIS_SOLO=0` dans l'environnement du service) ou en changer le plafond
+  (`FOULEE_RELAIS_SOLO_MAX`, 500 par défaut).
 
 **Ce que fait le coach** (page « Mes élèves ») :
 - le tableau de bord du groupe : pour chaque élève sa dernière séance, sa semaine jour par jour (fait, manqué,
@@ -723,8 +730,12 @@ ton adresse, par exemple `https://relais.mon-club.com`.
   objectifs secondaires, l'équilibre avant / arrière de son renfo (rapport, tendance, paire par paire, ce
   que tu peux lui dire, et « Lui en parler » avec un message tout prêt), ses séances proposées, sa forme
   (sommeil, VFC, FC au repos, poids) s'il la partage ;
-- son **calendrier** sur neuf semaines (quatre passées, celle-ci, quatre à venir) : son plan et tes séances
-  avec leur esquisse, ses séances faites (un clic les ouvre), ses courses visées ;
+- ses **zones cardio** telles que réglées dans Garmin Connect (méthode, FC max, au repos, au seuil, bornes des 5
+  zones, en général et pour la course) s'il les partage, avec ce qui cloche : pas de zones propres à la course,
+  un écart de FC max avec Foulée ;
+- son **calendrier**, à la semaine, au mois ou à l'année (des pastilles), avec des flèches pour passer d'une
+  période à l'autre : son plan et tes séances avec leur esquisse, ses séances faites (un clic les ouvre ; elles ne
+  sont partagées que sur quatre semaines), ses courses visées ;
 - chaque **séance** en détail : l'**analyse fraction par fraction** (façon intervals.icu : pour chaque tour, son
   temps, son allure, sa FC moyenne, sa zone et la part du tour dans cette zone, au-dessus des courbes d'allure et
   de FC), chiffres, tours, renfo, tracé simplifié (sans fond de carte), ce qui était proposé, et un **fil** pour
@@ -739,8 +750,8 @@ ton adresse, par exemple `https://relais.mon-club.com`.
   « Mes élèves » se range alors par groupe. La bibliothèque garde ses séances types : les proposer en un clic, les
   modifier, les renommer, les dupliquer, en créer une sans l'envoyer.
 
-**Ce que voit l'élève** (page « Mon coach ») : son calendrier de neuf semaines (le même que celui de son
-coach), les séances proposées, bloc par bloc avec ses allures (et dans sa vue « Calendrier », en pointillé bleu,
+**Ce que voit l'élève** (page « Mon coach ») : son calendrier, à la semaine, au mois ou à
+l'année (le même que celui de son coach), les séances proposées, bloc par bloc avec ses allures (et dans sa vue « Calendrier », en pointillé bleu,
 face à ce qu'il fait), la conversation avec son coach, et ce qu'il partage.
 
 **Sur la montre, sans câble** : sous chaque séance proposée, **« Envoyer sur ma montre »**. La première fois,
@@ -920,7 +931,7 @@ foulee/
   demo.py          données fictives
   static/          interface (HTML/CSS/JS, ECharts et Leaflet embarqués), appli installable (manifest, sw.js)
 packaging/         installateur Windows (Inno Setup), construction et essai de bout en bout
-docs/              site (GitHub Pages) : confidentialité, présentation et guides, page relais de Withings
+docs/              site (GitHub Pages) : confidentialité, présentation et guides, ancienne page relais de Withings
 scripts/           installation et mise à jour : archive Windows (.ps1), serveur Linux (.sh, maj_serveur.py)
 tests/             tests, dont un faux serveur Garmin et un faux Withings pour tester toute la chaîne
 ```

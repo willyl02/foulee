@@ -46,6 +46,7 @@ from . import (
     __version__,
     access,
     analysis,
+    atelier,
     calendrier,
     claude_desktop,
     club,
@@ -55,6 +56,7 @@ from . import (
     db,
     jour,
     keyinput,
+    logotheque,
     metrics,
     objectifs,
     partenaire,
@@ -290,8 +292,11 @@ def create_app() -> FastAPI:
                 "categories_tuiles": views.TILE_CATEGORIES, "categories_metriques": metrics.CATEGORIES,
                 "objectif": analysis.objective(settings), "profil_fc": analysis.hr_profile(conn, settings),
                 "club": club.summary(settings.get("club")), "club_licences": club.LICENCE_TYPES,
-                "club_logo": club.logo_version(),  # date du logo (pour l'adresse de l'image), ou None
+                "club_logo": club.logo_version(),  # repère du logo (pour l'adresse de l'image), ou None
+                "logotheque": logotheque.listing(),  # logos au choix (club, application partenaire), case de l'Accueil
+                "renfo_options": renfo.options(),  # Réglages → Renfo : cibles, niveaux, matériel, jours
                 "partenaire": partenaire.resolve(settings.get("partenaire")),
+                "sites_externes": partenaire.resolve_sites(settings.get("sites_externes")),
                 "garmin_profil": analysis.garmin_profile(conn),
                 "planning": schedule.describe(settings["horaires"]),
                 "modeles_horaires": schedule.MODELES,
@@ -409,6 +414,21 @@ def create_app() -> FastAPI:
             data["secondaires"] = [g for g in (objectifs.describe(x, settings) for x in
                                                settings.get("objectifs_secondaires") or []) if g]
             return data
+
+    # ----------------------------------------------------------- zones FC
+    @app.get("/api/zones/montre")
+    def watch_zones() -> dict:
+        """Les zones FC de la montre (profil par profil), celles que Foulée utilise, et si le coach les voit."""
+        with db.session(readonly=True) as conn:
+            settings = db.get_settings(conn)
+            hrp = analysis.hr_profile(conn, settings)
+            config = settings.get("zones_fc") if isinstance(settings.get("zones_fc"), dict) else {}
+            accord = coach.local_accord(conn) or {}
+            return {"profils": analysis.garmin_zone_profiles(conn),
+                    "foulee": {"methode": hrp["methode"], "profil_garmin": config.get("profil_garmin"),
+                               "max": hrp["max"], "repos": hrp["rest"], "source_max": hrp["source_max"],
+                               "planchers": hrp["floors"], "bornes": hrp["bornes"]},
+                    "partage": {"coach": bool(coach.role(conn) == "eleve"), "zones": bool(accord.get("zones"))}}
 
     # ----------------------------------------------------------- objectifs
     @app.get("/api/objectifs")
@@ -547,7 +567,7 @@ def create_app() -> FastAPI:
         """Bilan du renfo sur la période : séances, muscles travaillés, exercices et leur progression."""
         a, b = _period(start, end, 30)
         with db.session(readonly=True, strava=True) as conn:
-            data = renfo.period(conn, a, b, max(4, min(int(semaines), 52)))
+            data = renfo.period(conn, a, b, max(4, min(int(semaines), 52)), db.get_settings(conn))
             data["sources"] = analysis.sources_for(conn, [], a, b, ",".join(renfo.SPORTS), activities=True)
             return data
 
@@ -693,6 +713,79 @@ def create_app() -> FastAPI:
     @app.delete("/api/club/logo")
     def delete_club_logo() -> dict:
         return club.delete_logo()
+
+    # Logothèque : les logos au choix pour le club (Mon club, Accueil, Mon coach) et l'application partenaire,
+    # ceux livrés avec Foulée et ceux importés (nommés à l'import)
+    @app.get("/api/logos")
+    def logos_list() -> dict:
+        return logotheque.listing()
+
+    @app.get("/api/logos/{logo_id}/image")
+    def logo_image(logo_id: str):
+        try:
+            path = logotheque.path(logo_id)
+        except logotheque.LogoError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        return FileResponse(path, media_type="image/png",
+                            headers={"Cache-Control": "no-cache", "X-Content-Type-Options": "nosniff"})
+
+    @app.put("/api/logos/import")
+    async def logo_import(request: Request, nom: str = "", pour: str = "") -> dict:
+        if int(request.headers.get("content-length") or 0) > logotheque.MAX_UPLOAD:
+            raise HTTPException(413, "Image trop lourde : 5 Mo au plus.")
+        data = await request.body()
+        try:
+            return logotheque.add(nom, data, use=pour or None)
+        except logotheque.LogoError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+    @app.put("/api/logos/choix")
+    def logo_choice(payload: dict = Body(...)) -> dict:
+        """{"club": id | null} ou {"partenaire": id | null} : le logo choisi ; {"accueil": bool} : sur l'Accueil."""
+        try:
+            for use in logotheque.USES:
+                if use in payload:
+                    logotheque.choose(use, str(payload[use]) if payload[use] else None)
+            if "accueil" in payload:
+                logotheque.set_home(bool(payload["accueil"]))
+        except logotheque.LogoError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return logotheque.listing()
+
+    @app.delete("/api/logos/{logo_id}")
+    def logo_remove(logo_id: str) -> dict:
+        try:
+            return logotheque.remove(logo_id)
+        except logotheque.LogoError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+    # Sites externes : le logo de chaque site (un PNG, rangé avec les données du profil)
+    @app.get("/api/sites/{site_id}/logo")
+    def get_site_logo(site_id: str):
+        try:
+            path = partenaire.logo_path(site_id)
+        except partenaire.LogoError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        if not path.exists():
+            raise HTTPException(404, "Pas de logo")
+        return FileResponse(path, media_type="image/png",
+                            headers={"Cache-Control": "no-cache", "X-Content-Type-Options": "nosniff"})
+
+    @app.put("/api/sites/{site_id}/logo")
+    async def put_site_logo(site_id: str, request: Request) -> dict:
+        if int(request.headers.get("content-length") or 0) > partenaire.LOGO_BYTES:
+            raise HTTPException(413, "Logo trop lourd : 200 Ko au plus.")
+        try:
+            return partenaire.save_logo(site_id, await request.body())
+        except partenaire.LogoError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+    @app.delete("/api/sites/{site_id}/logo")
+    def delete_site_logo(site_id: str) -> dict:
+        try:
+            return partenaire.delete_logo(site_id)
+        except partenaire.LogoError as exc:
+            raise HTTPException(404, str(exc)) from exc
 
     @app.post("/api/club/fiche")
     def club_sheet(payload: dict = Body(...)) -> dict:
@@ -1586,7 +1679,7 @@ def create_app() -> FastAPI:
             raise HTTPException(503, busy_db) from None
 
     def coach_info(request: Request, conn) -> dict:
-        return {**coach.status(conn), "local": bool(request.state.local)}
+        return {**coach.status(conn), "local": bool(request.state.local), "relais_defaut": coach.DEFAULT_RELAY}
 
     @app.get("/api/coach")
     def coach_status(request: Request) -> dict:
@@ -1610,6 +1703,22 @@ def create_app() -> FastAPI:
                                                      name=str(payload.get("nom") or ""),
                                                      password=str(payload.get("mot_de_passe") or "")),
                                         "local": True})
+
+    @app.post("/api/coach/solo")
+    def coach_solo(request: Request, payload: dict = Body(...)) -> dict:
+        """Un compte sans coach sur le relais, pour envoyer les séances de l'Atelier sur sa montre."""
+        require_local(request)
+        return coach_call(lambda conn: {**coach.join_solo(conn, str(payload.get("adresse") or ""),
+                                                          ident=str(payload.get("identifiant") or ""),
+                                                          name=str(payload.get("nom") or ""),
+                                                          password=str(payload.get("mot_de_passe") or "")),
+                                        "local": True})
+
+    @app.post("/api/coach/rejoindre")
+    def coach_attach(request: Request, payload: dict = Body(...)) -> dict:
+        """Le compte sans coach rejoint un coach (code d'invitation) : il devient élève."""
+        return coach_call(lambda conn: {**coach.attach(conn, str(payload.get("code") or "")),
+                                        "local": bool(request.state.local)})
 
     @app.post("/api/coach/actualiser")
     def coach_refresh(request: Request) -> dict:
@@ -1673,7 +1782,7 @@ def create_app() -> FastAPI:
             link = coach.status(conn)
             role = (link.get("compte") or {}).get("role") if link.get("relie") else None
             return {"seances": renfo_seances.saved(conn), "bibliotheque": renfo_seances.library(),
-                    "montre": role == "eleve"}
+                    "montre": role in ("eleve", "solo")}
 
     @app.put("/api/renfo/seances")
     def renfo_sessions_save(payload: dict = Body(...)) -> dict:
@@ -1700,6 +1809,56 @@ def create_app() -> FastAPI:
         except renfo_seances.SessionError as exc:
             raise HTTPException(400, str(exc)) from None
         return coach_call(lambda conn: coach.garmin_personal(conn, item))
+
+    # L'Atelier : mes séances en blocs (course…) et de renfo, les séances toutes faites, l'envoi sur la montre
+    @app.get("/api/atelier")
+    def atelier_page() -> dict:
+        with db.session(readonly=True) as conn:
+            settings = db.get_settings(conn)
+            link = coach.status(conn)
+            role = (link.get("compte") or {}).get("role") if link.get("relie") else None
+            conf = renfo.settings_of(settings)
+            return {"seances": atelier.saved(conn), "renfo": renfo_seances.saved(conn),
+                    "modeles_renfo": renfo_seances.templates(settings), "faites": renfo_seances.done_sessions(conn),
+                    "bibliotheque": [{**f, "exercices": [{**e, "materiel_ok": renfo.has_gear(e["nom"], conf["materiel"])}
+                                                         for e in f["exercices"]]} for f in renfo_seances.library()],
+                    "montre": role in ("eleve", "solo"), "relie": bool(link.get("relie")), "role": role,
+                    "vma": settings.get("vma_kmh"), "renfo_reglages": conf,
+                    "date_renfo": atelier.next_day(conf["jours"]), "niveaux": renfo.options()["niveaux"]}
+
+    @app.put("/api/atelier/seances")
+    def atelier_save(payload: dict = Body(...)) -> dict:
+        try:
+            with db.session() as conn:
+                return {"seances": atelier.save(conn, payload.get("seances"))}
+        except atelier.SessionError as exc:
+            raise HTTPException(400, str(exc)) from None
+
+    @app.post("/api/atelier/seance.fit")
+    def atelier_fit(payload: dict = Body(...)) -> Response:
+        from . import workout_fit
+
+        with db.session(readonly=True) as conn:
+            vma = db.get_settings(conn).get("vma_kmh")
+        try:
+            item = atelier.to_item(payload.get("seance"))
+            return fit_response(workout_fit.file_name(item), workout_fit.build(item, vma))
+        except (atelier.SessionError, workout_fit.WorkoutError) as exc:
+            raise HTTPException(400, str(exc)) from None
+
+    @app.post("/api/atelier/seance/montre")
+    def atelier_watch(payload: dict = Body(...)) -> dict:
+        try:
+            item = atelier.to_item(payload.get("seance"), payload.get("date"))
+        except atelier.SessionError as exc:
+            raise HTTPException(400, str(exc)) from None
+        return coach_call(lambda conn: coach.garmin_personal(conn, {**item, "vma_kmh": db.get_settings(conn).get("vma_kmh")}))
+
+    @app.post("/api/atelier/renfo/bilan")
+    def atelier_renfo_balance(payload: dict = Body(...)) -> dict:
+        """L'équilibre avant / arrière et les muscles de la séance de renfo en cours de composition."""
+        with db.session(readonly=True) as conn:
+            return renfo_seances.composed_balance(payload.get("seance"), db.get_settings(conn))
 
     @app.get("/api/coach/seances/{proposal_id}.fit")
     def coach_workout_fit(proposal_id: int) -> Response:

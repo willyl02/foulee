@@ -1,6 +1,7 @@
 // Foulée : chef d'orchestre de l'interface (navigation, vues, tuiles, édition, synchro, thème).
 import * as api from "./api.js";
-import { renderPartnerPage } from "./appli-externe.js";
+import { renderAtelier } from "./atelier.js";
+import { renderPartnerPage, siteIcon } from "./appli-externe.js";
 import * as C from "./charts.js";
 import * as E from "./editor.js";
 import * as F from "./format.js";
@@ -31,7 +32,7 @@ const RENDERERS = {
   postes: D.postes, objectif: O.objectif, objectifs: O.objectifs, fractions: D.fractions, note: D.note,
   activites: A.activites, derniere_seance: A.derniere_seance, seance_resume: A.seance_resume,
   seance_carte: A.seance_carte, seance_courbes: A.seance_courbes, seance_tours: A.seance_tours, seance_analyse: A.seance_analyse,
-  seance_mesures: A.seance_mesures,
+  seance_mesures: A.seance_mesures, seance_zones: A.seance_zones,
   renfo: R.renfo, renfo_exercices: R.renfo_exercices, seance_renfo: R.seance_renfo, renfo_equilibre: R.renfo_equilibre, renfo_conseils: R.renfo_conseils,
   seance_effet: T.seance_effet,
   profil: H.profil, forme: H.forme, allures: H.allures, semaine: H.semaine, records: H.records, journee: H.journee,
@@ -52,6 +53,8 @@ function viewDays(view) {
   return Number(store("foulee-period")) || 90;
 }
 const WIDTHS = [3, 4, 6, 8, 9, 12];
+const MAX_H = 8;  // hauteur d'une tuile : de 1 à 8 rangées
+const widthPct = (w) => `${Math.round((w / 12) * 100)} %`;
 const THEMES = ["auto", "light", "dark"];
 const THEME_LABELS = { auto: "Thème : automatique", light: "Thème : clair", dark: "Thème : sombre" };
 
@@ -183,6 +186,7 @@ async function loadBoot() {
   state.catalog = Object.fromEntries(state.boot.metriques.map((m) => [m.key, m]));
   state.types = Object.fromEntries(state.boot.tuiles.map((t) => [t.type, t]));
   state.views = state.boot.vues;
+  C.applyZoneColors(state.boot.reglages?.couleurs_zones);
   watchCoach(state.boot, { toast });
 }
 
@@ -306,14 +310,19 @@ function cycleTheme() {
 function renderNav() {
   const nav = $("#nav");
   const partner = state.boot?.partenaire?.actif ? state.boot.partenaire : null;
+  const sites = (state.boot?.sites_externes || []).filter((x) => x.actif);
   const coach = state.boot?.coach;
   // Trois parties, séparées d'un trait : les vues (à réordonner en les glissant), l'application partenaire, le coach
   nav.innerHTML = state.views.map((v, i) => `<button class="nav-item" type="button" data-id="${F.escape(v.id)}" data-index="${i}"
       ${v.id === state.viewId && !isOtherPage() ? 'aria-current="page"' : ""} draggable="true" title="Glisse pour changer l'ordre (ou Alt + ↑ ↓)">
       ${icon(v.icon)}<span>${F.escape(v.name)}</span></button>`).join("")
     + `<button class="nav-item nav-add" type="button" data-new>${icon("plus")}<span>Nouvelle vue</span></button>`
-    + (partner ? `<div class="nav-sep" role="separator"></div><a class="nav-item nav-partner" href="#/partenaire" ${location.hash.startsWith("#/partenaire") ? 'aria-current="page"' : ""}>${icon("globe")}<span>${F.escape(partner.nom)}</span></a>` : "")
-    + (coach ? `<div class="nav-sep" role="separator"></div><a class="nav-item nav-coach" href="#/coach" ${location.hash.startsWith("#/coach") ? 'aria-current="page"' : ""}>${icon(coach.role === "coach" ? "club" : "user")}<span>${coachPageLabel(coach)}</span><span class="co-badge nav-badge" data-coach-unread ${coachUnread() ? "" : "hidden"}>${coachUnread()}</span></a>` : "");
+    + (partner || sites.length ? `<div class="nav-sep" role="separator"></div>` : "")
+    + (partner ? `<a class="nav-item nav-partner" href="#/partenaire" ${location.hash.startsWith("#/partenaire") ? 'aria-current="page"' : ""}>${siteIcon(partner, "partenaire")}<span>${F.escape(partner.nom)}</span></a>` : "")
+    + sites.map((x) => `<a class="nav-item nav-site" href="#/site/${encodeURIComponent(x.id)}" ${location.hash === `#/site/${x.id}` ? 'aria-current="page"' : ""}>${siteIcon(x)}<span>${F.escape(x.nom)}</span></a>`).join("")
+    // L'Atelier (composer ses séances) et le coach : ce qu'on prépare, ensemble
+    + `<div class="nav-sep" role="separator"></div><a class="nav-item nav-atelier" href="#/atelier" ${location.hash.startsWith("#/atelier") ? 'aria-current="page"' : ""}>${icon("atelier")}<span>Atelier</span></a>`
+    + (coach ? `<a class="nav-item nav-coach" href="#/coach" ${location.hash.startsWith("#/coach") ? 'aria-current="page"' : ""}>${icon(coach.role === "coach" ? "club" : "user")}<span>${coachPageLabel(coach)}</span><span class="co-badge nav-badge" data-coach-unread ${coachUnread() ? "" : "hidden"}>${coachUnread()}</span></a>` : "");
   nav.querySelectorAll("[data-id]").forEach((b) => {
     b.addEventListener("click", () => { location.hash = `#/vue/${encodeURIComponent(b.dataset.id)}`; closeMenu(); });
     wireNavDrag(b);
@@ -377,7 +386,7 @@ function wireNavDrag(item) {
 
 function isSettings() { return location.hash.startsWith("#/reglages"); }
 /** Une page qui n'est pas une vue : réglages, bienvenue, aide, retours. */
-function isOtherPage() { return /^#\/(reglages|bienvenue|aide|retours|coach|partenaire)/.test(location.hash); }
+function isOtherPage() { return /^#\/(reglages|bienvenue|aide|retours|coach|atelier|partenaire|site\/)/.test(location.hash); }
 
 function markRailLinks(path) {
   [["#help-link", "/aide"], ["#feedback-link", "/retours"]].forEach(([selector, page]) => {
@@ -398,6 +407,9 @@ function route() {
   if (path === "/retours") { showFeedback(params); return; }
   if (path === "/coach" || path.startsWith("/coach/")) { showCoach(path, params); return; }
   if (path === "/partenaire") { showPartner(); return; }
+  if (path === "/atelier") { showAtelier(params); return; }
+  const siteMatch = path.match(/^\/site\/([^/]+)/);
+  if (siteMatch) { showPartner(decodeURIComponent(siteMatch[1])); return; }
   const match = path.match(/^\/vue\/([^/]+)/);
   const wanted = match ? decodeURIComponent(match[1]) : null;
   const view = state.views.find((v) => v.id === wanted) || state.views[0];
@@ -412,7 +424,7 @@ function currentView() { return state.views.find((v) => v.id === state.viewId); 
 
 function rerender() {
   // Formulaires en cours (bienvenue, retours) ou texte sans graphique (aide) : on ne redessine pas
-  if (/^#\/(bienvenue|aide|retours|coach|partenaire)/.test(location.hash)) return;
+  if (/^#\/(bienvenue|aide|retours|coach|atelier|partenaire|site\/)/.test(location.hash)) return;
   if (isSettings()) showSettings(); else renderView();
 }
 
@@ -587,7 +599,7 @@ function renderTile(view, tile, index, ctx) {
   const fixed = hasPeriod(tile) && !followsView(tile) && view.spec.tuiles.some(followsView)
     ? `<span class="tile-fixed" title="Période propre à cette tuile : le sélecteur de la vue ne la change pas (Modifier la vue pour la changer).">${icon("lock")}${F.escape(PERIOD_LABEL[tile.params.periode] || `${tile.params.periode} j`)}</span>` : "";
   el.innerHTML = `${renderer.ownHead ? "" : `<div class="tile-head"><h2 class="tile-title" title="${F.escape(title)}">${F.escape(title)}</h2>${fixed}<span class="tile-src" hidden></span><span class="tile-sub"></span></div>`}
-    <div class="tile-body"></div>${state.editing ? tileTools() : ""}`;
+    <div class="tile-body"></div>${state.editing ? tileTools(tile) : ""}`;
   const body = el.querySelector(".tile-body");
   // Sources des chiffres (Garmin, Strava, Withings), d'après les réponses de chaque requête de la tuile
   let sources = [];
@@ -694,12 +706,18 @@ function wireViewBar(view) {
   });
 }
 
-function tileTools() {
+function tileTools(tile) {
+  // largeur et hauteur : un petit compteur chacune (− valeur +), en % de la largeur et en rangées
+  const stepper = (kind, ic, label, value, canDown, canUp) => `<span class="tt-step" title="${label}">${icon(ic)}
+    <button type="button" data-tool="${kind}-" aria-label="${label} : moins" ${canDown ? "" : "disabled"}>${icon("minus")}</button>
+    <b aria-live="polite">${value}</b>
+    <button type="button" data-tool="${kind}+" aria-label="${label} : plus" ${canUp ? "" : "disabled"}>${icon("plus")}</button></span>`;
+  const wi = WIDTHS.indexOf(tile.w);
   return `<div class="tile-tools" role="toolbar" aria-label="Outils de la tuile">
     <button type="button" data-tool="left" title="Déplacer avant" aria-label="Déplacer avant">${icon("left")}</button>
     <button type="button" data-tool="right" title="Déplacer après" aria-label="Déplacer après">${icon("right")}</button>
-    <button type="button" data-tool="width" title="Changer la largeur" aria-label="Changer la largeur">${icon("width")}</button>
-    <button type="button" data-tool="height" title="Changer la hauteur" aria-label="Changer la hauteur">${icon("height")}</button>
+    ${stepper("width", "width", "Largeur", widthPct(tile.w), wi > 0, wi < WIDTHS.length - 1)}
+    ${stepper("height", "height", "Hauteur (rangées)", tile.h, tile.h > 1, tile.h < MAX_H)}
     <button type="button" data-tool="edit" title="Régler" aria-label="Régler la tuile">${icon("settings")}</button>
     <button type="button" data-tool="delete" title="Retirer" aria-label="Retirer la tuile">${icon("trash")}</button>
   </div>`;
@@ -713,8 +731,15 @@ function wireTileTools(view, el, index) {
     if (!tool) return;
     if (tool === "left" && index > 0) [tiles[index - 1], tiles[index]] = [tiles[index], tiles[index - 1]];
     else if (tool === "right" && index < tiles.length - 1) [tiles[index + 1], tiles[index]] = [tiles[index], tiles[index + 1]];
-    else if (tool === "width") tile.w = WIDTHS[(WIDTHS.indexOf(tile.w) + 1) % WIDTHS.length];
-    else if (tool === "height") tile.h = (tile.h % 3) + 1;
+    else if (tool === "width+" || tool === "width-") {
+      const i = WIDTHS.indexOf(tile.w) + (tool === "width+" ? 1 : -1);
+      if (i < 0 || i >= WIDTHS.length) return;
+      tile.w = WIDTHS[i];
+    } else if (tool === "height+" || tool === "height-") {
+      const h = tile.h + (tool === "height+" ? 1 : -1);
+      if (h < 1 || h > MAX_H) return;
+      tile.h = h;
+    }
     else if (tool === "edit") {
       const res = await E.editTile(tile, state.types[tile.type], state.boot);
       if (!res) return;
@@ -847,13 +872,22 @@ function showCoach(path = "/coach", params = new URLSearchParams()) {
   renderCoachPage($("#page"), state.boot, { toast, path, params, onUnlinked: async () => { await refreshBoot(); renderNav(); } });
 }
 
-function showPartner() {
+function showPartner(siteId = null) {
   disposePass();
   state.editing = false;
   closeMenu();
   renderNav();
   window.scrollTo(0, 0);
-  renderPartnerPage($("#page"), state.boot, { keep: (disposable) => state.pass.disposers.push(disposable) });
+  renderPartnerPage($("#page"), state.boot, { siteId, keep: (disposable) => state.pass.disposers.push(disposable) });
+}
+
+function showAtelier(params) {
+  disposePass();
+  state.editing = false;
+  closeMenu();
+  renderNav();
+  window.scrollTo(0, 0);
+  renderAtelier($("#page"), state.boot, { toast, params });
 }
 
 function showFeedback(params) {

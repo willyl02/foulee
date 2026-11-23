@@ -1,6 +1,7 @@
 // Habillage commun des graphiques ECharts : couleurs lues dans le CSS (clair / sombre),
 // traits fins, grille discrète, info-bulles au survol.
 import * as F from "./format.js";
+import { icon } from "./icons.js";
 
 const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -20,13 +21,288 @@ export function palette() {
   };
 }
 
+// ------------------------------------------------------------------ couleurs des zones
+// Réglage « couleurs_zones » : Garmin (les jetons --z1…--z5 de la feuille de style, par défaut), « bleus »
+// (attribut data-zones sur la racine) ou « perso » (cinq couleurs posées sur la racine, les mêmes en clair et en sombre).
+export const ZONE_STYLES = [
+  ["garmin", "Comme Garmin", "Gris, bleu, vert, orange, rouge : les couleurs de ta montre et de Garmin Connect."],
+  ["bleus", "Dégradé de bleus", "Les bleus des premières versions de Foulée."],
+  ["perso", "À mon goût", "Choisis la couleur de chaque zone."],
+];
+export const GARMIN_ZONE_COLORS = ["#9ea8a3", "#2a78d6", "#13a06e", "#f08a1c", "#d3263a"];
+
+export function applyZoneColors(value) {
+  const root = document.documentElement;
+  const style = value?.style || "garmin";
+  if (style === "bleus") root.dataset.zones = "bleus";
+  else delete root.dataset.zones;
+  const colors = style === "perso" && Array.isArray(value.perso) ? value.perso : null;
+  [1, 2, 3, 4, 5].forEach((z, i) => {
+    if (colors) root.style.setProperty(`--z${z}`, colors[i]);
+    else root.style.removeProperty(`--z${z}`);
+  });
+}
+
+/** Encre lisible sur une couleur de fond (« #rrggbb » ou « rgb(…) ») : foncée sur les teintes claires, blanche sinon. */
+export function inkOn(color) {
+  const hex = /^#([0-9a-f]{6})$/i.exec(String(color).trim());
+  const rgb = hex ? [0, 2, 4].map((i) => parseInt(hex[1].slice(i, i + 2), 16))
+    : (String(color).match(/\d+(\.\d+)?/g) || []).slice(0, 3).map(Number);
+  if (rgb.length < 3) return "#ffffff";
+  const lin = rgb.map((c) => { const v = c / 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; });
+  const lum = 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2];
+  return lum > 0.2 ? "#15201b" : "#ffffff";  // ~ là où les deux contrastes se croisent
+}
+
 export function mount(el, option, onReady) {
   const chart = echarts.init(el, null, { renderer: "canvas" });
   chart.setOption(option);
-  const observer = new ResizeObserver(() => chart.resize());
+  let zoom = zoomable(el, chart, option);
+  const observer = new ResizeObserver(() => {
+    chart.resize();
+    // un graphique monté avant d'avoir sa taille (onglet caché, tuile qui s'ouvre) gagne son zoom ensuite
+    if (!zoom && el.clientHeight >= ZOOM_MIN_HEIGHT) zoom = zoomable(el, chart, option);
+  });
   observer.observe(el);
   if (onReady) onReady(chart);
-  return { chart, dispose() { observer.disconnect(); chart.dispose(); } };
+  return { chart, dispose() { observer.disconnect(); zoom?.dispose(); chart.dispose(); } };
+}
+
+// ------------------------------------------------------------------ zoom des graphiques
+// Une boîte à outils en haut à droite de chaque graphique à axes (assez grand pour ça) : zoomer en largeur ou en
+// hauteur, zoomer sur une zone tracée à la souris, revenir au zoom initial (aussi au double-clic). Ctrl + molette
+// zoome en largeur, Maj + molette déplace. Même allure que celle de l'analyse fraction par fraction.
+const ZOOM_MIN_HEIGHT = 150;
+const ZOOM_MIN_POINTS = 15;
+
+function axesOf(option, key) {
+  const list = option[key];
+  if (!list) return [];
+  return (Array.isArray(list) ? list : [list]).map((_, i) => i);
+}
+
+export function zoomBarHTML({ area = true } = {}) {
+  const tool = (key, name, title) => `<button class="zb-btn" type="button" data-zoom="${key}" title="${title}" aria-label="${title}">${icon(name)}</button>`;
+  return `<div class="zoombar" role="toolbar" aria-label="Zoom du graphique">
+    <span class="zb-group" title="En largeur">${icon("arrowsh")}${tool("x+", "plus", "Zoomer en largeur")}${tool("x-", "minus", "Dézoomer en largeur")}</span>
+    <span class="zb-group" title="En hauteur">${icon("arrowsv")}${tool("y+", "plus", "Zoomer en hauteur")}${tool("y-", "minus", "Dézoomer en hauteur")}</span>
+    ${area ? tool("area", "search", "Zoomer sur une zone (trace-la sur le graphique)") : ""}
+    ${tool("reset", "reset", "Zoom initial (double-clic)")}
+  </div>`;
+}
+
+/** Barre de défilement horizontale d'un graphique zoomé (analyse fraction par fraction, tuiles). */
+export function scrollbarHTML() {
+  return `<div class="zscroll is-off"><div class="zs-thumb" role="scrollbar" tabindex="0" aria-orientation="horizontal"
+    aria-valuemin="0" aria-valuemax="100" aria-label="Se déplacer dans le graphique zoomé"></div></div>`;
+}
+
+/**
+ * get() : la fenêtre vue, {start, end} entre 0 et 1 ; move(start) : la décaler (même largeur, bornée par l'appelant).
+ * Glisser le curseur, cliquer dans la piste (la vue s'y centre), ou au clavier : flèches, Pg préc./suiv., Début, Fin.
+ * Renvoie la fonction qui remet la barre à jour.
+ */
+export function wireScrollbar(track, { get, move }) {
+  const thumb = track.querySelector(".zs-thumb");
+  let drag = null;
+  const update = () => {
+    const { start, end } = get();
+    const on = end - start < 0.999;
+    track.classList.toggle("is-off", !on);
+    if (!on) return;
+    thumb.style.left = `${(start * 100).toFixed(3)}%`;
+    thumb.style.width = `${Math.max(0, (end - start) * 100).toFixed(3)}%`;
+    thumb.setAttribute("aria-valuenow", String(Math.round((start / Math.max(1e-9, 1 - (end - start))) * 100)));
+  };
+  thumb.addEventListener("pointerdown", (ev) => {
+    if (ev.button !== 0) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    drag = { x: ev.clientX, start: get().start };
+    thumb.setPointerCapture(ev.pointerId);
+    track.classList.add("is-dragging");
+  });
+  thumb.addEventListener("pointermove", (ev) => {
+    if (drag) move(drag.start + (ev.clientX - drag.x) / track.getBoundingClientRect().width);
+  });
+  const stop = () => { drag = null; track.classList.remove("is-dragging"); };
+  thumb.addEventListener("pointerup", stop);
+  thumb.addEventListener("pointercancel", stop);
+  track.addEventListener("pointerdown", (ev) => {
+    if (ev.target === thumb || ev.button !== 0) return;
+    ev.stopPropagation();
+    const rect = track.getBoundingClientRect();
+    const { start, end } = get();
+    move((ev.clientX - rect.left) / rect.width - (end - start) / 2);
+  });
+  track.addEventListener("dblclick", (ev) => ev.stopPropagation());
+  thumb.addEventListener("keydown", (ev) => {
+    const { start, end } = get();
+    const w = end - start;
+    const steps = { ArrowLeft: -w / 10, ArrowRight: w / 10, PageUp: -w, PageDown: w };
+    let to = null;
+    if (ev.key in steps) to = start + steps[ev.key];
+    else if (ev.key === "Home") to = 0;
+    else if (ev.key === "End") to = 1 - w;
+    if (to === null) return;
+    ev.preventDefault();
+    move(to);
+  });
+  update();
+  return update;
+}
+
+/** Ajoute le zoom à un graphique ECharts à axes ; à rappeler après chaque setOption qui remplace tout. */
+export function zoomable(el, chart, option) {
+  const xs = axesOf(option, "xAxis");
+  const ys = axesOf(option, "yAxis");
+  if (!xs.length || !ys.length || option.zoom === false || el.clientHeight < ZOOM_MIN_HEIGHT) return null;
+  // quelques barres (zones, mois) : rien à zoomer, pas de boîte à outils
+  const points = Math.max(0, ...[].concat(option.series || []).map((s) => (Array.isArray(s?.data) ? s.data.length : 0)));
+  if (points < ZOOM_MIN_POINTS) return null;
+  const own = (Array.isArray(option.dataZoom) ? option.dataZoom : option.dataZoom ? [option.dataZoom] : []);
+  const hasX = own.some((d) => d.type === "inside" && d.xAxisIndex !== undefined);
+  chart.setOption({
+    dataZoom: [...own,
+      // en largeur, les points hors fenêtre sont écartés (rien ne déborde dans la marge des étiquettes, et la hauteur
+      // s'ajuste à ce qu'on voit) ; en hauteur, rien n'est écarté : les courbes sont seulement coupées au bord
+      ...(hasX ? [] : [{ id: "zx", type: "inside", xAxisIndex: xs, filterMode: "filter", zoomOnMouseWheel: "ctrl", moveOnMouseWheel: "shift", moveOnMouseMove: false, preventDefaultMouseMove: false }]),
+      // un zoom vertical par axe : graphiques empilés, chaque grille garde son échelle
+      ...ys.map((i) => ({ id: `zy${i}`, type: "inside", yAxisIndex: i, filterMode: "none", zoomOnMouseWheel: false, moveOnMouseWheel: false, moveOnMouseMove: false, preventDefaultMouseMove: false }))],
+    // la sélection de zone passe par l'outil « dataZoom » d'ECharts, dont les icônes restent cachées (hors champ)
+    toolbox: { show: true, left: -1000, top: -1000, itemSize: 1, feature: { dataZoom: { filterMode: "none", xAxisIndex: xs, yAxisIndex: ys } } },
+  });
+  let bar = el.querySelector(":scope > .zoombar");
+  if (!bar) {
+    el.classList.add("zoom-host");
+    if (getComputedStyle(el).position === "static") el.style.position = "relative";
+    el.insertAdjacentHTML("beforeend", zoomBarHTML() + scrollbarHTML());
+    bar = el.querySelector(":scope > .zoombar");
+  }
+  const track = el.querySelector(":scope > .zscroll");
+  const zooms = () => (chart.getOption().dataZoom || []).map((d, i) => ({ ...d, index: i }));
+  // zoomé en hauteur, les bornes de l'axe tombent sur des valeurs quelconques (« 29 », « -65,48 ») : on cache ces
+  // deux étiquettes-là, les graduations rondes entre les deux restent ; le zoom initial rend les réglages d'origine
+  const labels = (chart.getOption().yAxis || []).map((a) => ({
+    showMinLabel: a.axisLabel?.showMinLabel ?? null, showMaxLabel: a.axisLabel?.showMaxLabel ?? null }));
+  let yShown = false;
+  const yLabels = (zoomed) => {
+    if (zoomed === yShown) return;
+    yShown = zoomed;
+    chart.setOption({ yAxis: labels.map((l) => ({ axisLabel: zoomed ? { showMinLabel: false, showMaxLabel: false } : l })) });
+  };
+  const has = (v) => (Array.isArray(v) ? v.length > 0 : v !== undefined && v !== null);
+  const isX = (d) => has(d.xAxisIndex) && !String(d.id).startsWith("zy");
+  const isY = (d) => has(d.yAxisIndex) && !has(d.xAxisIndex);
+  const scale = (pick, factor) => zooms().filter(pick).forEach((d) => {
+    const start = d.start ?? 0; const end = d.end ?? 100;
+    const mid = (start + end) / 2; const half = Math.min(50, Math.max(1, ((end - start) / 2) / factor));
+    let s = mid - half; let e = mid + half;
+    if (s < 0) { e -= s; s = 0; }
+    if (e > 100) { s -= e - 100; e = 100; }
+    chart.dispatchAction({ type: "dataZoom", dataZoomIndex: d.index, start: Math.max(0, s), end: Math.min(100, e) });
+  });
+  let area = false;
+  const setArea = (on) => {
+    area = on;
+    chart.dispatchAction({ type: "takeGlobalCursor", key: "dataZoomSelect", dataZoomSelectActive: on });
+    bar.querySelector('[data-zoom="area"]')?.classList.toggle("is-on", on);
+    el.classList.toggle("is-area", on);
+  };
+  const reset = () => {
+    zooms().forEach((d) => chart.dispatchAction({ type: "dataZoom", dataZoomIndex: d.index, start: 0, end: 100 }));
+    if (area) setArea(false);
+  };
+  const onClick = (ev) => {
+    const btn = ev.target.closest("[data-zoom]");
+    if (!btn) return;
+    const k = btn.dataset.zoom;
+    if (k === "x+") scale(isX, 2);
+    else if (k === "x-") scale(isX, 0.5);
+    else if (k === "y+") scale(isY, 1.5);
+    else if (k === "y-") scale(isY, 1 / 1.5);
+    else if (k === "area") setArea(!area);
+    else reset();
+  };
+  // zoomé, un glisser déplace la vue ; au zoom initial, le glisser rend la main à la page (défilement au doigt)
+  let panning = false;
+  const pan = (on) => {
+    if (on === panning) return;
+    panning = on;
+    const mine = zooms().filter((d) => d.id === "zx" || String(d.id).startsWith("zy"));
+    chart.setOption({ dataZoom: mine.map((d) => ({ id: d.id, moveOnMouseMove: on })) });
+  };
+  // la barre de défilement, posée sur le bas de la grille du bas, suit la fenêtre en largeur
+  const windowX = () => {
+    const d = zooms().find(isX);
+    return d ? { start: (d.start ?? 0) / 100, end: (d.end ?? 100) / 100 } : { start: 0, end: 1 };
+  };
+  let wanted = null;
+  const scroll = wireScrollbar(track, {
+    get: windowX,
+    move: (start) => {
+      const first = wanted === null;
+      wanted = start;
+      if (!first) return;
+      requestAnimationFrame(() => {
+        const { start: s0, end: e0 } = windowX();
+        const w = e0 - s0;
+        const s = Math.max(0, Math.min(1 - w, wanted));
+        wanted = null;
+        zooms().filter(isX).forEach((d) => chart.dispatchAction({ type: "dataZoom", dataZoomIndex: d.index, start: s * 100, end: (s + w) * 100 }));
+      });
+    },
+  });
+  const place = () => {
+    let rect = null;
+    try {
+      chart.getModel().eachComponent("grid", (g) => {
+        const r = g.coordinateSystem?.getRect?.();
+        if (r && (!rect || r.y + r.height > rect.y + rect.height)) rect = r;
+      });
+    } catch (e) { rect = null; }
+    if (!rect) return;
+    track.style.left = `${rect.x}px`;
+    track.style.width = `${rect.width}px`;
+    track.style.top = `${rect.y + rect.height - 8}px`;
+  };
+  const onZoom = () => {
+    const narrowed = (d) => (d.start ?? 0) > 0.01 || (d.end ?? 100) < 99.99;
+    const list = zooms();
+    const zoomed = list.some(narrowed);
+    el.classList.toggle("is-zoomed", zoomed);
+    yLabels(list.some((d) => isY(d) && narrowed(d)));
+    pan(zoomed);
+    scroll();
+    if (area) setArea(false); // une zone à la fois : l'outil se range après usage
+  };
+  // la main : « attrapée » pendant qu'on fait glisser la vue
+  const ungrab = () => el.classList.remove("is-grabbing");
+  const grab = (ev) => {
+    if (!el.classList.contains("is-zoomed") || area || ev.button !== 0 || ev.target.closest(".zoombar, .zscroll")) return;
+    el.classList.add("is-grabbing");
+    window.addEventListener("pointerup", ungrab, { once: true });
+  };
+  bar.onclick = onClick;
+  if (el._zoomOff) el._zoomOff(); // rappelé après un setOption qui remplace tout : on ne double pas les écouteurs
+  chart.on("datazoom", onZoom);
+  chart.on("finished", place);
+  chart.getZr().on("dblclick", reset);
+  el.addEventListener("pointerdown", grab);
+  el._zoomOff = () => {
+    chart.off("datazoom", onZoom);
+    chart.off("finished", place);
+    chart.getZr()?.off("dblclick", reset);
+    el.removeEventListener("pointerdown", grab);
+  };
+  place();
+  return {
+    dispose() {
+      el._zoomOff?.(); el._zoomOff = null;
+      bar?.remove(); track?.remove();
+      el.classList.remove("zoom-host", "is-zoomed", "is-area", "is-grabbing");
+    },
+  };
 }
 
 export function baseOption(p) {
@@ -159,11 +435,15 @@ export function bars(p, color, data, { name, stack, top = true, xAxisIndex = 0, 
 export function mountSized(el, build, onReady) {
   const chart = echarts.init(el, null, { renderer: "canvas" });
   let lastH = 0;
+  let zoom = null;
   const apply = () => {
     const h = el.clientHeight;
     if (Math.abs(h - lastH) > 4) {
       lastH = h;
-      chart.setOption(build(el.clientWidth, h), { notMerge: true });
+      const option = build(el.clientWidth, h);
+      chart.setOption(option, { notMerge: true });
+      zoom?.dispose();
+      zoom = zoomable(el, chart, option);
     }
     chart.resize();
   };
@@ -171,7 +451,7 @@ export function mountSized(el, build, onReady) {
   const observer = new ResizeObserver(apply);
   observer.observe(el);
   if (onReady) onReady(chart);
-  return { chart, dispose() { observer.disconnect(); chart.dispose(); } };
+  return { chart, dispose() { observer.disconnect(); zoom?.dispose(); chart.dispose(); } };
 }
 
 /**

@@ -1,16 +1,18 @@
-// Page « Réglages » : profil et logo, utilisateurs, mon club, application partenaire, coureur, objectifs, horaires, zones FC et d'allure,
+// Page « Réglages » : profil et logo, utilisateurs, mon club, application partenaire, sites externes, coureur, objectifs, horaires, zones FC et d'allure,
 // synchro, vues, sauvegarde ; puis l'installation (clé Garmin, dossier, Claude Desktop, mises à jour :
 // voir system.js).
 import * as api from "./api.js";
 import * as F from "./format.js";
 import { icon } from "./icons.js";
 import { goalManager } from "./goals.js";
-import { partnerPanel } from "./appli-externe.js";
+import { partnerPanel, sitesPanel } from "./appli-externe.js";
 import { clubPanel } from "./settings-club.js";
+import { logoLibrary } from "./logo-choice.js";
 import { profilePanel, transferPanel } from "./settings-profile.js";
 import { scheduleEditor } from "./settings-schedule.js";
 import { settingsShell } from "./settings-shell.js";
-import { hrZonesEditor, paceZonesEditor } from "./settings-zones.js";
+import { hrZonesEditor, paceZonesEditor, zoneColorsEditor } from "./settings-zones.js";
+import { renfoEditor } from "./settings-renfo.js";
 import { systemSections, wireSystem } from "./system.js";
 import { accessPanel, usersPanel } from "./users.js";
 
@@ -52,6 +54,11 @@ export function renderSettings(page, boot, { onSaved, onProfile, refreshBoot, to
         <p class="intro">Le site de ton club (par défaut Club en ligne : entraînements, compétitions, annuaire…) directement dans Foulée, avec son entrée dans la colonne de gauche.</p>
         <div data-partner></div>
       </section>
+      <section data-section="sites">
+        <h2>Sites externes</h2>
+        <p class="intro">D'autres sites dans Foulée (la FFA, ta ligue, un site de course…), chacun avec son entrée dans la colonne de gauche, sous l'application partenaire, et son logo si tu veux.</p>
+        <div data-sites></div>
+      </section>
     </div>
     <form class="settings" id="settings-form" novalidate>
       <section data-section="coureur">
@@ -79,18 +86,26 @@ export function renderSettings(page, boot, { onSaved, onProfile, refreshBoot, to
 
       <section data-section="zones-fc">
         <h2>Zones de fréquence cardiaque</h2>
-        <p class="intro">Elles comptent ton temps par zone dans chaque séance. Tire les séparations de la barre pour les ajuster.</p>
+        <p class="intro">Elles comptent ton temps par zone dans chaque séance : soit celles de ta montre, soit les tiennes, réglées ici.</p>
         <div data-hr-zones></div>
+        <h3>Couleurs des zones</h3>
+        <div data-zone-colors></div>
       </section>
 
       <section data-section="zones">
         <h2>Zones d'allure et fractions</h2>
-        <p class="intro">Cinq zones d'allure pour la course à pied. Le seuil des fractions décide quels tours comptent comme rapides.</p>
+        <p class="intro">Cinq zones d'allure pour la course à pied. Garmin ne donne pas à Foulée les zones d'allure de ta montre : elles se règlent ici, depuis ta VMA (les allures du club), ta vitesse au seuil ou à la main. Le seuil des fractions décide quels tours comptent comme rapides.</p>
         <div data-pace-zones></div>
         <div class="form-grid" style="margin-top:12px">
           <label class="field"><span>Fractions rapides (% VMA)</span><input type="number" min="60" max="120" step="1" name="fractions" value="${F.escape(s.fractions_seuil_pct_vma)}"></label>
         </div>
         <p class="computed" data-fractions></p>
+      </section>
+
+      <section data-section="renfo">
+        <h2>Renfo</h2>
+        <p class="intro">Ce qui guide les tuiles Renfo et l'Atelier : ton objectif de la semaine, l'équilibre avant / arrière que tu vises, ton niveau et ce que tu as sous la main.</p>
+        <div data-renfo></div>
       </section>
 
       <section data-section="synchro">
@@ -146,11 +161,17 @@ export function renderSettings(page, boot, { onSaved, onProfile, refreshBoot, to
   profilePanel(page.querySelector("[data-profile]"), boot, { toast, onProfile });
   accessPanel(page.querySelector("[data-access]"), boot, { toast, onChange: () => refreshBoot() });
   if (principal) usersPanel(page.querySelector("[data-users]"), boot, { toast, onChange: () => refreshBoot() });
-  clubPanel(page.querySelector("[data-club]"), boot, { toast, onChange: () => refreshBoot() });
-  partnerPanel(page.querySelector("[data-partner]"), boot, { toast, onChange: () => refreshBoot() });
+  const logos = logoLibrary(boot);  // une seule liste pour le logo du club et celui de l'application partenaire
+  clubPanel(page.querySelector("[data-club]"), boot, { toast, onChange: () => refreshBoot(), logos });
+  partnerPanel(page.querySelector("[data-partner]"), boot, { toast, onChange: () => refreshBoot(), logos });
+  sitesPanel(page.querySelector("[data-sites]"), boot, { toast, onChange: () => refreshBoot() });
   const schedule = scheduleEditor(page.querySelector("[data-schedule]"), s.horaires);
   const hrZones = hrZonesEditor(page.querySelector("[data-hr-zones]"), boot, profile);
   const paceZones = paceZonesEditor(page.querySelector("[data-pace-zones]"), boot, vma);
+  const renfoSettings = renfoEditor(page.querySelector("[data-renfo]"), boot);
+  const zoneColors = zoneColorsEditor(page.querySelector("[data-zone-colors]"), boot, {
+    onApply: () => { hrZones.refresh(); paceZones.refresh(); },
+  });
   goalManager(page.querySelector("[data-goals]"), {
     toast,
     vma,
@@ -193,6 +214,8 @@ export function renderSettings(page, boot, { onSaved, onProfile, refreshBoot, to
       horaires: schedule.value(),
       zones_fc: hrZones.value(),
       zones_allure: pace,
+      couleurs_zones: zoneColors.value(),
+      renfo: renfoSettings.value(),
       fractions_seuil_pct_vma: num("fractions") || 85,
       fit_auto_jours: Number(val("fit_auto_jours")),
       synchro_auto: syncRhythmValue(form, s),

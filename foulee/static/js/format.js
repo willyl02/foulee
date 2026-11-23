@@ -95,10 +95,10 @@ export function axis(meta, v) {
     case "duration": return hoursAxis(v);
     case "pace": return pace(v);
     case "clock": return clock(v);
-    case "km": return NB.format(Math.round(v * 10) / 10);
+    case "km": return NB.format(Math.round(v * 10) / 10 + 0); // + 0 : jamais « -0 »
     default:
-      if (Math.abs(v) >= 10000) return `${NB.format(Math.round(v / 1000))} k`;
-      return NB.format(Math.round(v * 100) / 100);
+      if (Math.abs(v) >= 10000) return `${NB.format(Math.round(v / 1000) + 0)} k`;
+      return NB.format(Math.round(v * 100) / 100 + 0);
   }
 }
 

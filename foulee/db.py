@@ -213,6 +213,8 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "zones_fc": None,          # méthode des zones FC (voir zones.py) ; vide = zones Garmin
     "zones_allure": None,      # méthode des zones d'allure ; vide = % de VMA ci-dessous
     "zones_allure_pct_vma": [70, 80, 88, 95],
+    "couleurs_zones": None,    # couleurs des zones FC et d'allure (voir zones.py) ; vide = celles de Garmin
+    "renfo": None,             # Réglages → Renfo (voir renfo.SETTINGS_DEFAULT) ; vide = les valeurs par défaut
     "fractions_seuil_pct_vma": 85,
     "fit_auto_jours": 180,     # télécharge automatiquement les FIT des N derniers jours
     "historique_depuis": None,  # date du premier import
@@ -223,6 +225,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "vameval": None,           # dernier test VAMEVAL saisi (« 12:40 »), pour la page d'accueil
     "club": None,              # club FFA du profil : numéro, coordonnées, licence (voir club.py)
     "partenaire": None,        # application partenaire dans la colonne de gauche (voir partenaire.py)
+    "sites_externes": None,    # autres sites web, sous l'application partenaire (voir partenaire.py)
     # synchro automatique : délai par source, en minutes (de 30 min à 12 h, voir sync.py)
     "synchro_auto": {"garmin": 180, "withings": 180, "strava": 180, "calendrier": 180},
 }

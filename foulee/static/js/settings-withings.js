@@ -99,7 +99,8 @@ export async function withingsPanel(box, boot, { toast, onChange, startSync }) {
               Le logo est facultatif.</li>
             <li>Valide : Withings affiche ton <b>ClientID</b> et ton <b>Secret</b>. Laisse cette page ouverte pour l'étape 2.</li>
           </ol>
-          <p class="hint">L'adresse à coller est celle d'une petite page relais de Foulée : après « Autoriser », Withings y renvoie ton navigateur, et elle le renvoie aussitôt vers ton Foulée. Withings n'accepte pas l'adresse de ton PC directement. La page ne garde rien et ne transmet rien ailleurs.</p>
+          <p class="hint">L'adresse à coller est celle d'une petite page relais de Foulée, sur le relais Foulée (relais.foulee-coach.com) : après « Autoriser », Withings y renvoie ton navigateur, et elle le renvoie aussitôt vers ton Foulée. Withings n'accepte pas l'adresse de ton PC directement. La page ne garde rien et ne transmet rien ailleurs.</p>
+          <p class="hint">Ton appli Withings date d'avant la 0.8.3 ? Elle a encore l'ancienne adresse (<code>willyl02.github.io/foulee/withings/</code>). Ta connexion actuelle continue de marcher ; pour pouvoir la refaire un jour, ajoute la nouvelle dans « Registered URLs » (Withings accepte plusieurs adresses, séparées par une virgule).</p>
         </div>
       </li>
 
@@ -159,7 +160,7 @@ export async function withingsPanel(box, boot, { toast, onChange, startSync }) {
       <summary>${icon("help")}Un souci ? Les cas les plus courants</summary>
       <dl>
         <dt>Withings affiche « redirect_uri_mismatch » ou une erreur d'adresse</dt>
-        <dd>L'adresse enregistrée dans ton appli (Registered URLs) doit être exactement <code>${F.escape(info.relais)}</code>, barre finale comprise. Corrige-la dans le tableau de bord de Withings, puis relance la connexion (étape 3).</dd>
+        <dd>L'adresse enregistrée dans ton appli (Registered URLs) doit être exactement <code>${F.escape(info.relais)}</code>, barre finale comprise. Si ton appli a encore l'ancienne adresse (<code>willyl02.github.io/foulee/withings/</code>, avant la 0.8.3), ajoute la nouvelle ou remplace-la dans le tableau de bord de Withings, puis relance la connexion (étape 3).</dd>
         <dt>« Withings refuse de terminer la connexion »</dt>
         <dd>Le ClientID ou le Secret ne correspondent pas : recopie-les avec leurs boutons de copie (étape 2, « Changer d'appli Withings »). Ou plus de 30 secondes se sont écoulées entre « Allow » et le retour dans Foulée : relance simplement la connexion.</dd>
         <dt>Je reste bloqué sur la page « Retour vers Foulée… »</dt>

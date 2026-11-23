@@ -831,8 +831,23 @@ def plan(conn: sqlite3.Connection, start: date, end: date, today: date | None = 
     events = [r for r in events if (r["uid"] or "").startswith("coach:") or not any(
         appariement.same_session(c["title"], c["date"], r["title"], r["date"]) for c in coach_rows)]
     sketches = {}
+    # Les séances du calendrier Garmin lues chez Garmin (garmin.seances) : leur vrai contenu, et leur vrai sport
+    # (une séance de renfo nommée « 5x10 Squat… » n'est pas une course)
+    from .garmin import seances as garmin_seances
+    vma = (db.get_settings(conn).get("vma_kmh") or None)
+    garmin = garmin_seances.stored(conn, [w for r in events if (w := garmin_seances.workout_id(r["uid"]))])
+    sport_fix = {}
+    for row in events:
+        workout = garmin.get(garmin_seances.workout_id(row["uid"]) or "")
+        if workout and (sport := garmin_seances.sport_of(workout)) and sport != row["sport"]:
+            sport_fix[row["id"]] = sport
+    events = [{**dict(r), "sport": sport_fix.get(r["id"], r["sport"])} for r in events]
     for row in events:
         if row["kind"] != "seance" or row["sport"] in ("renfo", "souplesse"):
+            continue
+        workout = garmin.get(garmin_seances.workout_id(row["uid"]) or "")
+        if workout and (blocks := garmin_seances.blocks_of(workout, vma)):
+            sketches[row["id"]] = (blocks, False)
             continue
         uid = row["uid"] or ""
         coach_item = proposals.get(int(uid[6:])) if uid.startswith("coach:") and uid[6:].isdigit() else None
@@ -849,8 +864,18 @@ def plan(conn: sqlite3.Connection, start: date, end: date, today: date | None = 
                   for row in events if row["kind"] != "autre"]
     done = [{"cle": a["id"], "date": a["date"], "sport": a["sport"], "nom": a["name"], "duree_s": seconds(a), "row": a}
             for a in activities]
-    vma = (db.get_settings(conn).get("vma_kmh") or None)
     matched = {key: d["row"] for key, d in appariement.assign(candidates, done, _fits, vma).items()}
+    # une séance faite : la séance suivie, lue dans son activité (étapes du FIT ou intervalles), plutôt que le
+    # profil deviné du nom (Garmin ne donne pas le contenu des séances à venir)
+    followed = garmin_seances.followed(conn, [a["id"] for a in matched.values()])
+    for row in events:
+        act = matched.get(row["id"])
+        blocks, approx = sketches.get(row["id"], ([], False))
+        if act is not None and act["id"] in followed and (approx or not blocks) and row["kind"] == "seance" \
+                and row["sport"] not in ("renfo", "souplesse"):
+            real = garmin_seances.blocks_of(followed[act["id"]], vma)
+            if real:
+                sketches[row["id"]] = (real, False)
     out = []
     for row in events:
         day = date.fromisoformat(row["date"])

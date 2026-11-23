@@ -84,18 +84,43 @@ def _meta_json(conn: sqlite3.Connection, key: str) -> dict | None:
 
 def garmin_profile(conn: sqlite3.Connection) -> dict:
     """Ce que Garmin dit du profil : zones FC de la montre, seuil lactique, VO2max (relus à chaque synchro)."""
-    return {"zones_fc": _meta_json(conn, "garmin_hr_zones"), "profil": _meta_json(conn, "garmin_profil")}
+    return {"zones_fc": _meta_json(conn, "garmin_hr_zones"), "profil": _meta_json(conn, "garmin_profil"),
+            "profils": garmin_zone_profiles(conn)}
+
+
+def _garmin_zones_raw(conn: sqlite3.Connection) -> Any:
+    row = conn.execute("SELECT payload FROM raw WHERE source = 'garmin' AND kind = 'hr_zones' AND key = 'latest'").fetchone()
+    try:
+        return json.loads(row["payload"]) if row else None
+    except (TypeError, ValueError):
+        return None
+
+
+def garmin_zone_profiles(conn: sqlite3.Connection) -> list[dict]:
+    """Les réglages des zones FC de la montre, profil par profil (général, course, vélo…), lus à la dernière synchro."""
+    from .garmin import parse
+
+    raw = _garmin_zones_raw(conn)
+    return parse.heart_rate_zone_profiles(raw) if raw is not None else []
 
 
 def hr_profile(conn: sqlite3.Connection, settings: dict) -> dict:
     """FC max, FC de repos, zones FC (selon la méthode choisie) et zones d'allure utilisées dans les calculs."""
     garmin = _meta_json(conn, "garmin_hr_zones")
     profile = _meta_json(conn, "garmin_profil") or {}
+    config = settings.get("zones_fc") if isinstance(settings.get("zones_fc"), dict) else {}
+    watch = config.get("methode") == "garmin"
+    if watch and config.get("profil_garmin"):  # le profil de la montre choisi dans les réglages
+        from .garmin import parse
+
+        garmin = parse.heart_rate_zones(_garmin_zones_raw(conn), prefer=config["profil_garmin"]) or garmin
     if garmin is not None and not garmin.get("lthr") and profile.get("seuil_fc"):
         garmin = {**garmin, "lthr": profile["seuil_fc"]}
 
-    hr_max = settings.get("fc_max") or (garmin or {}).get("max")
-    source_max = "réglage" if settings.get("fc_max") else ("zones Garmin" if hr_max else None)
+    # Zones de la montre : tout vient d'elle (FC max, au repos) pour rester cohérent avec ce qu'elle affiche
+    hr_max = ((garmin or {}).get("max") if watch else None) or settings.get("fc_max") or (garmin or {}).get("max")
+    source_max = "montre" if watch and (garmin or {}).get("max") else \
+        "réglage" if settings.get("fc_max") else ("zones Garmin" if hr_max else None)
     if not hr_max:
         row = conn.execute(
             "SELECT MAX(max_hr) AS m FROM activities WHERE max_hr IS NOT NULL AND date >= ?",
@@ -104,8 +129,8 @@ def hr_profile(conn: sqlite3.Connection, settings: dict) -> dict:
         hr_max = row["m"] if row and row["m"] else 190
         source_max = "FC max observée" if row and row["m"] else "valeur par défaut"
 
-    hr_rest = settings.get("fc_repos")
-    source_rest = "réglage" if hr_rest else None
+    hr_rest = ((garmin or {}).get("rest") if watch else None) or settings.get("fc_repos")
+    source_rest = ("montre" if watch and (garmin or {}).get("rest") else "réglage") if hr_rest else None
     if not hr_rest:
         values = [r["value"] for r in conn.execute(
             "SELECT value FROM daily WHERE metric = 'resting_hr' AND date >= ? ORDER BY date",
@@ -117,7 +142,7 @@ def hr_profile(conn: sqlite3.Connection, settings: dict) -> dict:
     if garmin is None and profile.get("seuil_fc"):
         garmin = {"lthr": profile["seuil_fc"]}
     hz = zone_methods.hr_floors(settings.get("zones_fc"), float(hr_max), float(hr_rest), garmin,
-                                max_from_settings=bool(settings.get("fc_max")))
+                                max_from_settings=bool(settings.get("fc_max")) and not watch)
     return {
         "max": float(hr_max),
         "rest": float(hr_rest),
@@ -1163,6 +1188,30 @@ def lap_analysis(laps: list[dict], streams: dict | None, floors: list[float]) ->
     return out
 
 
+def zone_tables(hrp: dict, row: sqlite3.Row | dict) -> dict:
+    """Le temps passé dans chaque zone d'une séance : FC (toutes les séances avec FC) et allure (course à pied),
+    avec les noms et les bornes des zones en vigueur ; une zone absente n'a pas de clé."""
+    out: dict[str, dict] = {}
+
+    def seconds(raw: Any) -> list[int] | None:
+        values = json.loads(raw) if isinstance(raw, str) else raw
+        if not isinstance(values, list) or len(values) < 5:
+            return None
+        values = [round(float(v or 0)) for v in values[:5]]
+        return values if sum(values) > 0 else None
+
+    hr = seconds(row["hr_zones"])
+    if hr:
+        out["fc"] = {"noms": list(hrp["noms"]), "bornes": list(hrp["bornes"]), "secondes": hr, "total": sum(hr),
+                     "methode": hrp["methode"]}
+    pace = seconds(row["pace_zones"]) if row["sport"] in metrics.RUNNING_SPORTS else None
+    if pace:
+        allure = hrp["allure"]
+        out["allure"] = {"noms": list(allure["noms"]), "bornes": list(allure["bornes"]), "secondes": pace,
+                         "total": sum(pace), "methode": allure["methode"]}
+    return out
+
+
 def activity_detail(conn: sqlite3.Connection, activity_id: str, settings: dict) -> dict | None:
     row = conn.execute("SELECT * FROM activities WHERE id = ?", (activity_id,)).fetchone()
     if not row:
@@ -1177,10 +1226,11 @@ def activity_detail(conn: sqlite3.Connection, activity_id: str, settings: dict) 
     data["zones_fc_bornes"] = hrp["floors"]
     data["zones_fc_noms"] = hrp["bornes"]
     data["zones_allure_noms"] = hrp["allure"]["bornes"]
+    data["temps_zones"] = zone_tables(hrp, row)  # temps par zone FC et d'allure, avec noms et bornes
     data["analyse"] = lap_analysis(data["tours"], streams, hrp["floors"]) if len(data["tours"]) > 1 else []
     data["mesures"] = activity_measures(row, data["extra"])
     data["effet"] = training_effect(conn, row, data["extra"])  # effet aérobie et anaérobie de Garmin (ou None)
-    data["renfo"] = renfo.session(conn, activity_id)  # exercices de renfo, muscles travaillés (ou None)
+    data["renfo"] = renfo.session(conn, activity_id, settings)  # exercices de renfo, muscles (ou None)
     if row["sport"] in metrics.RUNNING_SPORTS:
         vma = float(settings.get("vma_kmh") or 16)
         if row["avg_speed"]:

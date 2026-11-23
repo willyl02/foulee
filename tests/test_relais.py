@@ -234,3 +234,18 @@ def test_cli_lists_groups(relay, capsys):
     assert cli.main(["relais", "groupes"]) == 0
     out = capsys.readouterr().out
     assert "1 élève" in out and "Lucas B." in out and "lucas" in out and "notifications" in out
+
+
+def test_relay_serves_the_withings_return_page():
+    """0.8.3 : la page relais de Withings vit sur le relais du club (plus besoin de GitHub Pages)."""
+    from foulee.withings import client as withings
+
+    client = TestClient(create_relay_app())
+    page = client.get("/withings/?code=abc&state=x")
+    assert page.status_code == 200 and "Retour vers Foulée" in page.text
+    assert "script-src 'unsafe-inline'" in page.headers["content-security-policy"]
+    assert "frame-ancestors 'none'" in page.headers["content-security-policy"]
+    assert page.headers["referrer-policy"] == "no-referrer"
+    moved = client.get("/withings?code=abc&state=x", follow_redirects=False)
+    assert moved.status_code == 307 and moved.headers["location"] == "/withings/?code=abc&state=x"
+    assert withings.RELAY == "https://relais.foulee-coach.com/withings/"

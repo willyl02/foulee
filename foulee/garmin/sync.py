@@ -21,7 +21,7 @@ from datetime import date, timedelta
 from typing import Callable
 
 from .. import analysis, config, db, fitfile, renfo, views
-from . import parse
+from . import parse, seances
 from .client import GarminError, GarminSession
 
 LOG = logging.getLogger("foulee.garmin")
@@ -336,6 +336,17 @@ def run(conn: sqlite3.Connection, *, since: date | None = None, fit_days: int | 
                 except GarminError as exc:
                     note_error(summary, f"FIT {activity_id}", exc)
                 conn.commit()
+
+        # Les séances prévues du calendrier Garmin, étape par étape (pour les dessiner fidèlement)
+        if not config.is_demo():
+            progress("Séances prévues : leur contenu…", 0.96)
+            try:
+                result = seances.sync(conn, session, today)
+                if result.get("lues"):
+                    summary["flux"]["séances prévues lues"] = result["lues"]
+            except Exception as exc:  # noqa: BLE001 — un dessin ne fait jamais échouer la synchro
+                conn.rollback()
+                LOG.info("Séances prévues Garmin : %s", type(exc).__name__)
 
         if summary["erreurs"] and not session.answered:
             # Rien n'a abouti : ce n'est pas une synchro « partielle » mais un échec

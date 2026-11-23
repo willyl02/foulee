@@ -830,6 +830,7 @@ def cmd_relais(args: argparse.Namespace) -> int:
                 _say("Aucun compte. Crée le tien : foulee relais admin")
             for row in rows:
                 role = "coach" + (" (admin)" if row["admin"] else "") if row["role"] == "coach" \
+                    else "sans coach (montre)" if row["role"] == "solo" \
                     else f"élève de {(row.get('coach') or {}).get('nom', '?')}"
                 state = "" if row["actif"] else "  [désactivé]"
                 seen = row["derniere_connexion"] or "jamais connecté"

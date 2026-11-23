@@ -124,23 +124,53 @@ export const a_venir = {
   },
 };
 
-// ----------------------------------------------------------------- le mois
-function monthStart(iso) {
+// ------------------------------------------------- la semaine, le mois, l'année
+// Au choix (retenu dans ce navigateur), comme le calendrier des pages coach et élève.
+const VIEWS = [["semaine", "Semaine"], ["mois", "Mois"], ["annee", "Année"]];
+const VIEW_KEY = "foulee-agenda-vue";
+const MONTHS = ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."];
+const MONTHS_LONG = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
+const cap = (text) => text.charAt(0).toUpperCase() + text.slice(1);
+function storedView() {
+  try { const v = localStorage.getItem(VIEW_KEY); return VIEWS.some(([k]) => k === v) ? v : "mois"; } catch (e) { return "mois"; }
+}
+function storeView(v) {
+  try { localStorage.setItem(VIEW_KEY, v); } catch (e) { /* rien à retenir */ }
+}
+
+/** Les jours affichés pour une vue autour du jour choisi : du lundi au dimanche. */
+function periodBounds(view, iso) {
   const d = F.parseDate(iso);
-  return new Date(d.getFullYear(), d.getMonth(), 1);
+  if (view === "semaine") {
+    const start = F.mondayOf(d);
+    return { start, end: F.addDays(start, 6) };
+  }
+  const first = view === "mois" ? new Date(d.getFullYear(), d.getMonth(), 1) : new Date(d.getFullYear(), 0, 1);
+  const last = view === "mois" ? new Date(d.getFullYear(), d.getMonth() + 1, 0) : new Date(d.getFullYear(), 11, 31);
+  return { start: F.mondayOf(first), end: F.addDays(F.mondayOf(last), 6), first, last };
 }
 
-function gridBounds(first) {
-  const start = F.mondayOf(first);
-  const last = new Date(first.getFullYear(), first.getMonth() + 1, 0);
-  const end = F.addDays(F.mondayOf(last), 6);
-  return { start, end };
+function periodName(view, iso) {
+  const d = F.parseDate(iso);
+  if (view === "annee") return String(d.getFullYear());
+  if (view === "mois") return `${cap(MONTHS_LONG[d.getMonth()])} ${d.getFullYear()}`;
+  const start = F.mondayOf(d);
+  const end = F.addDays(start, 6);
+  const left = start.getMonth() === end.getMonth() ? `${start.getDate()}`
+    : `${start.getDate()} ${MONTHS[start.getMonth()]}${start.getFullYear() !== end.getFullYear() ? ` ${start.getFullYear()}` : ""}`;
+  return `${left} – ${end.getDate()} ${MONTHS[end.getMonth()]} ${end.getFullYear()}`;
 }
 
-const monthName = (first) => {
-  const text = F.periodLong(F.isoDate(first), "mois");
-  return text.charAt(0).toUpperCase() + text.slice(1);
-};
+/** Le jour choisi quand on passe à la période voisine : même quantième (ou le dernier du mois), aujourd'hui s'il y tombe. */
+function stepDay(view, iso, step, today) {
+  const d = F.parseDate(iso);
+  if (view === "semaine") return F.isoDate(F.addDays(d, 7 * step));
+  const month = view === "mois" ? new Date(d.getFullYear(), d.getMonth() + step, 1) : new Date(d.getFullYear() + step, d.getMonth(), 1);
+  const span = periodBounds(view, F.isoDate(month));
+  if (today >= F.isoDate(span.first) && today <= F.isoDate(span.last)) return today;
+  const last = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
+  return F.isoDate(new Date(month.getFullYear(), month.getMonth(), Math.min(d.getDate(), last)));
+}
 
 function dayLabel(iso, plans, acts) {
   const parts = [F.dateLong(iso)];
@@ -189,16 +219,19 @@ export const agenda = {
     const today = F.isoDate(new Date());
     const asked = ctx.query?.get("jour");
     let selected = /^\d{4}-\d{2}-\d{2}$/.test(asked || "") ? asked : today;
-    let month = monthStart(selected);
+    let view = storedView();
+    let shown = null; // la période chargée : {view, start, end}
     let data = null;
     body.classList.add("agenda-body");
 
     const vma = Number(ctx.settings?.vma_kmh) || null;
     const load = async () => {
-      const { start, end } = gridBounds(month);
+      const { start, end } = periodBounds(view, selected);
       data = await ctx.get("/api/calendrier", { start: F.isoDate(start), end: F.isoDate(end) });
       data.vma = vma;
+      shown = { view, start: F.isoDate(start), end: F.isoDate(end), key: periodName(view, selected) };
     };
+    const inShown = (iso) => shown && shown.view === view && shown.key === periodName(view, iso);
 
     const remember = () => {  // le jour choisi survit au rechargement de la page, sans redessiner la vue
       const [path, query] = location.hash.split("?");
@@ -218,13 +251,43 @@ export const agenda = {
         ...extra.map((a) => `<span class="aitem is-extra">${activityLine(a)}</span>`),
       ];
       const dots = [...plans.map((e) => `<i class="adot is-${F.escape(e.statut)} is-${F.escape(e.type)}${e.coach ? " is-coach" : ""}"></i>`), ...extra.map(() => `<i class="adot is-extra"></i>`)].slice(0, 4).join("");
-      const classes = ["aday", day.getMonth() !== month.getMonth() ? "out" : "", iso === today ? "today" : "", iso === selected ? "selected" : "",
+      const out = view === "mois" && day.getMonth() !== F.parseDate(selected).getMonth();
+      const classes = ["aday", out ? "out" : "", iso === today ? "today" : "", iso === selected ? "selected" : "",
         plans.some((e) => e.type === "course") ? "has-race" : "", iso < today ? "past" : ""].filter(Boolean).join(" ");
       return `<button type="button" class="${classes}" data-day="${iso}" aria-pressed="${iso === selected}" tabindex="${iso === selected ? 0 : -1}" aria-label="${F.escape(dayLabel(iso, plans, acts))}">
-          <span class="aday-top"><span class="aday-num">${day.getDate()}</span><span class="aday-more" aria-hidden="true" hidden></span></span>
+          <span class="aday-top"><span class="aday-num">${view === "semaine" ? `<span class="aday-dname">${DOW[(day.getDay() + 6) % 7]}</span> ` : ""}${day.getDate()}</span><span class="aday-more" aria-hidden="true" hidden></span></span>
           <span class="aday-items" aria-hidden="true">${items.join("")}</span>
           <span class="aday-dots" aria-hidden="true">${dots}</span>
         </button>`;
+    };
+
+    // À l'année : douze petits mois, une pastille par jour où il y a quelque chose
+    const yearGrid = () => {
+      const year = F.parseDate(selected).getFullYear();
+      const months = [];
+      for (let m = 0; m < 12; m += 1) {
+        const first = new Date(year, m, 1);
+        const last = new Date(year, m + 1, 0);
+        const cells = [];
+        for (let k = 0; k < (first.getDay() + 6) % 7; k += 1) cells.push(`<span class="cy-day out"></span>`);
+        let count = 0;
+        for (let n = 1; n <= last.getDate(); n += 1) {
+          const iso = F.isoDate(new Date(year, m, n));
+          const plans = data.evenements.filter((e) => e.date === iso);
+          const linked = new Set(plans.map((e) => e.seance_id).filter(Boolean));
+          const extra = data.seances.filter((a) => a.date === iso && !linked.has(a.id));
+          const marks = [...plans.map((e) => (e.type === "course" ? "race" : e.statut === "fait" ? "done" : e.statut === "manque" ? "miss"
+            : e.type === "autre" ? "other" : e.coach ? "coach" : "plan")), ...extra.map(() => "extra")];
+          if (marks.length) count += 1;
+          const dots = [...new Set(marks)].slice(0, 3).map((k) => `<i class="cy-dot ${k}"></i>`).join("");
+          cells.push(`<button type="button" class="cy-day${iso === today ? " today" : ""}${iso === selected ? " selected" : ""}${marks.length ? " has" : ""}${iso < today ? " past" : ""}" data-day="${iso}"
+              title="${F.escape(dayLabel(iso, plans, data.seances.filter((a) => a.date === iso)))}"><span class="cy-n">${n}</span><span class="cy-dots">${dots}</span></button>`);
+        }
+        months.push(`<section class="cy-month${today.startsWith(`${year}-${String(m + 1).padStart(2, "0")}`) ? " now" : ""}">
+          <button type="button" class="cy-title" data-month="${F.isoDate(first)}" title="Ouvrir ${MONTHS_LONG[m]} ${year}">${cap(MONTHS_LONG[m])}${count ? `<small>${count} jour${count > 1 ? "s" : ""}</small>` : ""}</button>
+          <div class="cy-grid">${["L", "M", "M", "J", "V", "S", "D"].map((d) => `<span class="cy-dow">${d}</span>`).join("")}${cells.join("")}</div></section>`);
+      }
+      return `<div class="cy agenda-year">${months.join("")}</div>`;
     };
 
     // Dans chaque case, ce qui tient en hauteur ; le reste devient « +n » à côté du quantième
@@ -249,10 +312,11 @@ export const agenda = {
     };
 
     const draw = () => {
-      const { start, end } = gridBounds(month);
+      const { start, end, first, last } = periodBounds(view, selected);
       const days = [];
       for (let d = new Date(start); d <= end; d = F.addDays(d, 1)) days.push(new Date(d));
-      const inMonth = data.evenements.filter((e) => F.parseDate(e.date).getMonth() === month.getMonth());
+      const from = F.isoDate(first || start); const to = F.isoDate(last || end);
+      const inMonth = data.evenements.filter((e) => e.date >= from && e.date <= to);
       const t = { prevues: 0, faites: 0, manquees: 0, a_venir: 0 };
       inMonth.filter((e) => e.type !== "autre").forEach((e) => {
         t.prevues += 1;
@@ -264,17 +328,18 @@ export const agenda = {
       body.innerHTML = `<div class="agenda">
         <div class="agenda-main">
           <div class="agenda-bar">
-            <button class="btn btn-ghost icon-btn" type="button" data-nav="-1" title="Mois précédent" aria-label="Mois précédent">${icon("left")}</button>
-            <h3 class="agenda-month" aria-live="polite">${F.escape(monthName(month))}</h3>
-            <button class="btn btn-ghost icon-btn" type="button" data-nav="1" title="Mois suivant" aria-label="Mois suivant">${icon("right")}</button>
-            ${selected !== today || month.getMonth() !== new Date().getMonth() ? `<button class="btn btn-ghost small" type="button" data-today>Aujourd'hui</button>` : ""}
+            <div class="segmented small agenda-views" role="group" aria-label="Afficher le calendrier">${VIEWS.map(([k, label]) => `<button type="button" data-view="${k}" aria-pressed="${k === view}">${label}</button>`).join("")}</div>
+            <span class="agenda-nav"><button class="btn btn-ghost icon-btn" type="button" data-nav="-1" title="Période précédente" aria-label="Période précédente">${icon("left")}</button>
+            <h3 class="agenda-month" aria-live="polite">${F.escape(periodName(view, selected))}</h3>
+            <button class="btn btn-ghost icon-btn" type="button" data-nav="1" title="Période suivante" aria-label="Période suivante">${icon("right")}</button></span>
+            ${selected !== today ? `<button class="btn btn-ghost small" type="button" data-today>Aujourd'hui</button>` : ""}
             <span class="agenda-legend" aria-hidden="true"><i class="adot is-fait"></i>fait<i class="adot is-manque"></i>manqué<i class="adot is-a_venir"></i>prévu<i class="adot is-course"></i>course<i class="adot is-extra"></i>hors plan</span>
           </div>
           ${data.lie ? "" : `<p class="agenda-hint">${icon("info")}<span>Aucun calendrier relié : seules tes séances faites s'affichent.${ctx.boot.acces === "local" ? ` <a href="#/reglages?section=calendrier">Relier mon calendrier</a> pour voir aussi les séances prévues et les courses.` : ""}</span></p>`}
-          <div class="agenda-grid" aria-label="${F.escape(monthName(month))}">
-            ${DOW.map((d) => `<span class="agenda-dow" aria-hidden="true">${d}</span>`).join("")}
+          ${view === "annee" ? yearGrid() : `<div class="agenda-grid${view === "semaine" ? " is-week" : ""}" aria-label="${F.escape(periodName(view, selected))}">
+            ${view === "semaine" ? "" : DOW.map((d) => `<span class="agenda-dow" aria-hidden="true">${d}</span>`).join("")}
             ${days.map(cell).join("")}
-          </div>
+          </div>`}
         </div>
         <aside class="agenda-day" aria-live="polite">${dayPanel(selected, data, today)}</aside>
       </div>`;
@@ -285,22 +350,20 @@ export const agenda = {
     const select = async (iso, { focus = false } = {}) => {
       selected = iso;
       remember();
-      const wanted = monthStart(iso);
-      if (wanted.getTime() !== month.getTime()) {
-        month = wanted;
+      if (!inShown(iso)) {
         await load();
         draw();
       } else {
-        body.querySelectorAll(".aday").forEach((b) => {
+        body.querySelectorAll(".aday, .cy-day[data-day]").forEach((b) => {
           const on = b.dataset.day === iso;
           b.classList.toggle("selected", on);
-          b.setAttribute("aria-pressed", String(on));
-          b.tabIndex = on ? 0 : -1;
+          if (b.classList.contains("aday")) { b.setAttribute("aria-pressed", String(on)); b.tabIndex = on ? 0 : -1; }
         });
         body.querySelector(".agenda-day").innerHTML = dayPanel(selected, data, today);
         wireDay();
       }
-      if (focus) body.querySelector(`.aday[data-day="${iso}"]`)?.focus();
+      body.querySelector("[data-today]")?.toggleAttribute("hidden", iso === today);
+      if (focus) body.querySelector(`[data-day="${iso}"]`)?.focus();
     };
 
     const wireDay = () => {
@@ -309,23 +372,35 @@ export const agenda = {
 
     const wire = () => {
       body.querySelectorAll("[data-nav]").forEach((b) => b.addEventListener("click", async () => {
-        month = new Date(month.getFullYear(), month.getMonth() + Number(b.dataset.nav), 1);
-        // le jour choisi suit : même quantième (ou le dernier du mois), aujourd'hui s'il tombe dans ce mois
-        const now = new Date();
-        const last = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
-        selected = now.getFullYear() === month.getFullYear() && now.getMonth() === month.getMonth()
-          ? today : F.isoDate(new Date(month.getFullYear(), month.getMonth(), Math.min(F.parseDate(selected).getDate(), last)));
+        selected = stepDay(view, selected, Number(b.dataset.nav), today);
+        remember();
+        await load();
+        draw();
+      }));
+      body.querySelectorAll("[data-view]").forEach((b) => b.addEventListener("click", async () => {
+        if (b.dataset.view === view) return;
+        view = b.dataset.view;
+        storeView(view);
+        await load();
+        draw();
+      }));
+      body.querySelectorAll("[data-month]").forEach((b) => b.addEventListener("click", async () => {
+        view = "mois";
+        storeView(view);
+        const first = b.dataset.month;
+        selected = today.slice(0, 7) === first.slice(0, 7) ? today : first;
         remember();
         await load();
         draw();
       }));
       body.querySelector("[data-today]")?.addEventListener("click", () => select(today, { focus: true }));
-      const grid = body.querySelector(".agenda-grid");
+      const grid = body.querySelector(".agenda-grid, .agenda-year");
       grid.addEventListener("click", (e) => {
         const day = e.target.closest("[data-day]");
         if (day) select(day.dataset.day);
       });
       grid.addEventListener("keydown", (e) => {
+        if (!e.target.closest("[data-day]")) return;
         const step = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 }[e.key];
         if (!step) return;
         e.preventDefault();

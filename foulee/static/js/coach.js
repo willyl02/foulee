@@ -7,6 +7,7 @@
 //   #/coach/proposer              proposer une séance (coach) ; ?groupe=<id>, ?modele=<id> (&edition=1 : le modifier)
 //   #/coach/reglages              groupes de niveau, VMA des élèves, bibliothèque de séances types (coach)
 //   #/coach/partage               ce que je partage avec mon coach (élève)
+//   #/coach/zones                 mes zones FC : celles de ma montre, celles de Foulée (élève)
 // Le relevé des nouveautés (toutes les minutes) met à jour le badge de la colonne et prévient d'un message.
 import * as api from "./api.js";
 import { icon } from "./icons.js";
@@ -16,7 +17,7 @@ import { renderStudent, renderSession } from "./coach-fiche.js";
 import { renderMessages } from "./coach-messages.js";
 import { renderEditor } from "./coach-proposer.js";
 import { renderCoachSettings } from "./coach-reglages.js";
-import { renderMyCoach, renderAccord } from "./coach-eleve.js";
+import { renderMyCoach, renderAccord, renderMyZones } from "./coach-eleve.js";
 
 // ------------------------------------------------------------ relevé
 const watch = { timer: null, unread: 0, repere: null, role: null, toast: null, onBadge: null, busy: false };
@@ -116,6 +117,7 @@ export async function renderCoachPage(page, boot, { toast, onUnlinked, path = "/
     } else if (parts[0] === "seance" && parts[1]) await renderSession(ctx, null, parts.slice(1).join("/"));
     else if (parts[0] === "messages") await renderMessages(ctx);
     else if (parts[0] === "partage") await renderAccord(ctx);
+    else if (parts[0] === "zones") await renderMyZones(ctx);
     else await renderMyCoach(ctx);
   } catch (err) {
     page.innerHTML = `${head(`<h1>${role === "coach" ? "Mes élèves" : "Mon coach"}</h1>`)}${ctx.tabs("")}<div class="co-page">${fail(err.message)}</div>`;
