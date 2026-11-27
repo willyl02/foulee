@@ -1,32 +1,41 @@
-# Présentations et guides de Foulée
+# Le manuel de Foulée
 
-Chaque fichier porte dans son nom la version de Foulée pour laquelle il a été fait (ici la bêta **0.8.2b10**).
-Sur GitHub, le bouton de téléchargement (en haut à droite du fichier) l'enregistre sur ton appareil.
+[**Foulee-manuel.pdf**](Foulee-manuel.pdf) : un seul document pour la présentation, l'installation et
+l'utilisation de Foulée et de Foulée Coach (78 pages, A4). La version de Foulée qu'il décrit est sur sa couverture
+(aujourd'hui la **0.8.3**). Sur GitHub, le bouton de téléchargement, en haut à droite du fichier, l'enregistre sur
+ton appareil.
 
-## Foulée
+| Partie | Ce qu'on y trouve |
+|---|---|
+| 1. Foulée, c'est quoi ? | Ce que fait Foulée, ce qu'il te faut, l'interface |
+| 2. Installer Foulée | Télécharger, installer, premier lancement, clé API Garmin, mises à jour |
+| 3. Foulée au quotidien | Accueil, Aujourd'hui (et le temps par zone FC), calendrier, entraînement, séance, récup, ta course, Mon club, Withings, Strava |
+| 4. Le renfo | Muscles travaillés, équilibre avant / arrière, progression, réglages du renfo |
+| 5. L'Atelier | Séances de course et de renfo, bibliothèque, envoi sur la montre, compte « sans coach » |
+| 6. Tes vues et tes réglages | Vues et tuiles, réglages par thème, zones FC et leurs couleurs, logothèque, Club en ligne, aide |
+| 7. Foulée sur ton téléphone | Tailscale, l'accès depuis le téléphone, le dépannage |
+| 8. Foulée Coach : le principe | Le relais du club, ce qui circule, la sécurité |
+| 9. Côté élève | Rejoindre son coach, partager, Mon coach, la montre, les notifications, les messages |
+| 10. Côté coach | Inviter, Mes élèves, groupes, bibliothèque, fiche, proposer une séance, montre, messages |
 
-- [**Foulee-presentation-beta-testeurs-0.8.2b10.pdf**](Foulee-presentation-beta-testeurs-0.8.2b10.pdf) : la
-  présentation complète (30 pages). Elle montre ce que fait Foulée, puis ses vues une à une : la forme du jour, « Ma séance du jour » avec la
-  météo et le créneau, le calendrier, Mon club, Withings, Strava, le renfo et sa séance sur la montre, l'effet
-  d'entraînement. Suivent les réglages rangés par thème et Club en ligne dans Foulée, l'appel à bêta-testeurs, et enfin le
-  téléchargement, l'installation pas à pas, le premier lancement et la clé API Garmin.
-- [**Foulee-presentation-pages-jpg-0.8.2b10.zip**](Foulee-presentation-pages-jpg-0.8.2b10.zip) : les mêmes pages
-  en images JPG, numérotées dans l'ordre, pour les partager sur Strava ou ailleurs.
-- [**Foulee-sur-ton-telephone-0.8.2b10.pdf**](Foulee-sur-ton-telephone-0.8.2b10.pdf) : ouvrir Foulée sur ton
-  téléphone, comme une appli, avec Tailscale (6 pages).
+L'administration du relais (sur son serveur, en SSH) n'est volontairement pas dans ce manuel.
 
-## Foulée Coach
+Il remplace les documents séparés de la 0.8.2 (présentation, présentation de Foulée Coach, guides de l'élève et du
+coach, « Foulée sur ton téléphone »), qui restent dans l'historique du dépôt.
 
-- [**Foulee-Coach-guide-coach-0.8.2b10.pdf**](Foulee-Coach-guide-coach-0.8.2b10.pdf) : le guide du coach, pas à
-  pas (14 pages). Il couvre l'installation, la connexion au relais, l'invitation des élèves et Mes élèves, puis les groupes de niveau
-  et la bibliothèque de séances, la fiche, le calendrier et l'analyse fraction par fraction. Viennent ensuite la proposition de
-  séance (groupes, touche Lap), l'envoi sur la montre, les messages, le ressenti et les notifications.
-- [**Foulee-Coach-guide-eleve-0.8.2b10.pdf**](Foulee-Coach-guide-eleve-0.8.2b10.pdf) : le guide de l'élève
-  (12 pages). On y rejoint son coach, on choisit ce qu'on partage et on reçoit ses séances jusque sur sa montre. Il présente aussi
-  « Ma séance du jour » et le ressenti, les notifications sur le téléphone et les messages.
-- [**Foulee-Coach-presentation-captures-reelles-0.8.2b10.pdf**](Foulee-Coach-presentation-captures-reelles-0.8.2b10.pdf) :
-  la présentation de Foulée Coach (27 pages, format paysage). Elle explique le principe et l'architecture, les données et la sécurité, puis montre
-  chaque écran du coach et de l'élève, les nouveautés de la 0.8.2 et la feuille de route.
+## Le mettre à jour
 
-Captures réelles du 11 au 16 novembre 2026, sur l'installation de William (coordonnées du club et numéro de licence
-floutés) ; celles des nouveautés de la 0.8.2 viennent de la démo de Foulée, avec des profils fictifs (20 novembre).
+Les sources sont dans [`source/`](source/) : une partie par fichier dans `parts/`, les captures dans `img/`.
+
+```
+cd docs/presentation/source
+uv run --with segno --with pillow --with playwright python build.py
+uv run --with playwright python check.py build/Foulee-manuel.html
+```
+
+`build.py` régénère `Foulee-manuel.pdf` (même nom à chaque version : les liens ne changent pas) et un aperçu PNG de
+chaque page dans `source/build/pages/`. `check.py` signale une page dont le contenu passe sous le pied de page.
+
+À chaque version : changer `VERSION` et `MOIS` dans `source/kit.py`, mettre à jour les pages concernées, remplacer
+les captures. Une capture n'arrive dans `img/` qu'une fois floutée : coordonnées du club, numéro de licence, nom de
+famille, sujet ntfy, clés et jetons n'ont rien à faire dans le dépôt public.

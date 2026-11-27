@@ -1,0 +1,201 @@
+/* Guides Foulée Coach : A4 portrait, mêmes repères que l'appli et les présentations (Barlow, balise GR blanc-rouge). */
+@page { size: 210mm 297mm; margin: 0; }
+:root {
+  --page: #f2f5f3; --surface: #fcfdfc; --surface-2: #e9eeeb; --ink: #15201b; --ink-2: #4a5751; --muted: #76827c;
+  --hair: #dce3df; --red: #d3263a; --night: #101614; --night-2: #182020; --night-ink: #e8eeeb; --night-ink-2: #aeb9b4;
+  --green: #0b6b2a;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body { font-family: "Barlow", system-ui, sans-serif; color: var(--ink); -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  font-variant-numeric: tabular-nums; }
+.page { width: 210mm; height: 297mm; position: relative; overflow: hidden; break-after: page; background: var(--page);
+  padding: 12mm 14mm 9mm; display: flex; flex-direction: column; }
+.page:last-child { break-after: auto; }
+
+.top { display: flex; align-items: center; justify-content: space-between; font-size: 9pt; color: var(--ink-2); }
+.brand { display: inline-flex; align-items: center; gap: 2.2mm; font-family: "Barlow Semi Condensed"; font-weight: 600; font-size: 12pt; color: var(--ink); }
+.coach-word { color: var(--red); }
+.balise { display: inline-grid; grid-template-rows: 1fr 1fr; width: 5.2mm; height: 3.8mm; border-radius: 0.6mm; overflow: hidden;
+  box-shadow: 0 0 0 0.25mm var(--hair); }
+.balise i:first-child { background: #fff; }
+.balise i:last-child { background: var(--red); }
+.crumb { color: var(--muted); }
+.kicker { display: inline-block; margin-top: 6mm; padding: 0.9mm 2.6mm; border-radius: 9mm; background: var(--red); color: #fff;
+  font-family: "Barlow Semi Condensed"; font-weight: 600; font-size: 10pt; letter-spacing: 0.02em; align-self: flex-start; }
+h1 { font-family: "Barlow Semi Condensed"; font-weight: 600; font-size: 23pt; line-height: 1.05; margin: 2.6mm 0 1.6mm; }
+.lead { font-size: 11pt; line-height: 1.4; color: var(--ink-2); margin: 0 0 5mm; }
+.content { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 4.5mm; }
+.foot { display: flex; justify-content: space-between; font-size: 8pt; color: var(--muted); padding-top: 2.6mm; border-top: 0.25mm solid var(--hair); }
+h2 { font-family: "Barlow Semi Condensed"; font-weight: 600; font-size: 13.5pt; margin: 0 0 2mm; display: flex; align-items: center; gap: 2mm; }
+h2 svg { color: var(--red); flex: none; }
+p { margin: 0; }
+b { font-weight: 600; }
+
+/* Pas à pas */
+.howto { list-style: none; margin: 0; padding: 0; display: grid; gap: 3.2mm; }
+.howto li { display: grid; grid-template-columns: 7mm 1fr; gap: 3mm; align-items: start; }
+.howto .n { width: 7mm; height: 7mm; border-radius: 50%; background: var(--red); color: #fff; display: grid; place-items: center;
+  font-family: "Barlow Semi Condensed"; font-weight: 600; font-size: 11.5pt; }
+.howto b { display: block; font-size: 11pt; margin: 0.6mm 0 0.6mm; }
+.howto p { font-size: 10.3pt; line-height: 1.42; color: var(--ink-2); }
+.howto.compact { gap: 2.4mm; }
+.chip { display: inline-block; padding: 0 1.6mm; border-radius: 1.2mm; background: var(--surface); box-shadow: 0 0 0 0.25mm var(--hair);
+  font-weight: 600; color: var(--ink); font-size: 9.6pt; white-space: nowrap; }
+.code { font-family: "Cascadia Mono", Consolas, monospace; font-size: 9.2pt; background: var(--surface-2); padding: 0.2mm 1.2mm; border-radius: 1mm; color: var(--ink); white-space: nowrap; }
+
+/* Captures */
+.shot { position: relative; flex: none; align-self: center; }
+.shot img { display: block; width: 100%; height: 100%; border-radius: 2.4mm;
+  box-shadow: 0 0 0 0.3mm rgba(21, 32, 27, 0.35), 0 2mm 6mm rgba(21, 32, 27, 0.2); }
+.shot.light img { box-shadow: 0 0 0 0.3mm rgba(21, 32, 27, 0.25), 0 2mm 6mm rgba(21, 32, 27, 0.14); }
+.mk, .num { width: 6.2mm; height: 6.2mm; border-radius: 50%; background: var(--red); color: #fff; display: grid; place-items: center;
+  font-family: "Barlow Semi Condensed"; font-weight: 600; font-size: 10.5pt; line-height: 1; }
+.mk { position: absolute; transform: translate(-50%, -50%); box-shadow: 0 0 0 0.5mm #fff, 0 0.8mm 2.4mm rgba(0, 0, 0, 0.5); }
+.cap { font-size: 9.2pt; color: var(--muted); margin-top: 1.8mm; text-align: center; }
+.legend { list-style: none; margin: 0; padding: 0; display: grid; gap: 2.4mm; }
+.legend li { display: grid; grid-template-columns: 6.2mm 1fr; gap: 2.6mm; align-items: start; font-size: 10.2pt; line-height: 1.38; }
+.legend li > span:last-child { padding-top: 0.5mm; }
+.legend.cols { grid-template-columns: 1fr 1fr; column-gap: 7mm; }
+
+.row { display: flex; gap: 6mm; align-items: flex-start; }
+.row > .grow { flex: 1; min-width: 0; }
+.box { background: var(--surface); border-radius: 2.6mm; padding: 3.4mm 4mm; box-shadow: 0 0 0 0.25mm var(--hair); }
+.box p, .box li { font-size: 10.2pt; line-height: 1.42; color: var(--ink-2); }
+.box ul { margin: 0; padding-left: 4.5mm; display: grid; gap: 1.2mm; }
+.box.warn { box-shadow: inset 1.2mm 0 0 var(--red), 0 0 0 0.25mm var(--hair); }
+.box.dark { background: var(--night); color: var(--night-ink); box-shadow: none; }
+.box.dark p, .box.dark li { color: var(--night-ink-2); }
+.box.dark h2 svg { color: #ff6b7c; }
+.note { padding: 2.8mm 3.4mm; border-radius: 2mm; background: var(--surface-2); font-size: 9.8pt; line-height: 1.4; color: var(--ink-2);
+  display: flex; gap: 2.2mm; align-items: flex-start; }
+.note svg { flex: none; margin-top: 0.4mm; color: var(--ink-2); }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 4.5mm; }
+
+/* QR et lien */
+.linkcard { display: flex; align-items: center; gap: 4mm; padding: 3mm 3.6mm; border-radius: 2.6mm; background: var(--night); color: var(--night-ink); }
+.linkcard .lc-text { flex: 1; min-width: 0; display: grid; gap: 0.8mm; }
+.linkcard .lc-label { font-size: 9.4pt; color: var(--night-ink-2); display: flex; align-items: center; gap: 1.6mm; }
+.linkcard .lc-url { font-weight: 600; font-size: 11.5pt; overflow-wrap: anywhere; }
+.linkcard .lc-note { font-size: 8.8pt; color: var(--night-ink-2); }
+.linkcard .lc-qr { width: 22mm; height: 22mm; flex: none; background: #fff; border-radius: 1.4mm; padding: 0.8mm; }
+.linkcard .lc-qr svg { width: 100%; height: 100%; display: block; }
+
+/* Couverture */
+.cover { background: var(--night); color: var(--night-ink); padding: 16mm 15mm 12mm; }
+.cover .top, .cover .crumb { color: var(--night-ink-2); }
+.cover .brand { color: var(--night-ink); }
+.cover .logo { display: flex; align-items: center; gap: 5mm; margin-top: 14mm; font-family: "Barlow Semi Condensed"; font-weight: 600;
+  font-size: 40pt; line-height: 0.95; }
+.cover .balise.big { width: 16mm; height: 11.5mm; border-radius: 1.2mm; box-shadow: none; }
+.cover .title { font-family: "Barlow Semi Condensed"; font-weight: 600; font-size: 30pt; margin: 6mm 0 2mm; color: #fff; }
+.cover .tagline { font-size: 13pt; line-height: 1.4; color: var(--night-ink-2); max-width: 165mm; margin: 0 0 8mm; }
+.cover .hero { width: 100%; height: 86mm; object-fit: cover; object-position: left top; border-radius: 2.6mm; box-shadow: 0 0 0 0.3mm rgba(255, 255, 255, 0.14), 0 3mm 10mm rgba(0, 0, 0, 0.5); }
+.cover .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5mm; margin-top: 8mm; }
+.cover .panel { background: var(--night-2); border-radius: 2.6mm; padding: 4mm 4.4mm; }
+.cover .panel h2 { color: #fff; font-size: 12.5pt; }
+.cover .panel h2 svg { color: #ff6b7c; }
+.cover .checks { list-style: none; margin: 0; padding: 0; display: grid; gap: 1.8mm; }
+.cover .checks li { display: grid; grid-template-columns: 5mm 1fr; gap: 2mm; font-size: 10.2pt; line-height: 1.38; color: var(--night-ink); }
+.cover .checks svg { color: #4cc27a; margin-top: 0.3mm; }
+.cover .toc { list-style: none; margin: 0; padding: 0; display: grid; gap: 1.6mm; }
+.cover .toc li { display: grid; grid-template-columns: 6mm 1fr auto; gap: 2mm; font-size: 10.2pt; align-items: baseline; color: var(--night-ink); }
+.cover .toc .n { color: #ff6b7c; font-family: "Barlow Semi Condensed"; font-weight: 600; }
+.cover .toc .pg { color: var(--night-ink-2); font-size: 9pt; }
+.cover .meta { margin-top: auto; font-size: 9pt; color: var(--night-ink-2); line-height: 1.45; }
+
+/* Tableau */
+table.t { width: 100%; border-collapse: separate; border-spacing: 0; background: var(--surface); border-radius: 2.4mm; overflow: hidden;
+  box-shadow: 0 0 0 0.25mm var(--hair); font-size: 9.8pt; }
+table.t th { text-align: left; font-weight: 600; font-size: 8.4pt; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted);
+  padding: 2mm 3mm; border-bottom: 0.25mm solid var(--hair); }
+table.t td { padding: 1.7mm 3mm; border-bottom: 0.25mm solid var(--hair); vertical-align: top; color: var(--ink); }
+table.t tr:last-child td { border-bottom: 0; }
+table.t .sub { color: var(--muted); font-size: 8.8pt; }
+.tag { display: inline-block; padding: 0.2mm 1.8mm; border-radius: 9mm; font-size: 8.8pt; font-weight: 600; white-space: nowrap; }
+.tag.ok { background: #d8f0df; color: #0b6b2a; }
+.tag.opt { background: #e3ecfb; color: #1e5bb8; }
+.tag.no { background: #fbe1e4; color: #a01d2d; }
+.term { background: var(--night); color: var(--night-ink); border-radius: 2.4mm; padding: 3mm 3.6mm; display: grid; gap: 1mm; }
+.term code { font-family: "Cascadia Mono", Consolas, monospace; font-size: 9.2pt; color: #fff; }
+.term span { font-size: 8.8pt; color: var(--night-ink-2); margin-bottom: 1.2mm; }
+/* Guide « Foulée sur ton téléphone » */
+.telcover { display: grid; grid-template-columns: 1fr 58mm; gap: 8mm; align-items: start; margin-top: 4mm; }
+.telcover .logo { margin-top: 8mm; }
+.telcover .phone { width: 58mm; border-radius: 6mm; border: 1.6mm solid #2a3431; box-shadow: 0 3mm 10mm rgba(0, 0, 0, 0.55); display: block; }
+.flow { display: flex; align-items: center; gap: 3mm; margin-top: 4mm; flex-wrap: wrap; }
+.flow span { display: inline-flex; align-items: center; gap: 2mm; padding: 2.2mm 3.4mm; border-radius: 2.4mm; background: var(--night-2); }
+.flow span b { font-size: 10.5pt; color: #fff; }
+.flow span svg { color: #ff6b7c; }
+.flow i { font-style: normal; font-size: 9pt; color: var(--night-ink-2); padding: 0 1mm; border-bottom: 0.4mm dashed #4cc27a; }
+.cover .title .ver { display: inline-block; font-family: "Barlow"; font-weight: 600; font-size: 13pt; vertical-align: 0.35em; margin-left: 3.5mm;
+  padding: 0.8mm 3.2mm; border-radius: 99px; background: #d3263a; color: #fff; letter-spacing: 0.02em; }
+.shot.full { margin-left: auto; margin-right: auto; }
+.term .term-foot { margin: 1mm 0 0; font-style: italic; }
+
+/* ========== Manuel unique : couverture, sommaire, intercalaires ========== */
+.page { background: var(--page); }
+.foot .pno { font-variant-numeric: tabular-nums; }
+
+/* Couverture du manuel */
+.mcover { background: var(--night); color: var(--night-ink); padding: 16mm 15mm 11mm; }
+.mcover .top, .mcover .crumb { color: var(--night-ink-2); }
+.mcover .brand { color: var(--night-ink); }
+.mcover .logo { display: flex; align-items: center; gap: 5mm; margin-top: 10mm;
+  font-family: "Barlow Semi Condensed"; font-weight: 600; font-size: 46pt; line-height: 0.95; }
+.mcover .balise.big { width: 18mm; height: 13mm; border-radius: 1.2mm; box-shadow: none; }
+.mcover .title { font-family: "Barlow Semi Condensed"; font-weight: 600; font-size: 27pt; margin: 7mm 0 2mm; color: #fff; }
+.mcover .title .ver { display: inline-block; font-family: "Barlow"; font-weight: 600; font-size: 12.5pt; vertical-align: 0.35em;
+  margin-left: 3.5mm; padding: 0.8mm 3.2mm; border-radius: 99px; background: var(--red); color: #fff; }
+.mcover .tagline { font-size: 12.5pt; line-height: 1.42; color: var(--night-ink-2); max-width: 168mm; margin: 0 0 7mm; }
+.mcover .hero { width: 100%; height: 78mm; object-fit: cover; object-position: left top; border-radius: 2.6mm;
+  box-shadow: 0 0 0 0.3mm rgba(255,255,255,.14), 0 3mm 10mm rgba(0,0,0,.5); }
+.mcover .strip { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4mm; margin-top: 7mm; }
+.mcover .strip div { background: var(--night-2); border-radius: 2.4mm; padding: 3.2mm 3.6mm; }
+.mcover .strip b { display: block; font-size: 10.6pt; color: #fff; margin-bottom: 0.8mm; }
+.mcover .strip p { font-size: 9.2pt; line-height: 1.35; color: var(--night-ink-2); }
+.mcover .meta { margin-top: auto; font-size: 9pt; color: var(--night-ink-2); line-height: 1.45; }
+
+/* Sommaire */
+.sommaire h1 { margin-bottom: 4mm; }
+.toc-parts { list-style: none; margin: 0; padding: 0; display: grid; gap: 2.6mm; }
+.toc-parts > li { display: grid; grid-template-columns: 15mm 1fr auto; gap: 3mm; align-items: baseline;
+  background: var(--surface); border-radius: 2.4mm; padding: 2.8mm 3.6mm; box-shadow: 0 0 0 .25mm var(--hair); }
+.toc-parts .pn { font-family: "Barlow Semi Condensed"; font-weight: 600; font-size: 10.5pt; color: var(--red); }
+.toc-parts .tt { font-size: 11.4pt; font-weight: 600; }
+.toc-parts .tt small { display: block; font-weight: 400; font-size: 9.6pt; color: var(--ink-2); margin-top: 0.6mm; }
+.toc-parts .pg { font-size: 9.6pt; color: var(--muted); white-space: nowrap; }
+
+/* Intercalaire de partie */
+.divider { background: var(--night); color: var(--night-ink); justify-content: flex-start; }
+.divider .top, .divider .crumb { color: var(--night-ink-2); }
+.divider .brand { color: var(--night-ink); }
+.divider .foot { color: var(--night-ink-2); border-top-color: rgba(255,255,255,.14); margin-top: auto; }
+.divider .dv-body { display: flex; flex-direction: column; margin-top: 22mm; }
+.divider .dv-no { font-family: "Barlow Semi Condensed"; font-weight: 600; font-size: 11pt; color: #ff6b7c;
+  letter-spacing: .06em; text-transform: uppercase; }
+.divider h1 { font-size: 34pt; color: #fff; margin: 2mm 0 3mm; }
+.divider .lead { color: var(--night-ink-2); font-size: 12.5pt; max-width: 160mm; margin-bottom: 6mm; }
+.divider .checks { list-style: none; margin: 0 0 9mm; padding: 0; display: grid; gap: 2mm; max-width: 160mm; }
+.divider .checks li { display: grid; grid-template-columns: 5mm 1fr; gap: 2.4mm; font-size: 10.6pt; line-height: 1.38; color: var(--night-ink); }
+.divider .checks svg { color: #4cc27a; margin-top: .3mm; }
+.divider .shot { align-self: center; }
+.divider .shot img { box-shadow: 0 0 0 .3mm rgba(255,255,255,.16), 0 3mm 9mm rgba(0,0,0,.55); }
+
+/* Cartes en grille */
+.cards { display: grid; gap: 3.4mm; }
+.cards.two { grid-template-columns: 1fr 1fr; }
+.cards.three { grid-template-columns: repeat(3, 1fr); }
+.cards.four { grid-template-columns: repeat(4, 1fr); }
+.card { background: var(--surface); border-radius: 2.4mm; padding: 3mm 3.4mm; box-shadow: 0 0 0 .25mm var(--hair); }
+.card svg { color: var(--red); margin-bottom: 1.2mm; }
+.card b { display: block; font-size: 10.4pt; margin-bottom: 1mm; }
+.card p { font-size: 9.5pt; line-height: 1.38; color: var(--ink-2); }
+.cards.four .card b { font-size: 9.8pt; }
+.cards.four .card p { font-size: 9pt; }
+
+/* Nuancier des zones */
+.zbar { display: grid; grid-template-columns: repeat(5, 1fr); gap: 2mm; }
+.zbar div { border-radius: 1.8mm; padding: 2.4mm 2mm; color: #fff; text-align: center; }
+.zbar b { display: block; font-size: 10.4pt; }
+.zbar span { font-size: 8.6pt; opacity: .92; }
