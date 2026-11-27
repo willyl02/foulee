@@ -18,12 +18,12 @@ def part5(D):
             "Reprendre une séance, la modifier, l'enregistrer sous un autre nom",
             "L'envoi sur ta montre, à la date que tu choisis",
             "Et si tu n'as pas de coach : le compte « sans coach »"],
-           img="n83-atelier-course")
+           img="v-atelier-course")
 
     D.page("Volet de gauche › <b>Atelier</b>", "L'Atelier, en deux onglets",
            "L'Atelier s'ouvre depuis le volet de gauche. Deux onglets : « Course » pour les séances de course à pied, "
            "« Renfo » pour la musculation. Dans les deux cas, le principe est le même : tu composes, tu gardes, tu envoies.",
-           row(shot("n83-rail", max_w=26, max_h=92, cap="Dans le volet de gauche"),
+           row(shot("v-rail", max_w=30, max_h=116, cap="Dans le volet de gauche"),
                howto([
                    (1, "Compose ta séance", fr("Un titre, puis des blocs : échauffement, répétitions, récupération, retour "
                                                "au calme. Chaque bloc a sa durée (ou sa distance) et son intensité.")),
@@ -42,13 +42,14 @@ def part5(D):
     D.page("Atelier › <b>Course</b>", "Une séance de course, bloc par bloc",
            "Comme un coach : des blocs mis bout à bout, avec une intensité donnée en pourcentage de ta VMA, en allure ou "
            "en zone de FC. Foulée traduit tout en allures réelles.",
-           shot("n83-atelier-course", max_w=170, max_h=116,
-                cap="Une séance de VMA courte : échauffement, 2 × (6 × 30 s / 30 s), retour au calme.")
+           shot("v-atelier-course", max_w=170, max_h=124,
+                cap="« VMA courte 10 × 400 m », une séance toute faite : le déroulé à gauche, ce que verra ta montre à droite.")
            + ul([
                "<b>Les blocs</b> : échauffement, effort, récupération, répétitions (un groupe qui se répète), retour au calme.",
                "<b>L'intensité</b> : en pourcentage de ta VMA, en allure au kilomètre, ou en zone de fréquence cardiaque. "
                "L'aperçu montre toujours l'allure qui en découle, d'après ta VMA du moment.",
-               "<b>Des exemples prêts à partir</b> : VMA courte, 30/30, seuil, côtes, sortie longue… À prendre tel quel, ou "
+               "<b>Des séances toutes faites</b> : footing en endurance fondamentale, seuil 3 × 10 min, VMA courte 10 × 400 m, "
+               "fractionné 30/30, sortie longue progressive… À prendre telles quelles, ou "
                "à modifier.",
                "<b>Le total</b> : durée et distance estimées, pour vérifier que la séance tient dans ton créneau.",
            ]))
@@ -56,17 +57,17 @@ def part5(D):
     D.page("Atelier › <b>Renfo</b>", "Une séance de renfo, à partir d'un modèle",
            "Sept séances toutes faites, choisies pour les coureurs, et réglées sur ton niveau et ton matériel "
            "(Réglages › Entraînement › Renfo). Tu les prends telles quelles, ou tu les modifies.",
-           two(shot("n83-atelier-renfo", max_w=86, max_h=78, cap="Les modèles, et l'équilibre de la séance"),
-               shot("n83-atelier-renfo-done", max_w=86, max_h=78, cap="La séance composée, prête à envoyer"))
+           shot("v-atelier-renfo", max_w=150, max_h=122, cap="« Chaîne postérieure », une séance toute faite : l’équilibre de la séance se calcule en direct, à droite.")
            + ul([
-               "<b>Les modèles</b> : chaîne postérieure, bas du corps, tronc, haut du corps, corps entier, séance courte, "
-               "séance d'avant-course.",
+               "<b>Les séances toutes faites</b> : renfo coureur express, chaîne postérieure, gainage du coureur, pieds, chevilles "
+               "et mollets, trail (cuisses et descentes), haut du corps et posture, avec haltères.",
                "<b>L'équilibre en direct</b> : à chaque exercice ajouté ou retiré, Foulée recalcule le rapport avant / "
                "arrière de la séance et le place sur ton échelle cible.",
                "<b>Chaque exercice</b> : séries, répétitions (ou durée), récup, et le matériel qu'il demande. Un exercice "
                "que ton matériel ne permet pas est signalé.",
                "<b>Échauffement et étirements</b> : ajoutés au début et à la fin si tu l'as choisi dans tes réglages.",
-               "<b>Ta bibliothèque</b> : jusqu'à 60 séances gardées, à rouvrir, modifier et réenregistrer sous un autre nom.",
+               "<b>D'après une séance faite</b> : reprends un renfo que tu as fait (exercices, séries, charges) pour le refaire "
+               "ou l'ajuster. Et « Garder dans mes séances » range la tienne avec les autres, jusqu'à 60.",
            ]))
 
     D.page("Atelier › <b>Envoyer</b>", "Envoyer ta séance sur ta montre",
@@ -114,8 +115,8 @@ def part6(D):
             "Les réglages par thème, et la recherche",
             "Les zones de FC, et les couleurs des zones",
             "La logothèque : le logo de ton club, partout dans Foulée",
-            "Le site de ton club dans Foulée, l'aide intégrée et tes retours"],
-           img="beta-reglages")
+            "Le site de ton club et tes sites externes, l'aide intégrée et tes retours"],
+           img="v-reglages")
 
     steps = [
         (1, "Crée la vue", fr("« + Nouvelle vue » dans le volet de gauche : un nom, une icône.")),
@@ -135,13 +136,13 @@ def part6(D):
 
     D.page("<b>Réglages</b>", "Des réglages rangés par thème",
            "Cinq thèmes, comme dans les réglages de Windows ou du Mac, et une recherche qui va droit à la bonne rubrique.",
-           shot("beta-reglages", [(1, 520, 720), (2, 1080, 350), (3, 380, 1006)], 176, 98)
+           shot("v-reglages", [(1, 272, 300), (2, 712, 123), (3, 200, 580)], 176, 108)
            + legend([
                "Cinq thèmes : Moi, Entraînement, Connexions, Club et coach, Application.",
                "Le thème choisi et ses rubriques (ici Connexions : Garmin, Withings, Strava, calendrier). Chaque changement "
                "s'enregistre tout seul.",
-               "La colonne de gauche en trois parties, séparées par un trait : tes vues, l'application partenaire, ta page "
-               "coach. Glisse une vue pour changer l'ordre (ou Alt + flèche).",
+               "La colonne de gauche en parties séparées par un trait : tes vues, le site de ton club et tes sites externes, "
+               "puis l'Atelier et ta page coach. Glisse une vue pour changer l'ordre (ou Alt + flèche).",
            ])
            + note("Sur le téléphone, la liste des thèmes d'abord, puis le détail. Une flèche, en bas à droite, remonte en "
                   "haut de la page."))
@@ -150,12 +151,12 @@ def part6(D):
            "Nouveau dans la 0.8.3 : les zones prennent les couleurs de Garmin Connect, et tu peux en changer. Partout dans "
            "Foulée — tableaux du temps par zone, graphiques, barres — les mêmes couleurs veulent dire la même chose.",
            zbar()
-           + row(shot("n83l-reglages-zones-light", max_w=94, max_h=64, cap="Réglages › Entraînement › Zones FC"),
+           + row(shot("v-reglages-zones", max_w=96, max_h=80, cap="Réglages › Entraînement › Zones FC"),
                  ul([
-                     "<b>Les bornes</b> : par pourcentage de ta FC max, ou de ta réserve cardiaque (FC max moins FC de "
-                     "repos). Foulée dit à chaque fois quelle méthode il applique.",
-                     "<b>Les couleurs</b> : celles de Garmin par défaut (gris, bleu, vert, orange, rouge), les anciens "
-                     "bleus de Foulée, ou les tiennes.",
+                     "<b>Les bornes</b> : celles de ta montre (FC max et FC de repos relues à chaque synchro), ou réglées dans "
+                     "Foulée : % de la FC max, de la réserve cardiaque, du seuil, ou à la main.",
+                     "<b>Les couleurs</b> : « Comme Garmin » par défaut (gris, bleu, vert, orange, rouge), le « Dégradé de "
+                     "bleus » des premières versions, ou « À mon goût », une couleur par zone.",
                      "<b>Clair et sombre</b> : chaque jeu a sa version pour le thème clair et pour le thème sombre, pour "
                      "rester lisible la nuit.",
                  ]), grow=1))
@@ -164,8 +165,8 @@ def part6(D):
            "Nouveau dans la 0.8.3. Les logos vivent dans une logothèque : ceux livrés avec Foulée, et ceux que tu importes "
            "et nommes. Tu choisis ensuite lequel s'affiche dans « Mon club », dans le bandeau d'accueil et pour le site de "
            "ton club.",
-           two(shot("n83l-club-import-1", max_w=84, max_h=52, cap="Le menu déroulant de la logothèque"),
-               shot("n83l-home-light", max_w=84, max_h=52, cap="Le logo dans le bandeau d'accueil"))
+           shot("v-logotheque", max_w=150, max_h=30, cap="Réglages › Club et coach › Mon club : le logo, choisi dans la logothèque.")
+           + shot("v-home-banner", max_w=176, max_h=24, cap="Et le même logo dans le bandeau de l’Accueil.")
            + ul([
                "<b>Importer</b> : un PNG à fond transparent, carré, 500 × 500 pixels de préférence. Foulée garde la "
                "transparence, retire les marges vides et le range sur ton PC.",
@@ -180,7 +181,7 @@ def part6(D):
     D.view("Volet de gauche › <b>Club en ligne</b>", "Le site de ton club, dans Foulée",
            "Réglages › Club et coach › Application partenaire. Une case, et le site de ton club s'ouvre dans Foulée, avec "
            "son entrée dans la colonne de gauche.",
-           "b-partenaire", [(408, 1008), (1988, 177), (2120, 177), (2373, 177), (2628, 177), (1360, 952)], [
+           "v-partenaire", [(200, 542), (1172, 100), (1260, 100), (1395, 100), (500, 45), (900, 300)], [
                "Son entrée, entre deux traits, sous « Nouvelle vue ».",
                "Précédent, suivant…",
                "… et recharger.",
@@ -189,6 +190,20 @@ def part6(D):
                "par exemple) ou un autre site.",
                "Le site : tu t'y connectes avec ton compte, comme d'habitude.",
            ], max_w=176, max_h=104, cols=True)
+
+    D.page("Réglages › Club et coach › <b>Sites externes</b>", "Tes sites externes, dans Foulée",
+           "En plus du site de ton club : d'autres sites, la FFA, ta ligue, un site de course, la plateforme de ton coach… "
+           "Chacun a son entrée dans la colonne de gauche, sous le site du club, avec son logo si tu veux.",
+           shot("v-sites-externes", max_w=150, max_h=94, cap="Réglages › Club et coach › Sites externes : ici Campus Coach et Strava.")
+           + ul([
+               "<b>Ajouter un site</b> : un nom pour le menu, son adresse, puis « Ajouter le site ». Huit sites au plus.",
+               "<b>Son logo</b> : un PNG carré (ou presque), de 64 × 64 à 512 × 512 pixels, 200 Ko au plus, fond "
+               "transparent conseillé. Sans logo, un petit globe. Il reste sur ton PC.",
+               "<b>Dans la colonne de gauche</b> : coche-le ou décoche-le, change l'ordre avec la flèche, « Essayer » "
+               "l'ouvre pour vérifier l'adresse.",
+               "<b>Un site qui refuse de s'afficher dans Foulée</b> ? Comme pour le site du club, « Ouvrir dans le "
+               "navigateur » l'ouvre à part.",
+           ]))
 
     D.page("Volet de gauche › <b>Aide et FAQ</b> · <b>Un bug, une idée ?</b>", "L'aide intégrée, et un bouton pour tes retours",
            "Foulée embarque son aide : 127 questions, rangées par thème, avec une recherche. Et un bouton pour dire ce qui "

@@ -46,7 +46,7 @@ def cover(D):
   <p class="tagline">{fr("Présentation, installation et utilisation de Foulée, le tableau de bord des coureurs qui tourne sur "
                           "ton PC, et de Foulée Coach, pour l'élève comme pour le coach. Un seul document, mis à jour à "
                           "chaque version.")}</p>
-  <img class="hero" src="../img/accueil-haut.jpg" alt="">
+  <img class="hero" src="../img/v-overview.jpg" alt="">
   <div class="strip">{strip}</div>
   <p class="meta">{fr("Captures réelles de Foulée (données personnelles floutées) et profils de démonstration. Foulée est un "
                       "projet personnel, gratuit, sans compte et sans publicité : github.com/willyl02/foulee. "

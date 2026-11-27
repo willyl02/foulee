@@ -14,7 +14,7 @@ arrière-plan, avec son icône près de l'horloge ; **sur Mac** (bêta), c'est u
 Applications, avec son icône dans la barre des menus (section 1 bis). Installé sur un serveur à la maison,
 il s'ouvre aussi **sur ton téléphone**, de partout, comme une appli (section 9).
 
-**Le manuel** (PDF, 78 pages) : la présentation, l'installation pas à pas, la clé API Garmin,
+**Le manuel** (PDF, 79 pages) : la présentation, l'installation pas à pas, la clé API Garmin,
 chaque vue et chaque réglage, l'Atelier, Foulée sur ton téléphone, et Foulée Coach côté élève et côté coach :
 [docs/presentation/Foulee-manuel.pdf](docs/presentation/Foulee-manuel.pdf).
 

@@ -8,7 +8,7 @@ def part1(D):
            ["Ce que Foulée fait, et ce qu'il ne fait pas",
             "Ce qu'il te faut pour commencer",
             "L'interface en un coup d'œil"],
-           img="overview")
+           img="v-overview")
 
     # --- En bref ---
     grid = cards([
@@ -43,16 +43,18 @@ def part1(D):
     # --- L'interface ---
     D.page("L'interface", "L'interface en un coup d'œil",
            "Tes vues à gauche, leurs tuiles à droite. Clair le jour, sombre la nuit (pour les levers à 4 h).",
-           shot("overview", [(1, 250, 268), (2, 192, 615), (3, 1050, 150), (4, 1320, 150), (5, 1496, 150),
-                             (6, 1168, 170), (7, 292, 905), (8, 292, 1042)], 182, 112)
+           shot("v-overview", [(1, 205, 170), (2, 175, 484), (3, 200, 582), (4, 110, 681), (5, 1255, 75), (6, 1530, 75),
+                               (7, 955, 150), (8, 800, 150), (9, 30, 735), (10, 30, 867)], 182, 112)
            + legend([
                "Le volet de gauche : tes vues. Chacune répond à une question : ma forme, ma semaine, ma course…",
                "« Nouvelle vue » : crée-en autant que tu veux.",
-               "La période de tous les graphiques, de 7 jours à 2 ans.",
-               "« Modifier la vue » : ajoute, déplace et redimensionne les tuiles.",
+               "Le site de ton club et tes sites externes (Campus Coach, Strava…), ouverts dans Foulée.",
+               "L'Atelier, pour construire tes séances de course et de renfo (partie 5).",
+               "« Modifier la vue » : ajoute, déplace et redimensionne les tuiles ; la période des graphiques est juste à côté.",
                "Plusieurs profils : chacun ses données, ses vues et ses réglages.",
                "Ta journée : ton poste, le compte à rebours de ta course, ton club, la dernière synchro.",
-               "L'aide intégrée (127 questions) et le bouton « Un bug, une idée ? ».",
+               "Le logo de ton club, dans le bandeau d'accueil.",
+               "L'aide intégrée et le bouton « Un bug, une idée ? ».",
                "La synchro avec Garmin (et Withings, Strava, ton calendrier si tu les branches) : automatique, ou d'un clic.",
            ], cols=True))
 

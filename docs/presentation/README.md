@@ -1,7 +1,7 @@
 # Le manuel de Foulée
 
 [**Foulee-manuel.pdf**](Foulee-manuel.pdf) : un seul document pour la présentation, l'installation et
-l'utilisation de Foulée et de Foulée Coach (78 pages, A4). La version de Foulée qu'il décrit est sur sa couverture
+l'utilisation de Foulée et de Foulée Coach (79 pages, A4). La version de Foulée qu'il décrit est sur sa couverture
 (aujourd'hui la **0.8.3**). Sur GitHub, le bouton de téléchargement, en haut à droite du fichier, l'enregistre sur
 ton appareil.
 
@@ -12,7 +12,7 @@ ton appareil.
 | 3. Foulée au quotidien | Accueil, Aujourd'hui (et le temps par zone FC), calendrier, entraînement, séance, récup, ta course, Mon club, Withings, Strava |
 | 4. Le renfo | Muscles travaillés, équilibre avant / arrière, progression, réglages du renfo |
 | 5. L'Atelier | Séances de course et de renfo, bibliothèque, envoi sur la montre, compte « sans coach » |
-| 6. Tes vues et tes réglages | Vues et tuiles, réglages par thème, zones FC et leurs couleurs, logothèque, Club en ligne, aide |
+| 6. Tes vues et tes réglages | Vues et tuiles, réglages par thème, zones FC et leurs couleurs, logothèque, Club en ligne, sites externes, aide |
 | 7. Foulée sur ton téléphone | Tailscale, l'accès depuis le téléphone, le dépannage |
 | 8. Foulée Coach : le principe | Le relais du club, ce qui circule, la sécurité |
 | 9. Côté élève | Rejoindre son coach, partager, Mon coach, la montre, les notifications, les messages |
